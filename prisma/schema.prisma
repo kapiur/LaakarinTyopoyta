@@ -1,0 +1,17 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Template {
+  id        Int      @id @default(autoincrement())
+  title     String
+  category  String
+  content   String
+  author    String   // Сюда будем писать ваше имя из Authelia
+  isPublic  Boolean  @default(false)
+}
