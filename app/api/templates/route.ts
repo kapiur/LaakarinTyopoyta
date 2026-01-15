@@ -3,32 +3,47 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-// Получить все шаблоны из базы
 export async function GET() {
   try {
-    const templates = await prisma.template.findMany({
-      orderBy: { id: 'desc' }
-    });
+    const templates = await prisma.template.findMany({ orderBy: { id: 'desc' } });
     return NextResponse.json(templates);
   } catch (error) {
     return NextResponse.json({ error: 'Database error' }, { status: 500 });
   }
 }
 
-// Сохранить новый шаблон
 export async function POST(req: Request) {
   try {
     const body = await req.json();
     const newTemplate = await prisma.template.create({
-      data: {
-        title: body.title,
-        category: body.category,
-        content: body.content,
-        author: 'Dr. Kapustin', // Позже свяжем с логином
-      },
+      data: { title: body.title, category: body.category, content: body.content, author: 'Dr. Kapustin' },
     });
     return NextResponse.json(newTemplate);
   } catch (error) {
-    return NextResponse.json({ error: 'Failed to create template' }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to create' }, { status: 500 });
+  }
+}
+
+// Новый метод для удаления и редактирования (через query параметры или тело)
+export async function DELETE(req: Request) {
+  try {
+    const { id } = await req.json();
+    await prisma.template.delete({ where: { id: Number(id) } });
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    return NextResponse.json({ error: 'Delete failed' }, { status: 500 });
+  }
+}
+
+export async function PUT(req: Request) {
+  try {
+    const body = await req.json();
+    const updated = await prisma.template.update({
+      where: { id: Number(body.id) },
+      data: { title: body.title, category: body.category, content: body.content },
+    });
+    return NextResponse.json(updated);
+  } catch (error) {
+    return NextResponse.json({ error: 'Update failed' }, { status: 500 });
   }
 }
