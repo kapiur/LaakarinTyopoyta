@@ -39,7 +39,7 @@ export default function Dashboard() {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 h-full">
       <div className="lg:col-span-2 space-y-6">
-        <h2 className="text-2xl font-bold text-slate-800">Tervetuloa, Tohtori</h2>
+        <h2 className="text-2xl font-bold text-slate-800">Tervetuloa</h2>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* КАРТОЧКА MALLIT */}
@@ -55,7 +55,7 @@ export default function Dashboard() {
             <h3 className="font-bold text-lg mb-2 text-blue-700 group-hover:text-blue-600 flex items-center gap-2">
               Laskurit <Calculator size={18} />
             </h3>
-            <p className="text-sm text-slate-500">PCA, BMI, eGFR и другие медицинские инструменты.</p>
+            <p className="text-sm text-slate-500">PCA, BMI, eGFR jne.</p>
           </Link>
         </div>
       </div>
