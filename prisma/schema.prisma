@@ -8,11 +8,17 @@ generator client {
   binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
 }
 
+model Category {
+  id        Int        @id @default(autoincrement())
+  name      String     @unique
+  templates Template[]
+}
+
 model Template {
-  id        Int      @id @default(autoincrement())
-  title     String
-  category  String
-  content   String
-  author    String
-  isPublic  Boolean  @default(false)
+  id         Int      @id @default(autoincrement())
+  title      String
+  content    String
+  author     String
+  categoryId Int
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
 }
