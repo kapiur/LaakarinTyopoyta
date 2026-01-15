@@ -4,7 +4,22 @@ datasource db {
 }
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Template {
+  id        Int      @id @default(autoincrement())
+  title     String
+  category  String
+  content   String
+  author    String
+  isPublic  Boolean  @default(false)
 }
 
 model Template {
