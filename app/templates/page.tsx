@@ -58,16 +58,21 @@ export default function TemplatesPage() {
     }
   };
 
-  const generateFinalText = () => {
-    if (!selectedTemplate) return "";
-    let text = selectedTemplate.content;
-    const matches = text.match(/{{(.*?)}}/g) || [];
-    matches.forEach(match => {
-      const [key] = match.replace(/{{|}}/g, '').split(':');
-      text = text.replace(match, formValues[key] || '____');
-    });
-    return text;
-  };
+const generateFinalText = () => {
+  if (!selectedTemplate) return "";
+  
+  // Берем исходный текст шаблона
+  let text = selectedTemplate.content;
+
+  // Используем функцию замены с колбэком для точности
+  return text.replace(/{{(.*?)}}/g, (match, p1) => {
+    // p1 — это то, что внутри скобок, например "turvotus:select:ei,lievä"
+    const [key] = p1.split(':'); 
+    
+    // Возвращаем значение из формы, если оно есть, иначе подчеркивание
+    return formValues[key] || "____";
+  });
+};
 
   return (
     <div className="flex h-[calc(100vh-10rem)] gap-6 p-2">
