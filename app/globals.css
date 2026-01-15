@@ -1,1 +1,7 @@
-body { font-family: sans-serif; }
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  background-color: rgb(248 250 252);
+}
