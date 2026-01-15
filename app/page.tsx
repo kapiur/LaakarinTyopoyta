@@ -1,11 +1,12 @@
 "use client";
 import { useState } from 'react';
-import { Send, Bot, User } from 'lucide-react';
+import { Send, Bot, FileText, Calculator } from 'lucide-react';
+import Link from 'next/link'; // Импортируем Link для навигации
 
 export default function Dashboard() {
   const [chatInput, setChatInput] = useState('');
   const [messages, setMessages] = useState([
-    { role: 'assistant', content: 'Hei! Miten voin auttaa sinua tänään?' }
+    { role: 'assistant', content: 'Hei! Miten voin auttaa sinua tänään? Voin auttaa tekstien muotoilussa tai lääketieteellisissä kysymyksissä.' }
   ]);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -39,13 +40,21 @@ export default function Dashboard() {
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 h-full">
       <div className="lg:col-span-2 space-y-6">
         <h2 className="text-2xl font-bold text-slate-800">Tervetuloa, Tohtori</h2>
-        <div className="grid grid-cols-2 gap-4">
-          <div className="p-6 bg-white rounded-xl shadow-sm border border-slate-200">
-            <h3 className="font-bold text-lg mb-2 text-blue-700">Mallit</h3>
-            <p className="text-sm text-slate-500">Valitse "Mallit" valikosta vasemmalta.</p>
-          </div>
-          <div className="p-6 bg-white rounded-xl shadow-sm border border-slate-200">
-            <h3 className="font-bold text-lg mb-2 text-blue-700">Laskurit</h3>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* КЛИКАБЕЛЬНАЯ КАРТОЧКА MALLIT */}
+          <Link href="/templates" className="block p-6 bg-white rounded-xl shadow-sm border border-slate-200 hover:border-blue-500 transition-all group">
+            <h3 className="font-bold text-lg mb-2 text-blue-700 group-hover:text-blue-600 flex items-center gap-2">
+              Mallit <FileText size={18} />
+            </h3>
+            <p className="text-sm text-slate-500">Käytä и muokkaa tallennettuja tutkimusmalleja.</p>
+          </Link>
+
+          {/* КАРТОЧКА LASKURIT (ПОКА ПРОСТО ДИВ) */}
+          <div className="p-6 bg-white rounded-xl shadow-sm border border-slate-200 opacity-60">
+            <h3 className="font-bold text-lg mb-2 text-slate-700 flex items-center gap-2">
+              Laskurit <Calculator size={18} />
+            </h3>
             <p className="text-sm text-slate-500">BMI, GFR ja muut tulossa pian.</p>
           </div>
         </div>
@@ -68,7 +77,7 @@ export default function Dashboard() {
               </div>
             </div>
           ))}
-          {isLoading && <div className="text-xs text-slate-400 animate-pulse italic text-center">AI vastaa...</div>}
+          {isLoading && <div className="text-xs text-slate-400 animate-pulse italic text-center py-2">AI vastaa...</div>}
         </div>
 
         <div className="p-4 border-t border-slate-200 bg-white rounded-b-xl">
