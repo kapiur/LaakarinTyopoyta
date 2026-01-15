@@ -61,15 +61,15 @@ export default function TemplatesPage() {
 const generateFinalText = () => {
   if (!selectedTemplate) return "";
   
-  // Берем исходный текст шаблона
-  let text = selectedTemplate.content;
+  const content = selectedTemplate.content;
 
-  // Используем функцию замены с колбэком для точности
-  return text.replace(/{{(.*?)}}/g, (match, p1) => {
-    // p1 — это то, что внутри скобок, например "turvotus:select:ei,lievä"
-    const [key] = p1.split(':'); 
+  // Функция проходит по тексту и для каждого {{...}} ищет значение в памяти
+  return content.replace(/{{(.*?)}}/g, (match, p1) => {
+    // p1 — это содержимое внутри скобок, например "koukistus:number"
+    // Берем только первое слово до двоеточия (это и есть наш ключ)
+    const key = p1.split(':')[0].trim();
     
-    // Возвращаем значение из формы, если оно есть, иначе подчеркивание
+    // Возвращаем введенное значение или заглушку
     return formValues[key] || "____";
   });
 };
