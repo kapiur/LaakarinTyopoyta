@@ -5,17 +5,23 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// Тот самый промпт для сохранения стиля
+// Промпт для генерации шаблонов с сохранением стиля
 const SYSTEM_PROMPT_MALLI = `
 Ты — эксперт по медицинской документации. Твоя задача — превратить текст реальной записи врача в интерактивный шаблон для системы «Lääkärin Työpöytä», максимально сохраняя индивидуальный стиль автора.
+Правила:
+1. Сохраняй авторское построение предложений и терминологию.
+2. Используй синтаксис {{название}} для полей и {{название:select:вариант1,вариант2}} для списков.
+3. Пояснительный текст оставляй СНАРУЖИ скобок.
+`;
 
-Критически важные правила:
-1. Сохранение «почерка»: Не пытайся «улучшить» текст. Сохраняй авторское построение предложений, сокращения, специфические термины и структуру.
-2. Интерактивность через {{...}}:
-   - Текстовые поля: {{название_поля}}
-   - Выпадающие списки: {{название:select:вариант1,вариант2}}
-3. Синтаксис: Названия полей пиши на финском. Пояснительный текст оставляй неизменным СНАРУЖИ скобок.
-Грамматически согласовывай варианты в списках с контекстом предложения.
+// Промпт для медицинских консультаций с опорой на источники
+const SYSTEM_PROMPT_MEDICAL = `
+Olet asiantunteva lääkärin avustaja. 
+Velvoitteesi:
+1. Tukeudu vastauksissasi yksinomaan virallisiin ja vahvistettuihin lääketieteellisiin lähteisiin, kuten www.terveyskirjasto.fi (Duodecim), Käypä hoito -suositukset tai vastaavat luotettavat lähteet.
+2. Sinun TÄYTYY mainita käytetty lähde jokaisen lääketieteellisen vastauksen lopussa (esim. "Lähde: Terveyskirjasto.fi").
+3. Jos et löydä vahvistettua tietoa, ilmoita siitä rehellisesti. 
+4. Vastaa suomeksi, selkeästi ja ammattimaisesti.
 `;
 
 export async function POST(req: Request) {
@@ -25,28 +31,28 @@ export async function POST(req: Request) {
 
     let finalMessages = [...messages];
 
-    // ПРОВЕРКА: Если сообщение начинается с "Malli:", добавляем инструкции
+    // Выбор системного промпта в зависимости от запроса
     if (lastMessage.toLowerCase().startsWith('malli:')) {
       finalMessages = [
         { role: 'system', content: SYSTEM_PROMPT_MALLI },
         ...messages
       ];
     } else {
-      // Обычный системный промпт для обычного чата
       finalMessages = [
-        { role: 'system', content: 'Olet lääkärin avustaja. Vastaa lyhyesti ja asiallisesti.' },
+        { role: 'system', content: SYSTEM_PROMPT_MEDICAL },
         ...messages
       ];
     }
 
     const response = await openai.chat.completions.create({
-      model: 'gpt-3.5-turbo', // или gpt-4
+      model: 'gpt-3.5-turbo', // Рекомендуется gpt-4 для более точного следования источникам
       messages: finalMessages,
-      temperature: 0.3, // Низкая температура для точности
+      temperature: 0.2, // Минимальная температура для исключения галлюцинаций
     });
 
     return NextResponse.json({ content: response.choices[0].message.content });
   } catch (error) {
-    return NextResponse.json({ error: 'AI Error' }, { status: 500 });
+    console.error("AI Error:", error);
+    return NextResponse.json({ error: 'AI-palvelinvirhe' }, { status: 500 });
   }
 }
