@@ -1,7 +1,7 @@
 "use client";
 import { useState } from 'react';
 import { Send, Bot, FileText, Calculator } from 'lucide-react';
-import Link from 'next/link'; // Импортируем Link для навигации
+import Link from 'next/link';
 
 export default function Dashboard() {
   const [chatInput, setChatInput] = useState('');
@@ -30,7 +30,7 @@ export default function Dashboard() {
         setMessages(prev => [...prev, { role: 'assistant', content: data.content }]);
       }
     } catch (error) {
-      console.error("Гребенная ошибка AI:", error);
+      console.error("AI-virhe:", error);
     } finally {
       setIsLoading(false);
     }
@@ -42,21 +42,21 @@ export default function Dashboard() {
         <h2 className="text-2xl font-bold text-slate-800">Tervetuloa, Tohtori</h2>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* КЛИКАБЕЛЬНАЯ КАРТОЧКА MALLIT */}
+          {/* КАРТОЧКА MALLIT */}
           <Link href="/templates" className="block p-6 bg-white rounded-xl shadow-sm border border-slate-200 hover:border-blue-500 transition-all group">
             <h3 className="font-bold text-lg mb-2 text-blue-700 group-hover:text-blue-600 flex items-center gap-2">
               Mallit <FileText size={18} />
             </h3>
-            <p className="text-sm text-slate-500">Käytä и muokkaa tallennettuja tutkimusmalleja.</p>
+            <p className="text-sm text-slate-500">Käytä ja muokkaa tallennettuja tutkimusmalleja.</p>
           </Link>
 
-          {/* КАРТОЧКА LASKURIT (ПОКА ПРОСТО ДИВ) */}
-          <div className="p-6 bg-white rounded-xl shadow-sm border border-slate-200 opacity-60">
-            <h3 className="font-bold text-lg mb-2 text-slate-700 flex items-center gap-2">
+          {/* КАРТОЧКА LASKURIT (ТЕПЕРЬ ЖИВАЯ) */}
+          <Link href="/calculators" className="block p-6 bg-white rounded-xl shadow-sm border border-slate-200 hover:border-blue-500 transition-all group">
+            <h3 className="font-bold text-lg mb-2 text-blue-700 group-hover:text-blue-600 flex items-center gap-2">
               Laskurit <Calculator size={18} />
             </h3>
-            <p className="text-sm text-slate-500">BMI, GFR ja muut tulossa pian.</p>
-          </div>
+            <p className="text-sm text-slate-500">PCA, BMI, eGFR и другие медицинские инструменты.</p>
+          </Link>
         </div>
       </div>
 
