@@ -17,6 +17,8 @@
     "tailwind-merge": "^2.2.1",
     "openai": "^4.24.1",
     "@prisma/client": "^5.8.1"
+    "next-auth": "^4.24.5",
+    "bcryptjs": "^2.4.3"
   },
   "devDependencies": {
     "typescript": "^5",
