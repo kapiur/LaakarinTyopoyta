@@ -33,8 +33,6 @@ export default function TemplatesPage() {
       const data = await res.json();
       const validData = Array.isArray(data) ? data : [];
       setCategories(validData);
-      
-      // Если есть категории и не выбрана активная — выбираем первую
       if (validData.length > 0 && !activeCategoryId) {
         setActiveCategoryId(validData[0].id);
       }
@@ -45,6 +43,42 @@ export default function TemplatesPage() {
     }
   };
 
+  // --- ЛОГИКА КОПИРОВАНИЯ (Исправленная) ---
+  const fallbackCopy = (text: string) => {
+    const textArea = document.createElement("textarea");
+    textArea.value = text;
+    // Стили, чтобы textarea не была видна
+    textArea.style.position = "fixed";
+    textArea.style.left = "-9999px";
+    textArea.style.top = "0";
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    try {
+      document.execCommand('copy');
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      alert("Kopiointi epäonnistui. Kopioi teksti manuaalisesti.");
+    }
+    document.body.removeChild(textArea);
+  };
+
+  const handleCopy = () => {
+    if (!generateFinalText) return;
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(generateFinalText)
+        .then(() => {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2000);
+        })
+        .catch(() => fallbackCopy(generateFinalText));
+    } else {
+      fallbackCopy(generateFinalText);
+    }
+  };
+
+  // --- ОСТАЛЬНАЯ ЛОГИКА ---
   const handleSave = async () => {
     if (!formData.title || !formData.content || !formData.categoryName) {
       alert("Täytä kaikki pakolliset kentät");
@@ -110,7 +144,6 @@ export default function TemplatesPage() {
     }
   };
 
-  // --- ЛОГИКА КОНСТРУКТОРА ---
   const parseTemplate = (content: string) => {
     const parts = [];
     const regex = /{{(.*?)}}/g;
@@ -162,7 +195,7 @@ export default function TemplatesPage() {
         </button>
       </div>
 
-      {/* КАТЕГОРИИ (ВКЛАДКИ) */}
+      {/* CATEGORIES */}
       <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar px-1 flex-shrink-0">
         {categories.map(cat => (
           <div key={cat.id} className="group relative">
@@ -188,13 +221,13 @@ export default function TemplatesPage() {
 
       <div className="flex-1 grid grid-cols-12 gap-6 min-h-0 pb-4 overflow-hidden">
         
-        {/* LEFT LIST PANEL */}
+        {/* LEFT PANEL */}
         <div className="col-span-3 flex flex-col gap-4 min-h-0">
           <div className="relative flex-shrink-0">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
             <input 
               type="text"
-              placeholder="Hae tästä osiosta..."
+              placeholder="Hae..."
               className="w-full pl-12 pr-4 py-4 bg-white border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500/20 shadow-sm"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -210,8 +243,8 @@ export default function TemplatesPage() {
                 onClick={() => { setSelectedTemplate(t); setIsAdding(false); setIsEditing(false); }}
                 className={`w-full text-left p-4 rounded-2xl transition-all border ${
                   selectedTemplate?.id === t.id 
-                    ? 'bg-blue-600 border-blue-600 text-white shadow-md translate-x-1' 
-                    : 'bg-white border-slate-50 hover:border-blue-200'
+                    ? 'bg-blue-600 border-blue-600 text-white shadow-md' 
+                    : 'bg-white border-slate-100 hover:border-blue-200'
                 }`}
               >
                 <div className="flex items-center justify-between">
@@ -223,45 +256,39 @@ export default function TemplatesPage() {
           </div>
         </div>
 
-        {/* RIGHT WORK PANEL */}
+        {/* RIGHT PANEL */}
         <div className="col-span-9 min-h-0">
           {(isAdding || isEditing) ? (
             <div className="bg-white h-full rounded-3xl border shadow-sm flex flex-col overflow-hidden animate-in slide-in-from-right-4 duration-300">
               <div className="p-8 border-b flex justify-between items-center bg-slate-50/50">
                 <h2 className="text-xl font-bold text-slate-900">{isEditing ? 'Muokkaa mallia' : 'Uusi tekstipohja'}</h2>
-                <button onClick={() => {setIsAdding(false); setIsEditing(false);}} className="p-2 hover:bg-slate-200 rounded-full transition-colors"><X /></button>
+                <button onClick={() => {setIsAdding(false); setIsEditing(false);}} className="p-2 hover:bg-slate-200 rounded-full"><X /></button>
               </div>
               <div className="p-8 flex-1 overflow-y-auto space-y-4 no-scrollbar">
                 <div className="grid grid-cols-2 gap-4">
-                  <input placeholder="Otsikko" className="p-4 bg-slate-50 border rounded-2xl outline-none focus:ring-2 focus:ring-blue-500/20" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} />
-                  <input placeholder="Kategoria" className="p-4 bg-slate-50 border rounded-2xl outline-none focus:ring-2 focus:ring-blue-500/20" value={formData.categoryName} onChange={e => setFormData({...formData, categoryName: e.target.value})} />
+                  <input placeholder="Otsikko" className="p-4 bg-slate-50 border rounded-2xl outline-none" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} />
+                  <input placeholder="Kategoria" className="p-4 bg-slate-50 border rounded-2xl outline-none" value={formData.categoryName} onChange={e => setFormData({...formData, categoryName: e.target.value})} />
                 </div>
-                <textarea placeholder="Käytä syntaksia {{id:select:val1,val2}}..." className="w-full p-6 bg-slate-50 border rounded-2xl outline-none focus:ring-2 focus:ring-blue-500/20 font-mono text-sm min-h-[400px]" value={formData.content} onChange={e => setFormData({...formData, content: e.target.value})} />
+                <textarea placeholder="Sisältö..." className="w-full p-6 bg-slate-50 border rounded-2xl font-mono text-sm min-h-[400px] outline-none" value={formData.content} onChange={e => setFormData({...formData, content: e.target.value})} />
               </div>
               <div className="p-8 border-t bg-slate-50/30 flex gap-4">
-                <button onClick={handleSave} className="flex-1 py-4 bg-blue-600 text-white rounded-2xl font-bold hover:bg-blue-700 shadow-lg shadow-blue-100">TALLENNA</button>
+                <button onClick={handleSave} className="flex-1 py-4 bg-blue-600 text-white rounded-2xl font-bold hover:bg-blue-700">TALLENNA</button>
               </div>
             </div>
           ) : selectedTemplate ? (
             <div className="grid grid-cols-2 h-full gap-6">
-              
-              {/* CONSTRUCTOR VIEW */}
               <div className="bg-white rounded-3xl border shadow-sm flex flex-col overflow-hidden">
                 <div className="p-6 border-b bg-slate-50/50 flex justify-between items-center">
-                  <h3 className="font-bold text-slate-900 flex items-center gap-2">
-                    <RefreshCcw size={16} className="text-blue-600" /> Valinnat
-                  </h3>
+                  <h3 className="font-bold text-slate-900 flex items-center gap-2">Valinnat</h3>
                   <div className="flex gap-1">
-                    <button onClick={() => startEditing(selectedTemplate)} className="p-2 text-slate-400 hover:text-blue-600 transition-colors"><Edit2 size={18} /></button>
-                    <button onClick={() => handleShare(selectedTemplate.id, selectedTemplate.title)} className="p-2 text-slate-400 hover:text-blue-600 transition-colors"><Share2 size={18} /></button>
-                    <button onClick={() => { if(confirm("Poista malli?")) fetch(`/api/templates?id=${selectedTemplate.id}`, {method:'DELETE'}).then(()=>fetchTemplates()) }} className="p-2 text-slate-400 hover:text-red-600 transition-colors"><Trash2 size={18} /></button>
+                    <button onClick={() => startEditing(selectedTemplate)} className="p-2 text-slate-400 hover:text-blue-600"><Edit2 size={18} /></button>
+                    <button onClick={() => handleShare(selectedTemplate.id, selectedTemplate.title)} className="p-2 text-slate-400 hover:text-blue-600"><Share2 size={18} /></button>
+                    <button onClick={() => { if(confirm("Poista?")) fetch(`/api/templates?id=${selectedTemplate.id}`, {method:'DELETE'}).then(()=>fetchTemplates()) }} className="p-2 text-slate-400 hover:text-red-600"><Trash2 size={18} /></button>
                   </div>
                 </div>
                 <div className="p-6 flex-1 overflow-y-auto no-scrollbar space-y-6">
-                  {parseTemplate(selectedTemplate.content).filter(p => p.type !== 'text').length === 0 ? (
-                    <p className="text-center py-10 text-slate-400 italic text-sm">Tässä mallissa ei ole valintoja.</p>
-                  ) : parseTemplate(selectedTemplate.content).filter(p => p.type !== 'text').map((part, idx) => (
-                    <div key={idx} className="flex flex-col gap-2 animate-in fade-in slide-in-from-left-2" style={{animationDelay: `${idx * 50}ms`}}>
+                  {parseTemplate(selectedTemplate.content).filter(p => p.type !== 'text').map((part, idx) => (
+                    <div key={idx} className="flex flex-col gap-2">
                       <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">{part.id}</label>
                       {part.type === 'select' ? (
                         <div className="flex flex-wrap gap-2">
@@ -282,8 +309,7 @@ export default function TemplatesPage() {
                       ) : (
                         <input 
                           type="text" 
-                          placeholder={`Syötä ${part.id}...`}
-                          className="p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/10 text-sm" 
+                          className="p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none" 
                           value={templateValues[part.id] || ''} 
                           onChange={(e) => setTemplateValues(prev => ({ ...prev, [part.id]: e.target.value }))} 
                         />
@@ -293,21 +319,15 @@ export default function TemplatesPage() {
                 </div>
               </div>
 
-              {/* RESULT VIEW */}
+              {/* RESULT AREA */}
               <div className="bg-[#1e293b] rounded-3xl flex flex-col overflow-hidden shadow-2xl border border-slate-800 relative">
                 <div className="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-900/50">
                   <span className="text-slate-400 text-xs font-bold uppercase tracking-widest">Lopputulos</span>
                   <button 
-                    onClick={() => { 
-                      if (generateFinalText) {
-                        navigator.clipboard.writeText(generateFinalText); 
-                        setCopied(true); 
-                        setTimeout(() => setCopied(false), 2000); 
-                      }
-                    }} 
+                    onClick={handleCopy} 
                     className={`px-6 py-2 rounded-xl border transition-all text-xs font-bold ${
                       copied 
-                        ? 'bg-emerald-500 text-white border-emerald-500 shadow-lg shadow-emerald-500/20' 
+                        ? 'bg-emerald-500 text-white border-emerald-500 shadow-lg' 
                         : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20'
                     }`}
                   >
@@ -315,15 +335,14 @@ export default function TemplatesPage() {
                   </button>
                 </div>
                 <div className="p-8 flex-1 overflow-y-auto text-emerald-400/90 font-mono text-sm leading-relaxed whitespace-pre-wrap no-scrollbar">
-                  {generateFinalText || "Valitse malli ja täytä tiedot..."}
+                  {generateFinalText || "Täytä valinnat..."}
                 </div>
               </div>
 
             </div>
           ) : (
-            <div className="h-full bg-white/50 border-2 border-dashed border-slate-200 rounded-3xl flex flex-col items-center justify-center text-slate-300">
-              <FileText size={48} className="mb-4 opacity-20" />
-              <p className="font-medium">Valitse malli tästä osiosta</p>
+            <div className="h-full bg-white/50 border-2 border-dashed border-slate-200 rounded-3xl flex items-center justify-center text-slate-300">
+              Valitse malli tästä osiosta
             </div>
           )}
         </div>
