@@ -52,8 +52,15 @@ export default function CalculatorsPage() {
     fetchPcaLibrary();
   };
 
+  // --- ИСПРАВЛЕННОЕ КОПИРОВАНИЕ ---
   const handleCopy = () => {
-    let textToCopy = typeof result === 'string' ? result : `Tulos: ${result?.score}\n${result?.desc}`;
+    let textToCopy = "";
+    if (typeof result === 'string') {
+      textToCopy = result;
+    } else if (result && result.score) {
+      textToCopy = `Tulos: ${result.score}\n${result.desc}`;
+    }
+    
     if (textToCopy) {
       navigator.clipboard.writeText(textToCopy);
       setCopied(true);
@@ -67,6 +74,7 @@ export default function CalculatorsPage() {
       const { kas, ad, spd, days } = pca;
       const adNum = parseFloat(ad), spdNum = parseFloat(spd), dNum = parseInt(days);
       let out = "", totMl = 0, conc = "";
+
       selectedDrugs.forEach(drug => {
         const vNum = parseFloat(drug.val);
         if (isNaN(vNum) || vNum <= 0 || drug.name === 'none') return;
@@ -77,6 +85,7 @@ export default function CalculatorsPage() {
         out += `${drug.name}: ${vNum} mg/vrk (${mgT.toFixed(1)} mg/${dNum}vrk)\n`;
         conc += `${drug.name.split(' ')[0]}: ${(mgT / adNum).toFixed(libData.s < 1 ? 3 : 2)} mg/ml\n`;
       });
+
       if (!out) return;
       const bolus = (spdNum * 2).toFixed(1);
       setResult(`PCA-ohje:\n\nPCA ${dNum} vrk, ${kas} ml kasetti.\n${out}Lääkkeet yhteensä: ${totMl.toFixed(1)} ml\nNaCl 0,9 % ad ${adNum} ml (${(adNum - totMl).toFixed(1)} ml)\n\nPitoisuudet:\n${conc}\nNopeus: ${spdNum} ml/h\nBolus: ${bolus} ml (2x tuntiannos), 20 min lukitus.\n\nJos boluksia menee yli 6/8–24 h, nosta nopeutta +0.1 ml/h ad ${(spdNum + 0.2).toFixed(1)} ml/h ja bolusta +0.2 ml ad ${(parseFloat(bolus) + 0.4).toFixed(1)} ml.\nJos potilas sedatoituu liikaa, vähennä nopeutta –0.1 ml/h.`);
@@ -89,6 +98,7 @@ export default function CalculatorsPage() {
       const strokeRisk = risks[score] || 15.2;
       const hbScore = Object.values(hasbled).reduce((a, b) => a + b, 0);
       setResult({ 
+        type: 'dual',
         score, hbScore, 
         desc: `Aivoinfarktiriski: ${strokeRisk}% / vuosi.\nHAS-BLED: ${hbScore} p (${hbScore >= 3 ? 'SUURI' : 'EI SUURI'} VUOTORISKI).`
       });
@@ -105,12 +115,12 @@ export default function CalculatorsPage() {
       const h = parseFloat(bmi.h) / 100, w = parseFloat(bmi.w);
       if (!h || !w) return alert("Syötä pituus ja paino");
       const score = (w / (h * h)).toFixed(1);
-      setResult({ score, desc: +score > 25 ? "Ylipaino" : "Normaali paino" });
+      setResult({ type: 'single', score, desc: +score > 25 ? "Ylipaino" : "Normaali paino" });
     }
 
     if (activeTab === 'gfr') {
       const score = Math.round(((140 - +gfr.age) * +gfr.w * +gfr.sex) / +gfr.creat);
-      setResult({ score, desc: "ml/min (Cockcroft-Gault)" });
+      setResult({ type: 'single', score, desc: "ml/min (Cockcroft-Gault)" });
     }
   };
 
@@ -126,7 +136,7 @@ export default function CalculatorsPage() {
           { id: 'gfr', label: 'GFR', icon: <Calculator size={14}/> }
         ].map((tab) => (
           <button key={tab.id} onClick={() => { setActiveTab(tab.id); setResult(null); }}
-            className={`flex-1 py-2 px-4 rounded-lg text-[10px] font-bold uppercase transition-all ${activeTab === tab.id ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}>
+            className={`flex-1 py-2 px-4 rounded-lg text-[10px] font-bold uppercase transition-all ${activeTab === tab.id ? 'bg-blue-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}>
             {tab.label}
           </button>
         ))}
@@ -140,7 +150,7 @@ export default function CalculatorsPage() {
           {activeTab === 'pca' && (
             <div className="space-y-3">
               {showSettings && (
-                <div className="grid grid-cols-4 gap-2 p-3 bg-slate-50 rounded-xl border border-slate-100 mb-2">
+                <div className="grid grid-cols-4 gap-2 p-3 bg-slate-50 rounded-xl border mb-2">
                   {['kas', 'ad', 'spd', 'days'].map(k => (
                     <div key={k}><label className="text-[8px] font-bold uppercase text-slate-400">{k}</label>
                     <input value={pca[k as keyof typeof pca]} onChange={e => setPca({...pca, [k]: e.target.value})} className="w-full p-1 border rounded text-xs font-bold" /></div>
@@ -171,7 +181,7 @@ export default function CalculatorsPage() {
               <p className="text-[10px] font-black text-red-400 uppercase tracking-widest border-b border-red-100 pb-1 mt-4">Vuotoriski (HAS-BLED)</p>
               <div className="grid grid-cols-1 gap-1">
                 {[{l:"RR-syst. > 160",k:'sbp',v:1},{l:"Munuaisten vajaat.",k:'renal',v:1},{l:"Maksan vajaat.",k:'liver',v:1},{l:"Aiempi vuoto",k:'bleed',v:1},{l:"Labiili INR",k:'inr',v:1},{l:"Ikä > 65",k:'age',v:1},{l:"Lääkitys (ASA/NSAID)",k:'drugs',v:1},{l:"Alkoholi",k:'alc',v:1}].map(i => (
-                  <button key={i.l} onClick={() => setHasbled({...hasbled, [i.k]: hasbled[i.k as keyof typeof hasbled] === i.v ? 0 : i.v})} className={`p-2 text-left rounded-lg border text-[10px] font-bold ${hasbled[i.k as keyof typeof hasbled] === i.v ? 'bg-red-600 text-white' : 'bg-red-50'}`}>{i.l}</button>
+                  <button key={i.l} onClick={() => setHasbled({...hasbled, [i.k]: hasbled[i.k as keyof typeof hasbled] === i.v ? 0 : i.v})} className={`p-2 text-left rounded-lg border text-[10px] font-bold ${hasbled[i.k as keyof typeof hasbled] === i.v ? 'bg-red-600 text-white border-red-600' : 'bg-red-50'}`}>{i.l}</button>
                 ))}
               </div>
             </div>
@@ -224,22 +234,26 @@ export default function CalculatorsPage() {
                 {typeof result === 'string' ? (
                   <div className="space-y-4 w-full">
                     <pre className="text-left bg-emerald-500/5 p-6 rounded-2xl border border-emerald-500/10 text-emerald-400 font-mono text-[11px] whitespace-pre-wrap leading-relaxed shadow-inner">{result}</pre>
-                    <button onClick={handleCopy} className={`w-full py-3 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-2 ${copied ? 'bg-emerald-500 text-slate-900 shadow-lg' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20'}`}>
+                    <button onClick={handleCopy} className={`w-full py-3 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-2 ${copied ? 'bg-emerald-500 text-slate-900 shadow-lg' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'}`}>
                       {copied ? <Check size={14}/> : <Copy size={14}/>} {copied ? 'KOPIOITU' : 'KOPIOI'}
                     </button>
                   </div>
                 ) : (
                   <div className="text-center">
-                    <div className="flex justify-around items-end mb-8">
-                      <div className="flex flex-col items-center">
-                         <div className="text-6xl font-black text-emerald-400">{result.score}</div>
-                         <div className="text-[8px] font-bold text-slate-500 uppercase">CHADS-VASc</div>
+                    {result.type === 'dual' ? (
+                      <div className="flex justify-around items-end mb-8">
+                        <div className="flex flex-col items-center">
+                          <div className="text-6xl font-black text-emerald-400">{result.score}</div>
+                          <div className="text-[8px] font-bold text-slate-500 uppercase">CHADS-VASc</div>
+                        </div>
+                        <div className="flex flex-col items-center">
+                          <div className={`text-6xl font-black ${result.hbScore >= 3 ? 'text-red-500' : 'text-emerald-400'}`}>{result.hbScore}</div>
+                          <div className="text-[8px] font-bold text-slate-500 uppercase">HAS-BLED</div>
+                        </div>
                       </div>
-                      <div className="flex flex-col items-center">
-                         <div className={`text-6xl font-black ${result.hbScore >= 3 ? 'text-red-500' : 'text-emerald-400'}`}>{result.hbScore}</div>
-                         <div className="text-[8px] font-bold text-slate-500 uppercase">HAS-BLED</div>
-                      </div>
-                    </div>
+                    ) : (
+                      <div className="text-8xl font-black text-emerald-400 tracking-tighter drop-shadow-sm mb-4">{result.score}</div>
+                    )}
                     <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-slate-800/50 px-6 py-4 rounded-3xl border border-slate-700/50 inline-block whitespace-pre-line leading-relaxed">
                       {result.desc}
                     </div>
