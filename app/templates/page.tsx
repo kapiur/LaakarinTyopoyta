@@ -43,7 +43,6 @@ export default function TemplatesPage() {
     }
   };
 
-  // Подготовка к редактированию
   const startEditing = (template: any) => {
     const category = categories.find(c => c.id === template.categoryId);
     setFormData({
@@ -63,7 +62,6 @@ export default function TemplatesPage() {
       return;
     }
     try {
-      // Если есть id — это UPDATE, если нет — POST (создание нового)
       const method = formData.id ? 'PUT' : 'POST';
       const res = await fetch('/api/templates', {
         method: method,
@@ -81,7 +79,24 @@ export default function TemplatesPage() {
     }
   };
 
-  // Логика конструктора (сокращенно для краткости, оставлена прежней)
+  // --- ФУНКЦИЯ "ПОДЕЛИТЬСЯ" (ВОССТАНОВЛЕНА) ---
+  const handleShare = async (templateId: number, title: string) => {
+    const targetEmail = window.prompt(`Jaa malli "${title}"\n\nSyötä vastaanottajan sähköposti:`);
+    if (!targetEmail) return;
+    try {
+      const res = await fetch('/api/templates/share', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ templateId, targetEmail: targetEmail.toLowerCase().trim() })
+      });
+      const data = await res.json();
+      if (data.success) alert("Malli kopioitu kollegalle!");
+      else alert("Virhe: " + (data.error || "Jakaminen epäonnistui"));
+    } catch (err) {
+      alert("Yhteysvirhe.");
+    }
+  };
+
   const parseTemplate = (content: string) => {
     const parts = [];
     const regex = /{{(.*?)}}/g;
@@ -126,7 +141,7 @@ export default function TemplatesPage() {
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Tekstimallit</h1>
           <p className="text-slate-500 text-sm">Hallitse ja muokkaa kliinisiä tekstipohjia</p>
         </div>
-        <button onClick={() => { setIsAdding(true); setIsEditing(false); setFormData({id:null, title:'', content:'', categoryName:'', author:''}); setSelectedTemplate(null); }} className="flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-2xl font-bold hover:bg-blue-700 transition-all shadow-lg">
+        <button onClick={() => { setIsAdding(true); setIsEditing(false); setFormData({id:null, title:'', content:'', categoryName:'', author:''}); setSelectedTemplate(null); }} className="flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-2xl font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-100">
           <Plus size={20} />
           <span>UUSI MALLI</span>
         </button>
@@ -141,9 +156,7 @@ export default function TemplatesPage() {
           <div className="flex-1 overflow-y-auto pr-2 space-y-6 no-scrollbar">
             {loading ? <Loader2 className="animate-spin mx-auto text-blue-600" /> : filteredCategories.map(cat => (
               <div key={cat.id} className="space-y-2">
-                <div className="flex justify-between items-center px-3">
-                   <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{cat.name}</h3>
-                </div>
+                <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-3">{cat.name}</h3>
                 <div className="space-y-1">
                   {cat.templates.map((t: any) => (
                     <button key={t.id} onClick={() => { setSelectedTemplate(t); setIsAdding(false); setIsEditing(false); }} className={`w-full text-left p-4 rounded-2xl transition-all border ${selectedTemplate?.id === t.id ? 'bg-blue-600 border-blue-600 text-white shadow-md' : 'bg-white border-slate-50 hover:border-blue-200'}`}>
@@ -177,7 +190,7 @@ export default function TemplatesPage() {
                 <textarea placeholder="Sisältö..." className="w-full p-6 bg-slate-50 border rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm min-h-[400px]" value={formData.content} onChange={e => setFormData({...formData, content: e.target.value})} />
               </div>
               <div className="p-8 border-t flex gap-4">
-                <button onClick={handleSave} className="flex-1 py-4 bg-blue-600 text-white rounded-2xl font-bold shadow-lg shadow-blue-100">TALLENNA MUUTOKSET</button>
+                <button onClick={handleSave} className="flex-1 py-4 bg-blue-600 text-white rounded-2xl font-bold shadow-lg shadow-blue-100">TALLENNA</button>
               </div>
             </div>
           ) : selectedTemplate ? (
@@ -187,12 +200,11 @@ export default function TemplatesPage() {
                   <h3 className="font-bold text-slate-900 flex items-center gap-2"><RefreshCcw size={16} className="text-blue-600" /> Valinnat</h3>
                   <div className="flex gap-1">
                     <button onClick={() => startEditing(selectedTemplate)} className="p-2 text-slate-400 hover:text-blue-600" title="Muokkaa"><Edit2 size={18} /></button>
-                    <button onClick={() => handleShare(selectedTemplate.id, selectedTemplate.title)} className="p-2 text-slate-400 hover:text-blue-600"><Share2 size={18} /></button>
+                    <button onClick={() => handleShare(selectedTemplate.id, selectedTemplate.title)} className="p-2 text-slate-400 hover:text-blue-600" title="Jaa"><Share2 size={18} /></button>
                     <button onClick={() => { if(confirm("Poista?")) fetch(`/api/templates?id=${selectedTemplate.id}`, {method:'DELETE'}).then(()=>fetchTemplates()) }} className="p-2 text-slate-400 hover:text-red-600"><Trash2 size={18} /></button>
                   </div>
                 </div>
                 <div className="p-6 flex-1 overflow-y-auto no-scrollbar">
-                  {/* Здесь вызывается renderConstructor из предыдущего кода */}
                   <div className="space-y-6">
                     {parseTemplate(selectedTemplate.content).filter(p => p.type !== 'text').map((part, idx) => (
                       <div key={idx} className="flex flex-col gap-2">
@@ -216,7 +228,7 @@ export default function TemplatesPage() {
                   <span className="text-slate-400 text-xs font-bold uppercase tracking-widest">Lopputulos</span>
                   <button onClick={handleCopy} className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded-xl transition-all border border-emerald-500/20">
                     {copied ? <Check size={16} /> : <Copy size={16} />}
-                    <span className="text-xs font-bold">{copied ? 'KOPIOITU' : 'KOPIOI'}</span>
+                    <span className="text-xs font-bold uppercase">{copied ? 'Kopioitu' : 'Kopioi'}</span>
                   </button>
                 </div>
                 <div className="p-8 flex-1 overflow-y-auto text-emerald-400/90 font-mono text-sm leading-relaxed whitespace-pre-wrap no-scrollbar">
@@ -225,9 +237,9 @@ export default function TemplatesPage() {
               </div>
             </div>
           ) : (
-            <div className="h-full bg-white/50 border-2 border-dashed border-slate-200 rounded-3xl flex flex-col items-center justify-center text-slate-400">
+            <div className="h-full bg-white/50 border-2 border-dashed border-slate-200 rounded-3xl flex flex-col items-center justify-center text-slate-300">
               <FileText size={48} className="mb-4 opacity-20" />
-              <p className="font-medium">Valitse tekstimalli listasta</p>
+              <p className="font-medium">Valitse tekstimalli aloittaaksesi</p>
             </div>
           )}
         </div>
