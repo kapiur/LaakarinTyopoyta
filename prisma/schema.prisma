@@ -15,6 +15,7 @@ model User {
   name          String?
   categories    Category[]
   templates     Template[]
+  pcaDrugs PcaDrug[]
   createdAt     DateTime   @default(now())
 }
 
@@ -37,3 +38,15 @@ model Template {
   user       User?    @relation(fields: [userId], references: [id])
   createdAt  DateTime @default(now())
 }
+
+model PcaDrug {
+  id        Int      @id @default(autoincrement())
+  name      String
+  strength  Float    // mg/ml
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
