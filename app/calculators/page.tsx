@@ -18,6 +18,7 @@ export default function CalculatorsPage() {
   
   const [bmi, setBmi] = useState({ h: '175', w: '75' });
   const [gfr, setGfr] = useState({ age: '65', w: '75', creat: '100', sex: '1.23' });
+  const [peds, setPeds] = useState({ weight: '', doseMgKg: '', strength: '' });
   
   const [chads, setChads] = useState({ chf: 0, ht: 0, age: 0, dm: 0, stroke: 0, vasc: 0, sex: 0 });
   const [hasbled, setHasbled] = useState({ sbp: 0, renal: 0, liver: 0, stroke: 0, bleed: 0, inr: 0, age: 0, drugs: 0, alc: 0 });
@@ -64,26 +65,21 @@ export default function CalculatorsPage() {
   const executeCalculation = () => {
     if (activeTab === 'pca') {
       const { kas, ad, spd, days } = pca;
-      const adNum = parseFloat(ad);
-      const spdNum = parseFloat(spd);
-      const dNum = parseInt(days);
+      const adNum = parseFloat(ad), spdNum = parseFloat(spd), dNum = parseInt(days);
       let out = "", totMl = 0, conc = "";
-
       selectedDrugs.forEach(drug => {
         const vNum = parseFloat(drug.val);
         if (isNaN(vNum) || vNum <= 0 || drug.name === 'none') return;
         const libData = library.find(l => l.n === drug.name);
         if (!libData) return;
-        const mgT = vNum * dNum; 
-        const ml = mgT / libData.s; 
+        const mgT = vNum * dNum, ml = mgT / libData.s;
         totMl += ml;
         out += `${drug.name}: ${vNum} mg/vrk (${mgT.toFixed(1)} mg/${dNum}vrk)\n`;
         conc += `${drug.name.split(' ')[0]}: ${(mgT / adNum).toFixed(libData.s < 1 ? 3 : 2)} mg/ml\n`;
       });
-
       if (!out) return;
       const bolus = (spdNum * 2).toFixed(1);
-      setResult(`PCA-ohje:\n\nPCA ${dNum} vrk, ${kas} ml kasetti.\n${out}Lääkkeet yhteensä: ${totMl.toFixed(1)} ml\nNaCl 0,9 % ad ${adNum} ml (${(adNum - totMl).toFixed(1)} ml)\n\nPitoisuudet:\n${conc}\nNopeus: ${spdNum} ml/h\nBolus: ${bolus} ml (2x tuntiannos), 20 min lukitus.\n\nJos boluksia menee yli 6/8–24 h, nosta nopeutta +0.1 ml/h ad ${(spdNum + 0.2).toFixed(1)} ml/h и bolusta +0.2 ml ad ${(parseFloat(bolus) + 0.4).toFixed(1)} ml.\nJos potilas sedatoituu liikaa, vähennä nopeutta –0.1 ml/h.`);
+      setResult(`PCA-ohje:\n\nPCA ${dNum} vrk, ${kas} ml kasetti.\n${out}Lääkkeet yhteensä: ${totMl.toFixed(1)} ml\nNaCl 0,9 % ad ${adNum} ml (${(adNum - totMl).toFixed(1)} ml)\n\nPitoisuudet:\n${conc}\nNopeus: ${spdNum} ml/h\nBolus: ${bolus} ml (2x tuntiannos), 20 min lukitus.\n\nJos boluksia menee yli 6/8–24 h, nosta nopeutta +0.1 ml/h ad ${(spdNum + 0.2).toFixed(1)} ml/h ja bolusta +0.2 ml ad ${(parseFloat(bolus) + 0.4).toFixed(1)} ml.\nJos potilas sedatoituu liikaa, vähennä nopeutta –0.1 ml/h.`);
     }
 
     if (activeTab === 'chads') {
@@ -96,6 +92,13 @@ export default function CalculatorsPage() {
         score, hbScore, 
         desc: `Aivoinfarktiriski: ${strokeRisk}% / vuosi.\nHAS-BLED: ${hbScore} p (${hbScore >= 3 ? 'SUURI' : 'EI SUURI'} VUOTORISKI).`
       });
+    }
+
+    if (activeTab === 'peds') {
+      const w = parseFloat(peds.weight), d = parseFloat(peds.doseMgKg), s = parseFloat(peds.strength);
+      if (!w || !d || !s) return alert("Täytä kaikki kentät");
+      const totalMg = w * d, totalMl = totalMg / s;
+      setResult(`PEDIATRINEN ANNOS:\n\nPaino: ${w} kg\nAnnos: ${d} mg/kg\nVahvuus: ${s} mg/ml\n\nKerta-annos: ${totalMg.toFixed(2)} mg\nTilavuus: ${totalMl.toFixed(2)} ml`);
     }
 
     if (activeTab === 'bmi') {
@@ -118,11 +121,12 @@ export default function CalculatorsPage() {
         {[
           { id: 'pca', label: 'PCA', icon: <Zap size={14}/> },
           { id: 'chads', label: 'CHADS', icon: <Heart size={14}/> },
+          { id: 'peds', label: 'PEDS', icon: <Baby size={14}/> },
           { id: 'bmi', label: 'BMI', icon: <Activity size={14}/> },
           { id: 'gfr', label: 'GFR', icon: <Calculator size={14}/> }
         ].map((tab) => (
           <button key={tab.id} onClick={() => { setActiveTab(tab.id); setResult(null); }}
-            className={`flex-1 py-2 px-4 rounded-lg text-[10px] font-bold uppercase transition-all ${activeTab === tab.id ? 'bg-blue-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}>
+            className={`flex-1 py-2 px-4 rounded-lg text-[10px] font-bold uppercase transition-all ${activeTab === tab.id ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}>
             {tab.label}
           </button>
         ))}
@@ -167,9 +171,20 @@ export default function CalculatorsPage() {
               <p className="text-[10px] font-black text-red-400 uppercase tracking-widest border-b border-red-100 pb-1 mt-4">Vuotoriski (HAS-BLED)</p>
               <div className="grid grid-cols-1 gap-1">
                 {[{l:"RR-syst. > 160",k:'sbp',v:1},{l:"Munuaisten vajaat.",k:'renal',v:1},{l:"Maksan vajaat.",k:'liver',v:1},{l:"Aiempi vuoto",k:'bleed',v:1},{l:"Labiili INR",k:'inr',v:1},{l:"Ikä > 65",k:'age',v:1},{l:"Lääkitys (ASA/NSAID)",k:'drugs',v:1},{l:"Alkoholi",k:'alc',v:1}].map(i => (
-                  <button key={i.l} onClick={() => setHasbled({...hasbled, [i.k]: hasbled[i.k as keyof typeof hasbled] === i.v ? 0 : i.v})} className={`p-2 text-left rounded-lg border text-[10px] font-bold ${hasbled[i.k as keyof typeof hasbled] === i.v ? 'bg-red-600 text-white border-red-600' : 'bg-red-50/30 border-red-100'}`}>{i.l}</button>
+                  <button key={i.l} onClick={() => setHasbled({...hasbled, [i.k]: hasbled[i.k as keyof typeof hasbled] === i.v ? 0 : i.v})} className={`p-2 text-left rounded-lg border text-[10px] font-bold ${hasbled[i.k as keyof typeof hasbled] === i.v ? 'bg-red-600 text-white' : 'bg-red-50'}`}>{i.l}</button>
                 ))}
               </div>
+            </div>
+          )}
+
+          {activeTab === 'peds' && (
+            <div className="space-y-4 animate-in fade-in">
+              <div><label className="text-[10px] font-bold uppercase text-slate-400 ml-2">Paino (kg)</label>
+              <input value={peds.weight} onChange={e => setPeds({...peds, weight: e.target.value})} className="w-full p-4 bg-slate-50 border rounded-2xl font-bold" /></div>
+              <div><label className="text-[10px] font-bold uppercase text-slate-400 ml-2">Annos (mg/kg)</label>
+              <input value={peds.doseMgKg} onChange={e => setPeds({...peds, doseMgKg: e.target.value})} className="w-full p-4 bg-slate-50 border rounded-2xl font-bold" /></div>
+              <div><label className="text-[10px] font-bold uppercase text-slate-400 ml-2">Lääkkeen vahvuus (mg/ml)</label>
+              <input value={peds.strength} onChange={e => setPeds({...peds, strength: e.target.value})} className="w-full p-4 bg-slate-50 border rounded-2xl font-bold" /></div>
             </div>
           )}
 
@@ -215,8 +230,19 @@ export default function CalculatorsPage() {
                   </div>
                 ) : (
                   <div className="text-center">
-                    <div className="text-8xl font-black text-emerald-400 tracking-tighter drop-shadow-sm">{result.score}</div>
-                    <div className="text-[10px] font-bold text-slate-400 uppercase mt-4 tracking-widest bg-slate-800/50 px-6 py-2 rounded-full border border-slate-700/50 inline-block whitespace-pre-line">{result.desc}</div>
+                    <div className="flex justify-around items-end mb-8">
+                      <div className="flex flex-col items-center">
+                         <div className="text-6xl font-black text-emerald-400">{result.score}</div>
+                         <div className="text-[8px] font-bold text-slate-500 uppercase">CHADS-VASc</div>
+                      </div>
+                      <div className="flex flex-col items-center">
+                         <div className={`text-6xl font-black ${result.hbScore >= 3 ? 'text-red-500' : 'text-emerald-400'}`}>{result.hbScore}</div>
+                         <div className="text-[8px] font-bold text-slate-500 uppercase">HAS-BLED</div>
+                      </div>
+                    </div>
+                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-slate-800/50 px-6 py-4 rounded-3xl border border-slate-700/50 inline-block whitespace-pre-line leading-relaxed">
+                      {result.desc}
+                    </div>
                   </div>
                 )}
               </div>
