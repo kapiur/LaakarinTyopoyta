@@ -1,16 +1,28 @@
+generator client {
+  provider = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-generator client {
-  provider      = "prisma-client-js"
-  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+model User {
+  id            Int        @id @default(autoincrement())
+  email         String     @unique
+  password      String
+  name          String?
+  categories    Category[]
+  templates     Template[]
+  createdAt     DateTime   @default(now())
 }
 
 model Category {
   id        Int        @id @default(autoincrement())
-  name      String     @unique
+  name      String
+  userId    Int?       // Временно опционально для миграции
+  user      User?      @relation(fields: [userId], references: [id])
   templates Template[]
 }
 
@@ -21,4 +33,7 @@ model Template {
   author     String
   categoryId Int
   category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  userId     Int?     // Временно опционально для миграции
+  user       User?    @relation(fields: [userId], references: [id])
+  createdAt  DateTime @default(now())
 }
