@@ -1,63 +1,125 @@
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "../auth/[...nextauth]/route";
 
 const prisma = new PrismaClient();
 
+// Хелпер для получения сессии и проверки прав
+async function getAuthSession() {
+  const session = await getServerSession(authOptions);
+  if (!session || !session.user) return null;
+  return session;
+}
+
 export async function GET() {
+  const session = await getAuthSession();
+  
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
-    const templates = await prisma.template.findMany({ orderBy: { id: 'desc' } });
-    return NextResponse.json(templates);
+    const currentUserId = parseInt((session.user as any).id);
+
+    const categories = await prisma.category.findMany({
+      where: {
+        userId: currentUserId
+      },
+      include: {
+        templates: true,
+      },
+      orderBy: {
+        name: 'asc'
+      }
+    });
+    return NextResponse.json(categories);
   } catch (error) {
-    return NextResponse.json({ error: 'Database error' }, { status: 500 });
+    console.error("GET Templates Error:", error);
+    return NextResponse.json({ error: 'Failed to fetch' }, { status: 500 });
   }
 }
 
-export async function POST(req: Request) {
+export async function POST(request: Request) {
+  const session = await getAuthSession();
+  
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
-    const body = await req.json();
-    
-    // ПРОВЕРКА: Преобразуем categoryId в число, так как из формы оно может прийти строкой
-    const catId = parseInt(body.categoryId);
-    
-    if (isNaN(catId)) {
-      return NextResponse.json({ error: 'Virheellinen osio ID' }, { status: 400 });
+    const body = await request.json();
+    const { title, content, author, categoryName } = body;
+    const currentUserId = parseInt((session.user as any).id);
+
+    // 1. Находим или создаем категорию ДЛЯ КОНКРЕТНОГО пользователя
+    let category = await prisma.category.findFirst({
+      where: { 
+        name: categoryName,
+        userId: currentUserId
+      }
+    });
+
+    if (!category) {
+      category = await prisma.category.create({
+        data: { 
+          name: categoryName,
+          userId: currentUserId
+        }
+      });
     }
 
-    const newTemplate = await prisma.template.create({
+    // 2. Создаем шаблон, привязанный к пользователю и категории
+    const template = await prisma.template.create({
       data: {
-        title: body.title,
-        content: body.content,
-        author: 'Dr. Kapustin',
-        categoryId: catId, // Используем числовое значение
+        title,
+        content,
+        author,
+        categoryId: category.id,
+        userId: currentUserId
       },
     });
-    return NextResponse.json(newTemplate);
+
+    return NextResponse.json(template);
   } catch (error) {
-    console.error("Prisma error:", error);
+    console.error("POST Template Error:", error);
     return NextResponse.json({ error: 'Failed to create' }, { status: 500 });
   }
 }
 
-// Новый метод для удаления и редактирования (через query параметры или тело)
-export async function DELETE(req: Request) {
+export async function DELETE(request: Request) {
+  const session = await getAuthSession();
+  
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
-    const { id } = await req.json();
-    await prisma.template.delete({ where: { id: Number(id) } });
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+    const currentUserId = parseInt((session.user as any).id);
+
+    if (!id) return NextResponse.json({ error: 'ID required' }, { status: 400 });
+
+    // Проверяем, что шаблон принадлежит именно этому пользователю перед удалением
+    const template = await prisma.template.findFirst({
+      where: {
+        id: parseInt(id),
+        userId: currentUserId
+      }
+    });
+
+    if (!template) {
+      return NextResponse.json({ error: 'Template not found or access denied' }, { status: 403 });
+    }
+
+    await prisma.template.delete({
+      where: { id: parseInt(id) },
+    });
+
     return NextResponse.json({ success: true });
   } catch (error) {
-    return NextResponse.json({ error: 'Delete failed' }, { status: 500 });
-  }
-}
-
-export async function PUT(req: Request) {
-  try {
-    const body = await req.json();
-    const updated = await prisma.template.update({
-      where: { id: Number(body.id) },
-      data: { title: body.title, category: body.category, content: body.content },
-    });
-    return NextResponse.json(updated);
-  } catch (error) {
-    return NextResponse.json({ error: 'Update failed' }, { status: 500 });
+    console.error("DELETE Template Error:", error);
+    return NextResponse.json({ error: 'Failed to delete' }, { status: 500 });
   }
 }
