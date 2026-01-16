@@ -1,13 +1,13 @@
 "use client";
 import { useState, useEffect, useMemo } from 'react';
-import { useSession } from "next-auth/react"; // Добавили для получения автора
+import { useSession } from "next-auth/react";
 import { 
   Plus, Search, FileText, Trash2, ChevronRight, 
-  Copy, Check, Clock, User, Share2, Loader2, X, RefreshCcw, Edit2
+  Copy, Check, Loader2, X, Edit2
 } from 'lucide-react';
 
 export default function TemplatesPage() {
-  const { data: session } = useSession(); // Получаем данные пользователя
+  const { data: session } = useSession();
   const [categories, setCategories] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeCategoryId, setActiveCategoryId] = useState<number | null>(null);
@@ -53,17 +53,16 @@ export default function TemplatesPage() {
     });
   };
 
-  // --- ИСПРАВЛЕННОЕ СОХРАНЕНИЕ ---
   const handleSave = async () => {
-    // Проверка обязательных полей
     if (!formData.title.trim() || !formData.content.trim() || !formData.categoryName.trim()) {
-      alert("Täytä kaikki kentät: Otsikko, Kategoria ja Sisältö.");
+      alert("Täytä kaikki pakolliset kentät.");
       return;
     }
 
+    // ВАЖНО: Передаем ID, чтобы API понимал - это обновление или создание нового
     const payload = {
       ...formData,
-      author: formData.author || session?.user?.email || 'Nimetön' // Гарантируем наличие автора для БД
+      author: formData.author || session?.user?.email || 'Doc'
     };
 
     try {
@@ -82,16 +81,15 @@ export default function TemplatesPage() {
         alert("Malli tallennettu!");
       } else {
         const errorData = await res.json();
-        alert(`Virhe tallennuksessa: ${errorData.error || 'Palvelinvirhe'}`);
+        alert(`Virhe: ${errorData.error}`);
       }
     } catch (err) {
-      console.error("Save Error:", err);
       alert("Yhteysvirhe tallennettaessa.");
     }
   };
 
   const deleteCategory = async (id: number, name: string) => {
-    if (!confirm(`Poistetaanko "${name}"?`)) return;
+    if (!confirm(`Haluatko poistaa kategorian "${name}" ja kaikki sen mallit?`)) return;
     await fetch(`/api/templates?id=${id}&type=category`, { method: 'DELETE' });
     fetchTemplates();
   };
@@ -132,6 +130,8 @@ export default function TemplatesPage() {
   }, [selectedTemplate, templateValues]);
 
   const activeCategory = categories.find(c => c.id === activeCategoryId);
+  
+  // ИСПРАВЛЕНИЕ: Безопасный фильтр (не упадет, если данных еще нет)
   const displayedTemplates = activeCategory?.templates 
     ? activeCategory.templates.filter((t: any) => t.title.toLowerCase().includes(searchTerm.toLowerCase())) 
     : [];
@@ -153,11 +153,11 @@ export default function TemplatesPage() {
           <div key={cat.id} className="group relative">
             <button 
               onClick={() => { setActiveCategoryId(cat.id); setSelectedTemplate(null); }}
-              className={`px-6 py-3 rounded-2xl font-bold text-sm border whitespace-nowrap ${activeCategoryId === cat.id ? 'bg-blue-600 text-white shadow-md' : 'bg-white text-slate-500 hover:border-blue-300'}`}
+              className={`px-6 py-3 rounded-2xl font-bold text-sm border whitespace-nowrap transition-all ${activeCategoryId === cat.id ? 'bg-blue-600 text-white shadow-md' : 'bg-white text-slate-500 hover:border-blue-300'}`}
             >
               {cat.name}
             </button>
-            <button onClick={() => deleteCategory(cat.id, cat.name)} className="absolute -top-2 -right-1 bg-red-100 text-red-600 p-1 rounded-full opacity-0 group-hover:opacity-100 border-2 border-white shadow-sm"><X size={12} /></button>
+            <button onClick={() => deleteCategory(cat.id, cat.name)} className="absolute -top-2 -right-1 bg-red-100 text-red-600 p-1 rounded-full opacity-0 group-hover:opacity-100 border-2 border-white shadow-sm transition-opacity"><X size={12} /></button>
           </div>
         ))}
       </div>
@@ -166,11 +166,11 @@ export default function TemplatesPage() {
         <div className="col-span-3 flex flex-col gap-4 min-h-0">
           <div className="relative">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-            <input placeholder="Hae..." className="w-full pl-12 pr-4 py-4 bg-white border border-slate-200 rounded-2xl outline-none" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+            <input placeholder="Hae..." className="w-full pl-12 pr-4 py-4 bg-white border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500/20" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
           </div>
           <div className="flex-1 overflow-y-auto space-y-2 no-scrollbar">
-            {loading ? <Loader2 className="animate-spin mx-auto text-blue-600" /> : displayedTemplates.map((t: any) => (
-              <button key={t.id} onClick={() => { setSelectedTemplate(t); setIsAdding(false); setIsEditing(false); }} className={`w-full text-left p-4 rounded-2xl border transition-all ${selectedTemplate?.id === t.id ? 'bg-blue-600 text-white shadow-md' : 'bg-white border-slate-50 hover:border-blue-200'}`}>
+            {loading ? <div className="flex justify-center py-10"><Loader2 className="animate-spin text-blue-600" /></div> : displayedTemplates.map((t: any) => (
+              <button key={t.id} onClick={() => { setSelectedTemplate(t); setIsAdding(false); setIsEditing(false); }} className={`w-full text-left p-4 rounded-2xl border transition-all ${selectedTemplate?.id === t.id ? 'bg-blue-600 text-white shadow-md' : 'bg-white border-slate-100 hover:border-blue-200'}`}>
                 <div className="flex items-center justify-between"><span className="font-bold text-sm truncate">{t.title}</span><ChevronRight size={14} className={selectedTemplate?.id === t.id ? 'text-white' : 'text-slate-300'} /></div>
               </button>
             ))}
@@ -182,27 +182,27 @@ export default function TemplatesPage() {
             <div className="bg-white h-full rounded-3xl border shadow-sm flex flex-col overflow-hidden animate-in slide-in-from-right-4">
               <div className="p-8 border-b flex justify-between items-center bg-slate-50/50">
                 <h2 className="text-xl font-bold text-slate-900">{isEditing ? 'Muokkaa mallia' : 'Uusi tekstipohja'}</h2>
-                <button onClick={() => {setIsAdding(false); setIsEditing(false);}} className="p-2 hover:bg-slate-200 rounded-full"><X /></button>
+                <button onClick={() => {setIsAdding(false); setIsEditing(false);}} className="p-2 hover:bg-slate-200 rounded-full transition-colors"><X /></button>
               </div>
               <div className="p-8 flex-1 overflow-y-auto space-y-4 no-scrollbar">
                 <div className="grid grid-cols-2 gap-4">
-                  <input placeholder="Otsikko (esm. PCA-aloitus)" className="p-4 bg-slate-50 border rounded-2xl outline-none" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} />
-                  <input placeholder="Kategoria (esm. Anestesia)" className="p-4 bg-slate-50 border rounded-2xl outline-none" value={formData.categoryName} onChange={e => setFormData({...formData, categoryName: e.target.value})} />
+                  <input placeholder="Otsikko (esm. PCA-aloitus)" className="p-4 bg-slate-50 border rounded-2xl outline-none focus:bg-white transition-colors" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} />
+                  <input placeholder="Kategoria (esm. Anestesia)" className="p-4 bg-slate-50 border rounded-2xl outline-none focus:bg-white transition-colors" value={formData.categoryName} onChange={e => setFormData({...formData, categoryName: e.target.value})} />
                 </div>
-                <textarea placeholder="Kirjoita sisältö... Käytä {{Nimi:select:val1,val2}} tai {{Nimi:input}} muuttujille." className="w-full p-6 bg-slate-50 border rounded-2xl font-mono text-sm min-h-[400px] outline-none" value={formData.content} onChange={e => setFormData({...formData, content: e.target.value})} />
+                <textarea placeholder="Kirjoita sisältö..." className="w-full p-6 bg-slate-50 border rounded-2xl font-mono text-sm min-h-[400px] outline-none focus:bg-white transition-colors" value={formData.content} onChange={e => setFormData({...formData, content: e.target.value})} />
               </div>
               <div className="p-8 border-t bg-slate-50/30">
-                <button onClick={handleSave} className="w-full py-4 bg-blue-600 text-white rounded-2xl font-bold hover:bg-blue-700 transition-all uppercase tracking-widest">Tallenna malli</button>
+                <button onClick={handleSave} className="w-full py-4 bg-blue-600 text-white rounded-2xl font-bold hover:bg-blue-700 transition-all uppercase tracking-widest shadow-lg shadow-blue-100">Tallenna malli</button>
               </div>
             </div>
           ) : selectedTemplate ? (
             <div className="grid grid-cols-2 h-full gap-6">
               <div className="bg-white rounded-3xl border shadow-sm flex flex-col overflow-hidden">
                 <div className="p-6 border-b bg-slate-50/50 flex justify-between items-center">
-                  <h3 className="font-bold text-slate-900">Valinnat</h3>
+                  <h3 className="font-bold text-slate-900 uppercase text-xs tracking-widest">Valinnat</h3>
                   <div className="flex gap-1">
-                    <button onClick={() => startEditing(selectedTemplate)} className="p-2 text-slate-400 hover:text-blue-600"><Edit2 size={18} /></button>
-                    <button onClick={() => { if(confirm("Poista?")) fetch(`/api/templates?id=${selectedTemplate.id}`, {method:'DELETE'}).then(()=>fetchTemplates()) }} className="p-2 text-slate-400 hover:text-red-600"><Trash2 size={18} /></button>
+                    <button onClick={() => startEditing(selectedTemplate)} className="p-2 text-slate-400 hover:text-blue-600 transition-colors"><Edit2 size={18} /></button>
+                    <button onClick={() => { if(confirm("Poista?")) fetch(`/api/templates?id=${selectedTemplate.id}`, {method:'DELETE'}).then(()=>fetchTemplates()) }} className="p-2 text-slate-400 hover:text-red-600 transition-colors"><Trash2 size={18} /></button>
                   </div>
                 </div>
                 <div className="p-6 flex-1 overflow-y-auto no-scrollbar space-y-6">
@@ -211,22 +211,22 @@ export default function TemplatesPage() {
                       <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">{part.id}</label>
                       {part.type === 'select' ? (
                         <div className="flex flex-wrap gap-2">{part.options.map((opt: any) => (
-                          <button key={opt} onClick={() => setTemplateValues(prev => ({ ...prev, [part.id]: opt }))} className={`px-4 py-2 rounded-xl text-xs font-bold border ${templateValues[part.id] === opt ? 'bg-blue-600 text-white' : 'bg-slate-50 text-slate-600 hover:border-blue-300'}`}>{opt}</button>
+                          <button key={opt} onClick={() => setTemplateValues(prev => ({ ...prev, [part.id]: opt }))} className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all ${templateValues[part.id] === opt ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-slate-50 border-slate-100 text-slate-600 hover:border-blue-300'}`}>{opt}</button>
                         ))}</div>
                       ) : (
-                        <input className="p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none" value={templateValues[part.id] || ''} onChange={(e) => setTemplateValues(prev => ({ ...prev, [part.id]: e.target.value }))} />
+                        <input className="p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-blue-300" value={templateValues[part.id] || ''} onChange={(e) => setTemplateValues(prev => ({ ...prev, [part.id]: e.target.value }))} />
                       )}
                     </div>
                   ))}
                 </div>
               </div>
-              <div className="bg-[#1e293b] rounded-3xl flex flex-col overflow-hidden border border-slate-800 relative shadow-2xl">
-                <div className="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-900/50">
-                  <span className="text-slate-400 text-xs font-bold uppercase tracking-widest">Lopputulos</span>
-                  <button onClick={handleCopy} className={`px-6 py-2 rounded-xl border text-xs font-bold ${copied ? 'bg-emerald-500 text-white' : 'bg-emerald-500/10 text-emerald-400'}`}>{copied ? 'KOPIOITU!' : 'KOPIOI'}</button>
+              <div className="bg-[#0f172a] rounded-3xl flex flex-col overflow-hidden border border-slate-800 relative shadow-2xl">
+                <div className="p-6 border-b border-slate-800/50 flex justify-between items-center bg-slate-900/50">
+                  <span className="text-emerald-500/50 text-[10px] font-bold uppercase tracking-widest font-mono">Tulos / Konsoli</span>
+                  <button onClick={handleCopy} className={`px-6 py-2 rounded-xl border transition-all text-xs font-bold ${copied ? 'bg-emerald-500 text-slate-900 border-emerald-500 shadow-lg' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20'}`}>{copied ? 'KOPIOITU!' : 'KOPIOI'}</button>
                 </div>
-                <div className="p-8 flex-1 overflow-y-auto text-emerald-400/90 font-mono text-sm leading-relaxed whitespace-pre-wrap no-scrollbar">
-                  {generateFinalText || "Täytä valinnat..."}
+                <div className="p-8 flex-1 overflow-y-auto text-emerald-400/90 font-mono text-sm leading-relaxed whitespace-pre-wrap no-scrollbar shadow-inner">
+                  {generateFinalText || "Täytä valinnat vasemmalta..."}
                 </div>
               </div>
             </div>
