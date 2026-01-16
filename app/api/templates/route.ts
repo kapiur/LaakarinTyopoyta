@@ -5,6 +5,7 @@ import { authOptions } from "../../../lib/auth";
 
 const prisma = new PrismaClient();
 
+// ПОЛУЧЕНИЕ КАТЕГОРИЙ И ШАБЛОНОВ
 export async function GET() {
   try {
     const session = await getServerSession(authOptions);
@@ -13,18 +14,27 @@ export async function GET() {
     }
 
     const userId = parseInt((session.user as any).id);
-    const drugs = await prisma.pcaDrug.findMany({
+    
+    // Загружаем категории вместе с вложенными шаблонами для текущего юзера
+    const categories = await prisma.category.findMany({
       where: { userId: userId },
+      include: {
+        templates: {
+          where: { userId: userId },
+          orderBy: { createdAt: 'desc' }
+        }
+      },
       orderBy: { name: 'asc' }
     });
-    
-    return NextResponse.json(drugs);
+
+    return NextResponse.json(categories);
   } catch (error) {
-    console.error("GET PCA Library Error:", error);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    console.error("GET Templates Error:", error);
+    return NextResponse.json({ error: "Latausvirhe" }, { status: 500 });
   }
 }
 
+// СОЗДАНИЕ ИЛИ ОБНОВЛЕНИЕ ШАБЛОНА
 export async function POST(req: Request) {
   try {
     const session = await getServerSession(authOptions);
@@ -32,24 +42,46 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const body = await req.json();
+    const { title, content, categoryName, author, id } = await req.json();
     const userId = parseInt((session.user as any).id);
 
-    const drug = await prisma.pcaDrug.create({
-      data: {
-        name: body.name,
-        strength: parseFloat(body.strength),
-        userId: userId
-      }
+    // 1. Сначала разбираемся с категорией
+    let category = await prisma.category.findFirst({
+      where: { name: categoryName, userId: userId }
     });
 
-    return NextResponse.json(drug);
+    if (!category) {
+      category = await prisma.category.create({
+        data: { name: categoryName, userId: userId }
+      });
+    }
+
+    // 2. Если есть ID, обновляем существующий шаблон, если нет — создаем новый
+    if (id) {
+      const updatedTemplate = await prisma.template.update({
+        where: { id: parseInt(id), userId: userId },
+        data: { title, content, author, categoryId: category.id }
+      });
+      return NextResponse.json(updatedTemplate);
+    } else {
+      const newTemplate = await prisma.template.create({
+        data: {
+          title,
+          content,
+          author: author || "Doc",
+          categoryId: category.id,
+          userId: userId
+        }
+      });
+      return NextResponse.json(newTemplate);
+    }
   } catch (error) {
-    console.error("POST PCA Library Error:", error);
-    return NextResponse.json({ error: "Failed to create drug" }, { status: 500 });
+    console.error("POST Template Error:", error);
+    return NextResponse.json({ error: "Tallennus epäonnistui" }, { status: 500 });
   }
 }
 
+// УДАЛЕНИЕ ШАБЛОНА ИЛИ КАТЕГОРИИ
 export async function DELETE(req: Request) {
   try {
     const session = await getServerSession(authOptions);
@@ -59,22 +91,24 @@ export async function DELETE(req: Request) {
 
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');
+    const type = searchParams.get('type'); // 'category' или 'template'
     const userId = parseInt((session.user as any).id);
 
-    if (!id) {
-      return NextResponse.json({ error: "ID required" }, { status: 400 });
-    }
+    if (!id) return NextResponse.json({ error: "ID required" }, { status: 400 });
 
-    await prisma.pcaDrug.deleteMany({
-      where: {
-        id: parseInt(id),
-        userId: userId
-      }
-    });
+    if (type === 'category') {
+      await prisma.category.deleteMany({
+        where: { id: parseInt(id), userId: userId }
+      });
+    } else {
+      await prisma.template.deleteMany({
+        where: { id: parseInt(id), userId: userId }
+      });
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("DELETE PCA Library Error:", error);
-    return NextResponse.json({ error: "Failed to delete drug" }, { status: 500 });
+    console.error("DELETE Error:", error);
+    return NextResponse.json({ error: "Poisto epäonnistui" }, { status: 500 });
   }
 }
