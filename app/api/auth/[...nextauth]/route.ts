@@ -5,7 +5,8 @@ import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
-export const authOptions = {
+// Убрали export отсюда, чтобы Next.js не ругался
+const authOptions = {
   providers: [
     CredentialsProvider({
       name: "Credentials",
@@ -35,7 +36,7 @@ export const authOptions = {
   },
   callbacks: {
     async session({ session, token }: any) {
-      if (token) {
+      if (token && session.user) {
         session.user.id = token.sub;
       }
       return session;
