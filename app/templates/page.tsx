@@ -1,242 +1,258 @@
 "use client";
 import { useState, useEffect } from 'react';
-import { Plus, X, Save, Loader2, Trash2, Edit3, Settings, Folder, Clipboard, FileEdit } from 'lucide-react';
+import { 
+  Plus, Search, FileText, Trash2, ChevronRight, 
+  Copy, Check, Clock, User, Share2, Loader2 
+} from 'lucide-react';
 
 export default function TemplatesPage() {
   const [categories, setCategories] = useState<any[]>([]);
-  const [templates, setTemplates] = useState<any[]>([]);
-  const [selectedCatId, setSelectedCatId] = useState<number | null>(null);
-  const [selectedTplId, setSelectedTplId] = useState<number | null>(null);
-  const [formValues, setFormValues] = useState<Record<string, string>>({});
-  
-  const [isTplModalOpen, setIsTplModalOpen] = useState(false);
-  const [isCatModalOpen, setIsCatModalOpen] = useState(false);
-  
-  const [tplForm, setTplForm] = useState({ title: '', content: '', categoryId: '' });
-  const [editingTplId, setEditingTplId] = useState<number | null>(null);
-  const [newCatName, setNewCatName] = useState('');
-  const [isSaving, setIsSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedTemplate, setSelectedTemplate] = useState<any>(null);
+  const [isAdding, setIsAdding] = useState(false);
+  const [copied, setCopied] = useState(false);
 
-  useEffect(() => { loadData(); }, []);
+  const [newTemplate, setNewTemplate] = useState({
+    title: '',
+    content: '',
+    categoryName: '',
+    author: ''
+  });
 
-  async function loadData() {
+  useEffect(() => {
+    fetchTemplates();
+  }, []);
+
+  const fetchTemplates = async () => {
     try {
-      const [cRes, tRes] = await Promise.all([fetch('/api/categories'), fetch('/api/templates')]);
-      const cats = await cRes.json();
-      const tpls = await tRes.json();
-      if (Array.isArray(cats)) setCategories(cats);
-      if (Array.isArray(tpls)) setTemplates(tpls);
-      if (cats.length > 0 && !selectedCatId) setSelectedCatId(cats[0].id);
-    } catch (e) { console.error("Load error", e); }
-  }
-
-  const saveCategory = async () => {
-    if (!newCatName) return;
-    await fetch('/api/categories', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: newCatName }),
-    });
-    setNewCatName('');
-    loadData();
-  };
-
-  const deleteCategory = async (id: number) => {
-    if (confirm("Haluatko poistaa osion ja sen mallit?")) {
-      await fetch('/api/categories', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
-      loadData();
+      const res = await fetch('/api/templates');
+      const data = await res.json();
+      setCategories(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error("Virhe ladattaessa malleja:", err);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const saveTemplate = async () => {
-    if (!tplForm.title || !tplForm.categoryId || !tplForm.content) {
-      alert("Täytä kaikki tiedot: otsikko, kategoria ja sisältö!");
+  const handleSave = async () => {
+    if (!newTemplate.title || !newTemplate.content || !newTemplate.categoryName) {
+      alert("Täytä kaikki pakolliset kentät");
       return;
     }
-    setIsSaving(true);
-    const method = editingTplId ? 'PUT' : 'POST';
-    const body = editingTplId ? { ...tplForm, id: editingTplId } : tplForm;
 
     try {
       const res = await fetch('/api/templates', {
-        method,
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
+        body: JSON.stringify(newTemplate),
       });
-      
+
       if (res.ok) {
-        setIsTplModalOpen(false);
-        setEditingTplId(null);
-        setTplForm({ title: '', content: '', categoryId: '' });
-        await loadData();
-      } else {
-        const err = await res.json();
-        alert("Virhe tallennuksessa: " + (err.error || "Palvelinvirhe"));
+        setIsAdding(false);
+        setNewTemplate({ title: '', content: '', categoryName: '', author: '' });
+        fetchTemplates();
       }
-    } catch (e) {
-      alert("Yhteysvirhe palvelimeen");
-    } finally {
-      setIsSaving(false);
+    } catch (err) {
+      alert("Tallennus epäonnistui");
     }
   };
 
-  const filteredTemplates = templates.filter(t => t.categoryId === selectedCatId);
-  const selectedTemplate = templates.find(t => t.id === selectedTplId);
-
-  const generateFinalText = () => {
-    if (!selectedTemplate) return "";
-    return selectedTemplate.content.replace(/{{(.*?)}}/g, (match: string, p1: string) => {
-      const key = p1.split(':')[0].trim();
-      return formValues[key] || "____";
-    });
+  const handleDelete = async (id: number) => {
+    if (!confirm("Haluatko varmasti poistaa tämän mallin?")) return;
+    try {
+      await fetch(`/api/templates?id=${id}`, { method: 'DELETE' });
+      fetchTemplates();
+      if (selectedTemplate?.id === id) setSelectedTemplate(null);
+    } catch (err) {
+      alert("Poisto epäonnistui");
+    }
   };
 
+  const handleCopy = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  // --- НОВАЯ ФУНКЦИЯ: ПОДЕЛИТЬСЯ ---
+  const handleShare = async (templateId: number, title: string) => {
+    const targetEmail = window.prompt(`Jaa malli "${title}"\n\nSyötä vastaanottajan sähköposti:`);
+    
+    if (!targetEmail) return;
+
+    try {
+      const res = await fetch('/api/templates/share', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ templateId, targetEmail: targetEmail.toLowerCase().trim() })
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        alert("Malli kopioitu onnistuneesti kollegalle!");
+      } else {
+        alert("Virhe: " + (data.error || "Jakaminen epäonnistui"));
+      }
+    } catch (err) {
+      alert("Yhteysvirhe palvelimeen.");
+    }
+  };
+
+  const filteredCategories = categories.map(cat => ({
+    ...cat,
+    templates: cat.templates.filter((t: any) => 
+      t.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      cat.name.toLowerCase().includes(searchTerm.toLowerCase())
+    )
+  })).filter(cat => cat.templates.length > 0);
+
   return (
-    <div className="flex h-[calc(100vh-8rem)] gap-4 p-4 bg-slate-50 text-slate-900">
-      <div className="w-80 flex flex-col gap-4">
-        <div className="bg-white p-4 rounded-2xl border shadow-sm">
-          <div className="flex justify-between items-center mb-4 text-slate-500 uppercase text-[10px] font-bold tracking-widest">
-            <span className="flex items-center gap-2"><Folder size={14}/> Osiot</span>
-            <button onClick={() => setIsCatModalOpen(true)} className="hover:text-blue-600"><Settings size={16}/></button>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {categories.map(c => (
-              <button key={c.id} onClick={() => { setSelectedCatId(c.id); setSelectedTplId(null); }}
-                className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all ${selectedCatId === c.id ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-100 text-slate-600'}`}>
-                {c.name}
-              </button>
-            ))}
-          </div>
+    <div className="max-w-7xl mx-auto space-y-6 animate-in fade-in duration-500">
+      {/* HEADER */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-3xl border shadow-sm">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Tekstimallit</h1>
+          <p className="text-slate-500 text-sm">Hallitse ja käytä kliinisiä tekstipohjia</p>
         </div>
-
-        <div className="flex-1 bg-white p-4 rounded-2xl border shadow-sm flex flex-col overflow-hidden">
-          <div className="flex justify-between items-center mb-4 border-b pb-2 font-bold text-sm">
-            <span>Mallit</span>
-            <button onClick={() => { 
-              if(categories.length === 0) return alert("Luo ensin osio!"); 
-              setTplForm({title:'', content:'', categoryId: String(selectedCatId || categories[0].id)}); 
-              setEditingTplId(null); 
-              setIsTplModalOpen(true); 
-            }}
-              className="p-1 bg-blue-600 text-white rounded-md"><Plus size={16}/></button>
-          </div>
-          <div className="flex-1 overflow-auto space-y-2">
-            {filteredTemplates.map(t => (
-              <div key={t.id} onClick={() => { setSelectedTplId(t.id); setFormValues({}); }}
-                className={`group p-3 rounded-xl border cursor-pointer relative transition-all ${selectedTplId === t.id ? 'bg-blue-50 border-blue-200 text-blue-800' : 'bg-white border-slate-100'}`}>
-                <p className="font-medium text-sm pr-10 leading-tight">{t.title}</p>
-                <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 flex gap-1">
-                   <button onClick={(e) => { e.stopPropagation(); setEditingTplId(t.id); setTplForm({title:t.title, content:t.content, categoryId: String(t.categoryId)}); setIsTplModalOpen(true); }} className="p-1 hover:text-blue-600"><Edit3 size={14}/></button>
-                   <button onClick={(e) => { e.stopPropagation(); if(confirm("Poista?")) fetch('/api/templates', {method:'DELETE', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:t.id})}).then(loadData); }} className="p-1 hover:text-red-600"><Trash2 size={14}/></button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+        <button 
+          onClick={() => setIsAdding(true)}
+          className="flex items-center justify-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-2xl font-bold hover:bg-blue-700 transition-all active:scale-95 shadow-lg shadow-blue-200"
+        >
+          <Plus size={20} />
+          <span>UUSI MALLI</span>
+        </button>
       </div>
 
-      <div className="flex-1 bg-white rounded-3xl border shadow-sm flex overflow-hidden">
-        {selectedTemplate ? (
-          <div className="flex w-full h-full">
-            <div className="w-1/2 p-8 border-r overflow-auto">
-              <h2 className="text-xl font-bold mb-6 border-b pb-4">{selectedTemplate.title}</h2>
-              <div className="space-y-4">
-                {selectedTemplate.content.match(/{{(.*?)}}/g)?.map((match: string) => {
-                  const [key, type, options] = match.replace(/{{|}}/g, '').split(':');
-                  return (
-                    <div key={key} className="bg-slate-50 p-3 rounded-xl">
-                      <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">{key}</label>
-                      {type === 'select' ? (
-                        <select className="w-full p-2 border rounded-lg text-sm" onChange={e => setFormValues({...formValues, [key]: e.target.value})}>
-                          <option value="">Valitse...</option>
-                          {options.split(',').map(o => <option key={o} value={o}>{o}</option>)}
-                        </select>
-                      ) : (
-                        <input className="w-full p-2 border rounded-lg text-sm" type="text" onChange={e => setFormValues({...formValues, [key]: e.target.value})} />
-                      )}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* LEFT: LIST */}
+        <div className="lg:col-span-4 space-y-4">
+          <div className="relative group">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-600 transition-colors" size={18} />
+            <input 
+              type="text"
+              placeholder="Hae malleja..."
+              className="w-full pl-12 pr-4 py-4 bg-white border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all shadow-sm"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-4 max-h-[calc(100vh-300px)] overflow-y-auto pr-2 no-scrollbar">
+            {loading ? (
+              <div className="flex justify-center py-10"><Loader2 className="animate-spin text-blue-600" /></div>
+            ) : filteredCategories.map(cat => (
+              <div key={cat.id} className="space-y-2">
+                <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] ml-2">{cat.name}</h3>
+                {cat.templates.map((t: any) => (
+                  <div 
+                    key={t.id}
+                    onClick={() => setSelectedTemplate(t)}
+                    className={`group p-4 rounded-2xl cursor-pointer transition-all border ${
+                      selectedTemplate?.id === t.id 
+                        ? 'bg-blue-600 border-blue-600 text-white shadow-md translate-x-1' 
+                        : 'bg-white border-slate-100 hover:border-blue-300 hover:shadow-sm'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <FileText size={18} className={selectedTemplate?.id === t.id ? 'text-blue-100' : 'text-blue-600'} />
+                        <span className="font-bold text-sm truncate max-w-[180px]">{t.title}</span>
+                      </div>
+                      <ChevronRight size={16} className={`transition-transform ${selectedTemplate?.id === t.id ? 'rotate-90' : 'group-hover:translate-x-1'}`} />
                     </div>
-                  );
-                })}
+                  </div>
+                ))}
               </div>
-            </div>
-            <div className="w-1/2 p-8 bg-slate-50 flex flex-col">
-              <div className="flex-1 bg-white p-8 rounded-2xl border shadow-inner text-base leading-relaxed whitespace-pre-wrap font-serif italic text-slate-600">
-                {generateFinalText()}
-              </div>
-              <button onClick={() => { navigator.clipboard.writeText(generateFinalText()); alert("Kopioitu!"); }}
-                className="mt-4 w-full py-4 bg-emerald-600 text-white rounded-2xl font-bold hover:bg-emerald-700 shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2">
-                <Clipboard size={20}/> Kopioi teksti
-              </button>
-            </div>
+            ))}
           </div>
-        ) : (
-          <div className="flex-1 flex flex-col items-center justify-center text-slate-300 italic"><FileEdit size={64} className="mb-4 opacity-20"/><p>Valitse malli</p></div>
-        )}
-      </div>
+        </div>
 
-      {/* МОДАЛКА ШАБЛОНА С ВЫБОРОМ КАТЕГОРИИ */}
-      {isTplModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl p-8 w-full max-w-2xl shadow-2xl">
-            <h3 className="text-xl font-bold mb-6">{editingTplId ? 'Muokkaa mallia' : 'Uusi malli'}</h3>
-            <div className="space-y-4">
-              <div>
-                <label className="text-xs font-bold text-slate-400 uppercase ml-1">Otsikko</label>
-                <input value={tplForm.title} placeholder="Esim. Polvi" className="w-full p-3 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500 mt-1" onChange={e => setTplForm({...tplForm, title: e.target.value})} />
+        {/* RIGHT: EDITOR / VIEW */}
+        <div className="lg:col-span-8 h-full">
+          {isAdding ? (
+            <div className="bg-white p-8 rounded-3xl border shadow-sm space-y-6 animate-in slide-in-from-right-4 duration-300">
+              <h2 className="text-xl font-bold flex items-center gap-2"><Plus className="text-blue-600" /> Luo uusi malli</h2>
+              <div className="grid gap-4">
+                <input 
+                  placeholder="Mallin otsikko (esim. Polvi-status)"
+                  className="w-full p-4 bg-slate-50 border rounded-2xl outline-none focus:ring-2 focus:ring-blue-500"
+                  value={newTemplate.title}
+                  onChange={e => setNewTemplate({...newTemplate, title: e.target.value})}
+                />
+                <input 
+                  placeholder="Kategoria (esim. Kirurgia)"
+                  className="w-full p-4 bg-slate-50 border rounded-2xl outline-none focus:ring-2 focus:ring-blue-500"
+                  value={newTemplate.categoryName}
+                  onChange={e => setNewTemplate({...newTemplate, categoryName: e.target.value})}
+                />
+                <textarea 
+                  placeholder="Mallin sisältö..."
+                  rows={12}
+                  className="w-full p-4 bg-slate-50 border rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+                  value={newTemplate.content}
+                  onChange={e => setNewTemplate({...newTemplate, content: e.target.value})}
+                />
               </div>
-              
-              <div>
-                <label className="text-xs font-bold text-slate-400 uppercase ml-1">Osio (Kategoria)</label>
-                <select 
-                  value={tplForm.categoryId} 
-                  className="w-full p-3 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500 mt-1"
-                  onChange={e => setTplForm({...tplForm, categoryId: e.target.value})}
-                >
-                  {categories.map(c => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-slate-400 uppercase ml-1">Sisältö</label>
-                <textarea value={tplForm.content} placeholder="Käytä {{muuttuja}} или {{valinta:select:a,b}}" className="w-full h-64 p-4 border rounded-xl font-mono text-sm outline-none focus:ring-2 focus:ring-blue-500 mt-1" onChange={e => setTplForm({...tplForm, content: e.target.value})} />
-              </div>
-
               <div className="flex gap-3 pt-4">
-                <button onClick={() => setIsTplModalOpen(false)} className="flex-1 py-3 font-bold bg-slate-100 rounded-xl hover:bg-slate-200">Peruuta</button>
-                <button onClick={saveTemplate} disabled={isSaving} className="flex-[2] py-3 bg-blue-600 text-white rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-blue-700">
-                  {isSaving ? <Loader2 className="animate-spin" /> : <Save size={20} />} Tallenna
-                </button>
+                <button onClick={handleSave} className="flex-1 py-4 bg-blue-600 text-white rounded-2xl font-bold hover:bg-blue-700 transition-all">TALLENNA</button>
+                <button onClick={() => setIsAdding(false)} className="px-8 py-4 bg-slate-100 text-slate-600 rounded-2xl font-bold hover:bg-slate-200 transition-all">PERUUTA</button>
               </div>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* МОДАЛКА КАТЕГОРИЙ */}
-      {isCatModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
-          <div className="bg-white p-8 rounded-3xl w-full max-w-md shadow-2xl">
-            <div className="flex justify-between mb-6 items-center font-bold text-lg">
-              <span>Hallitse osioita</span>
-              <button onClick={() => setIsCatModalOpen(false)}><X/></button>
-            </div>
-            <div className="space-y-2 mb-6 max-h-60 overflow-auto pr-2">
-              {categories.map(c => (
-                <div key={c.id} className="flex justify-between items-center p-3 bg-slate-50 rounded-xl border border-slate-100">
-                  <span className="text-sm font-bold text-slate-700">{c.name}</span>
-                  <button onClick={() => deleteCategory(c.id)} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"><Trash2 size={16}/></button>
+          ) : selectedTemplate ? (
+            <div className="bg-white rounded-3xl border shadow-sm overflow-hidden animate-in fade-in duration-300">
+              <div className="p-8 border-b bg-slate-50/50 flex justify-between items-start">
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wider">
+                      {categories.find(c => c.id === selectedTemplate.categoryId)?.name}
+                    </span>
+                  </div>
+                  <h2 className="text-2xl font-bold text-slate-900">{selectedTemplate.title}</h2>
                 </div>
-              ))}
+                <div className="flex gap-2">
+                  {/* КНОПКА ПОДЕЛИТЬСЯ */}
+                  <button 
+                    onClick={() => handleShare(selectedTemplate.id, selectedTemplate.title)}
+                    className="p-3 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
+                    title="Jaa kollegalle"
+                  >
+                    <Share2 size={20} />
+                  </button>
+                  <button 
+                    onClick={() => handleDelete(selectedTemplate.id)}
+                    className="p-3 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"
+                  >
+                    <Trash2 size={20} />
+                  </button>
+                </div>
+              </div>
+              <div className="p-8 space-y-6">
+                <div className="bg-slate-900 rounded-2xl p-6 text-emerald-400 font-mono text-sm leading-relaxed relative group">
+                  <pre className="whitespace-pre-wrap">{selectedTemplate.content}</pre>
+                  <button 
+                    onClick={() => handleCopy(selectedTemplate.content)}
+                    className="absolute top-4 right-4 p-3 bg-white/10 hover:bg-white/20 rounded-xl transition-all text-white backdrop-blur-sm"
+                  >
+                    {copied ? <Check size={18} className="text-emerald-400" /> : <Copy size={18} />}
+                  </button>
+                </div>
+                <div className="flex items-center gap-6 text-slate-400 text-xs font-medium border-t pt-6">
+                  <div className="flex items-center gap-2"><Clock size={14}/> <span>{new Date(selectedTemplate.createdAt).toLocaleDateString('fi-FI')}</span></div>
+                  <div className="flex items-center gap-2"><User size={14}/> <span>{selectedTemplate.author || 'Oma malli'}</span></div>
+                </div>
+              </div>
             </div>
-            <div className="flex gap-2 bg-slate-100 p-2 rounded-2xl border border-slate-200">
-              <input value={newCatName} onChange={e => setNewCatName(e.target.value)} placeholder="Uusi osio..." className="flex-1 bg-transparent p-2 outline-none text-sm px-4" />
-              <button onClick={saveCategory} className="px-5 py-2 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700">Lisää</button>
+          ) : (
+            <div className="h-full min-h-[500px] flex flex-col items-center justify-center text-slate-300 border-2 border-dashed border-slate-100 rounded-3xl">
+              <div className="bg-slate-50 p-6 rounded-full mb-4"><FileText size={48} /></div>
+              <p className="font-medium">Valitse malli listasta tai luo uusi</p>
             </div>
-          </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }
