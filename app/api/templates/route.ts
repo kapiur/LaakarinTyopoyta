@@ -121,5 +121,34 @@ export async function DELETE(request: Request) {
   } catch (error) {
     console.error("DELETE Template Error:", error);
     return NextResponse.json({ error: 'Failed to delete' }, { status: 500 });
+    export async function PUT(request: Request) {
+  const session = await getServerSession(authOptions);
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  try {
+    const body = await request.json();
+    const { id, title, content, categoryName } = body;
+    const currentUserId = parseInt((session.user as any).id);
+
+    // 1. Проверяем категорию
+    let category = await prisma.category.findFirst({
+      where: { name: categoryName, userId: currentUserId }
+    });
+
+    if (!category) {
+      category = await prisma.category.create({
+        data: { name: categoryName, userId: currentUserId }
+      });
+    }
+
+    // 2. Обновляем шаблон только если он принадлежит пользователю
+    const updated = await prisma.template.updateMany({
+      where: { id: parseInt(id), userId: currentUserId },
+      data: { title, content, categoryId: category.id }
+    });
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    return NextResponse.json({ error: 'Failed to update' }, { status: 500 });
   }
 }
