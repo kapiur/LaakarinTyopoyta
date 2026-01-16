@@ -5,7 +5,7 @@ import { authOptions } from "../../../lib/auth";
 
 const prisma = new PrismaClient();
 
-// ПОЛУЧЕНИЕ КАТЕГОРИЙ И ШАБЛОНОВ
+// 1. ПОЛУЧЕНИЕ ВСЕХ КАТЕГОРИЙ И ШАБЛОНОВ ПОЛЬЗОВАТЕЛЯ
 export async function GET() {
   try {
     const session = await getServerSession(authOptions);
@@ -14,8 +14,8 @@ export async function GET() {
     }
 
     const userId = parseInt((session.user as any).id);
-    
-    // Загружаем категории вместе с вложенными шаблонами для текущего юзера
+
+    // Получаем категории вместе с шаблонами, которые принадлежат этому пользователю
     const categories = await prisma.category.findMany({
       where: { userId: userId },
       include: {
@@ -34,7 +34,7 @@ export async function GET() {
   }
 }
 
-// СОЗДАНИЕ ИЛИ ОБНОВЛЕНИЕ ШАБЛОНА
+// 2. СОЗДАНИЕ ИЛИ ОБНОВЛЕНИЕ ШАБЛОНА
 export async function POST(req: Request) {
   try {
     const session = await getServerSession(authOptions);
@@ -42,25 +42,37 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { title, content, categoryName, author, id } = await req.json();
+    const body = await req.json();
     const userId = parseInt((session.user as any).id);
+    const { id, title, content, categoryName, author } = body;
 
-    // 1. Сначала разбираемся с категорией
+    // ШАГ 1: Находим или создаем категорию для пользователя
     let category = await prisma.category.findFirst({
-      where: { name: categoryName, userId: userId }
+      where: { 
+        name: categoryName,
+        userId: userId 
+      }
     });
 
     if (!category) {
       category = await prisma.category.create({
-        data: { name: categoryName, userId: userId }
+        data: { 
+          name: categoryName,
+          userId: userId 
+        }
       });
     }
 
-    // 2. Если есть ID, обновляем существующий шаблон, если нет — создаем новый
+    // ШАГ 2: Если передан ID — обновляем, если нет — создаем новый шаблон
     if (id) {
       const updatedTemplate = await prisma.template.update({
         where: { id: parseInt(id), userId: userId },
-        data: { title, content, author, categoryId: category.id }
+        data: {
+          title,
+          content,
+          author: author || session.user.email || "Nimetön",
+          categoryId: category.id
+        }
       });
       return NextResponse.json(updatedTemplate);
     } else {
@@ -68,20 +80,25 @@ export async function POST(req: Request) {
         data: {
           title,
           content,
-          author: author || "Doc",
+          author: author || session.user.email || "Nimetön",
           categoryId: category.id,
           userId: userId
         }
       });
       return NextResponse.json(newTemplate);
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error("POST Template Error:", error);
-    return NextResponse.json({ error: "Tallennus epäonnistui" }, { status: 500 });
+    return NextResponse.json({ error: "Tallennus epäonnistui: " + error.message }, { status: 500 });
   }
 }
 
-// УДАЛЕНИЕ ШАБЛОНА ИЛИ КАТЕГОРИИ
+// 3. ОБНОВЛЕНИЕ (PUT) — для поддержки метода PUT из фронтенда
+export async function PUT(req: Request) {
+  return POST(req); // Просто перенаправляем на ту же логику сохранения
+}
+
+// 4. УДАЛЕНИЕ ШАБЛОНА ИЛИ КАТЕГОРИИ
 export async function DELETE(req: Request) {
   try {
     const session = await getServerSession(authOptions);
@@ -97,10 +114,12 @@ export async function DELETE(req: Request) {
     if (!id) return NextResponse.json({ error: "ID required" }, { status: 400 });
 
     if (type === 'category') {
+      // Удаляем категорию (благодаря onDelete: Cascade в Prisma, шаблоны удалятся сами)
       await prisma.category.deleteMany({
         where: { id: parseInt(id), userId: userId }
       });
     } else {
+      // Удаляем конкретный шаблон
       await prisma.template.deleteMany({
         where: { id: parseInt(id), userId: userId }
       });
