@@ -18,7 +18,9 @@ export default function CalculatorsPage() {
   
   const [bmi, setBmi] = useState({ h: '175', w: '75' });
   const [gfr, setGfr] = useState({ age: '65', w: '75', creat: '100', sex: '1.23' });
-  const [peds, setPeds] = useState({ weight: '', doseMgKg: '', strength: '' });
+  
+  // Обновленное состояние PEDS с кратностью приемов
+  const [peds, setPeds] = useState({ weight: '', doseMgKg: '', strength: '', timesPerDay: '1' });
   
   const [chads, setChads] = useState({ chf: 0, ht: 0, age: 0, dm: 0, stroke: 0, vasc: 0, sex: 0 });
   const [hasbled, setHasbled] = useState({ sbp: 0, renal: 0, liver: 0, stroke: 0, bleed: 0, inr: 0, age: 0, drugs: 0, alc: 0 });
@@ -91,11 +93,41 @@ export default function CalculatorsPage() {
       setResult({ type: 'dual', score, hbScore, desc: `Aivoinfarktiriski: ${strokeRisk}% / vuosi.\nHAS-BLED: ${hbScore} p (${hbScore >= 3 ? 'SUURI' : 'EI SUURI'} VUOTORISKI).` });
     }
 
+    // Обновленная логика PEDS с суточной и разовой дозой
     if (activeTab === 'peds') {
-      const w = parseFloat(peds.weight), d = parseFloat(peds.doseMgKg), s = parseFloat(peds.strength);
-      if (!w || !d || !s) return alert("Täytä kaikki kentät");
-      const totalMg = w * d, totalMl = totalMg / s;
-      setResult(`PEDIATRINEN ANNOS:\n\nPaino: ${w} kg\nAnnos: ${d} mg/kg\nVahvuus: ${s} mg/ml\n\nKerta-annos: ${totalMg.toFixed(2)} mg\nTilavuus: ${totalMl.toFixed(2)} ml`);
+      const w = parseFloat(peds.weight);
+      const dMgKg = parseFloat(peds.doseMgKg);
+      const s = parseFloat(peds.strength);
+      const times = parseInt(peds.timesPerDay) || 1;
+
+      if (!w || !dMgKg || !s) return alert("Täytä kaikki kentät");
+
+      const dailyMg = w * dMgKg;
+      const dailyMl = dailyMg / s;
+      const singleMg = dailyMg / times;
+      const singleMl = dailyMl / times;
+
+      // Округление и вывод точного значения в скобках
+      const formatDose = (val: number) => {
+        const rounded = Math.round(val * 100) / 100;
+        return val !== rounded 
+          ? `${rounded.toFixed(2)} ml (${val.toFixed(3)} ml)` 
+          : `${val.toFixed(2)} ml`;
+      };
+
+      setResult(
+        `PEDIATRINEN ANNOS:\n\n` +
+        `Paino: ${w} kg\n` +
+        `Annos: ${dMgKg} mg/kg/vrk\n` +
+        `Vahvuus: ${s} mg/ml\n` +
+        `Antokerrat: ${times} krt/vrk\n\n` +
+        `KOKONAISANNOSTUS (Vuorokausi):\n` +
+        `• ${dailyMg.toFixed(2)} mg/vrk\n` +
+        `• ${dailyMl.toFixed(2)} ml/vrk\n\n` +
+        `KERTA-ANNOS (${times} krt päivässä):\n` +
+        `• ${singleMg.toFixed(2)} mg / kerta\n` +
+        `• ${formatDose(singleMl)} / kerta`
+      );
     }
 
     if (activeTab === 'bmi') {
@@ -156,7 +188,6 @@ export default function CalculatorsPage() {
                 <button onClick={() => setShowSettings(!showSettings)} className="text-[10px] font-bold text-slate-300 uppercase">⚙ Asetukset</button>
               </div>
 
-              {/* УПРАВЛЕНИЕ БИБЛИОТЕКОЙ (БД) */}
               <div className="mt-6 p-4 bg-slate-50 rounded-[1.5rem] border border-slate-100 space-y-3">
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-200 pb-1">Lääkekirjasto (DB)</p>
                 <div className="flex gap-1">
@@ -176,18 +207,30 @@ export default function CalculatorsPage() {
             </div>
           )}
 
+          {/* Обновленный интерфейс PEDS */}
           {activeTab === 'peds' && (
             <div className="space-y-4 animate-in fade-in">
-              <div><label className="text-[10px] font-bold uppercase text-slate-400 ml-2">Paino (kg)</label>
-              <input value={peds.weight} onChange={e => setPeds({...peds, weight: e.target.value})} className="w-full p-4 bg-slate-50 border rounded-2xl font-bold" /></div>
-              <div><label className="text-[10px] font-bold uppercase text-slate-400 ml-2">Annos (mg/kg)</label>
-              <input value={peds.doseMgKg} onChange={e => setPeds({...peds, doseMgKg: e.target.value})} className="w-full p-4 bg-slate-50 border rounded-2xl font-bold" /></div>
-              <div><label className="text-[10px] font-bold uppercase text-slate-400 ml-2">Vahvuus (mg/ml)</label>
-              <input value={peds.strength} onChange={e => setPeds({...peds, strength: e.target.value})} className="w-full p-4 bg-slate-50 border rounded-2xl font-bold" /></div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] font-bold uppercase text-slate-400 ml-2">Paino (kg)</label>
+                  <input type="number" value={peds.weight} onChange={e => setPeds({...peds, weight: e.target.value})} className="w-full p-4 bg-slate-50 border rounded-2xl font-bold" />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold uppercase text-slate-400 ml-2">Krt / vrk</label>
+                  <input type="number" value={peds.timesPerDay} onChange={e => setPeds({...peds, timesPerDay: e.target.value})} className="w-full p-4 bg-slate-50 border rounded-2xl font-bold" />
+                </div>
+              </div>
+              <div>
+                <label className="text-[10px] font-bold uppercase text-slate-400 ml-2">Annos (mg/kg/vrk)</label>
+                <input type="number" value={peds.doseMgKg} onChange={e => setPeds({...peds, doseMgKg: e.target.value})} className="w-full p-4 bg-slate-50 border rounded-2xl font-bold" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold uppercase text-slate-400 ml-2">Vahvuus (mg/ml)</label>
+                <input type="number" value={peds.strength} onChange={e => setPeds({...peds, strength: e.target.value})} className="w-full p-4 bg-slate-50 border rounded-2xl font-bold" />
+              </div>
             </div>
           )}
 
-          {/* CHADS, BMI, GFR inputs here... (сохранены из предыдущего кода) */}
           {activeTab === 'chads' && (
             <div className="space-y-4 animate-in fade-in max-h-[450px] overflow-y-auto no-scrollbar">
               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b pb-1">Infarktiriski</p>
