@@ -116,7 +116,7 @@ export default function CalculatorsPage() {
       };
 
       setResult(
-        `PEDIATRINEN ANNOS:\n\n` +
+        `ANNOS:\n\n` +
         `Paino: ${w} kg\n` +
         `Annos: ${dMgKg} mg/kg/vrk\n` +
         `Vahvuus: ${s} mg/ml\n` +
