@@ -16,8 +16,6 @@ export default function TemplatesPage() {
   const [isAdding, setIsAdding] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [copied, setCopied] = useState(false);
-  
-  // Здесь хранятся все выбранные значения
   const [templateValues, setTemplateValues] = useState<Record<string, string>>({});
 
   const [formData, setFormData] = useState({
@@ -29,29 +27,17 @@ export default function TemplatesPage() {
   });
 
   useEffect(() => { fetchTemplates(); }, []);
-
-  // СБРОС: когда меняем шаблон, очищаем старые значения, чтобы логика не путалась
-  useEffect(() => { 
-    setTemplateValues({}); 
-  }, [selectedTemplate?.id]);
+  useEffect(() => { setTemplateValues({}); }, [selectedTemplate?.id]);
 
   const fetchTemplates = async () => {
     try {
       const res = await fetch('/api/templates');
       const data = await res.json();
-      const validData = Array.isArray(data) ? data : [];
-      setCategories(validData);
-      if (validData.length > 0 && !activeCategoryId) {
-        setActiveCategoryId(validData[0].id);
-      }
-    } catch (err) {
-      console.error("Latausvirhe:", err);
-    } finally {
-      setLoading(false);
-    }
+      setCategories(Array.isArray(data) ? data : []);
+      if (data.length > 0 && !activeCategoryId) setActiveCategoryId(data[0].id);
+    } catch (err) { console.error(err); } finally { setLoading(false); }
   };
 
-  // ПАРСЕР: Разбирает {{id:тип:опции:showIf}}
   const parseTemplate = (content: string) => {
     const parts = [];
     const regex = /{{(.*?)}}/g;
@@ -63,24 +49,25 @@ export default function TemplatesPage() {
       }
 
       const rawConfig = match[1];
-      const config = rawConfig.split(':').map(part => part.trim());
+      const config = rawConfig.split(':').map(p => p.trim());
       const id = config[0];
       
-      const showIfCond = config.find(c => c.startsWith('showIf:'));
+      const showIfCond = config.find(c => c.toLowerCase().startsWith('showif:'));
       let condition = null;
       if (showIfCond) {
-        const cleanCond = showIfCond.replace('showIf:', '').trim();
-        const condParts = cleanCond.split('=');
-        if (condParts.length === 2) {
+        const cleanCond = showIfCond.replace(/showif:/i, '').trim();
+        const [pId, pVal] = cleanCond.split('=');
+        if (pId && pVal) {
           condition = { 
-            parentId: condParts[0].trim(), 
-            value: condParts[1].trim() 
+            parentId: pId.trim().toLowerCase(), 
+            value: pVal.trim().toLowerCase() 
           };
         }
       }
 
       parts.push({ 
-        id,
+        id: id.toLowerCase(),
+        displayName: id,
         type: config.includes('select') ? 'select' : 'input', 
         options: config.find(c => c.includes(','))?.split(',').map(o => o.trim()) || [],
         condition,
@@ -93,7 +80,6 @@ export default function TemplatesPage() {
     return parts;
   };
 
-  // ГЕНЕРАТОР: Проверяет видимость и собирает текст
   const generateFinalText = useMemo(() => {
     if (!selectedTemplate) return "";
     const parsed = parseTemplate(selectedTemplate.content);
@@ -105,16 +91,14 @@ export default function TemplatesPage() {
       } else {
         let isVisible = true;
         if (part.condition) {
-          // Если значение родителя в стейте в точности равно требуемому в showIf
-          isVisible = templateValues[part.condition.parentId] === part.condition.value;
+          const currentVal = (templateValues[part.condition.parentId] || "").toLowerCase().trim();
+          isVisible = currentVal === part.condition.value;
         }
         if (isVisible) {
-          const val = templateValues[part.id];
-          result += val || `[${part.id}]`;
+          result += templateValues[part.id] || `[${part.displayName}]`;
         }
       }
     });
-    // Чистим двойные пробелы
     return result.replace(/[ ]{2,}/g, ' ').replace(/\s+\./g, '.').trim();
   }, [selectedTemplate, templateValues]);
 
@@ -131,62 +115,53 @@ export default function TemplatesPage() {
     }
     try {
       const method = formData.id ? 'PUT' : 'POST';
-      const res = await fetch('/api/templates', {
+      await fetch('/api/templates', {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...formData, author: session?.user?.email || 'Doc' }),
       });
-      if (res.ok) {
-        setIsAdding(false); setIsEditing(false);
-        setFormData({ id: null, title: '', content: '', categoryName: '', author: '' });
-        fetchTemplates();
-      }
+      setIsAdding(false); setIsEditing(false); fetchTemplates();
     } catch (err) { console.error(err); }
   };
 
   const startEditing = (template: any) => {
-    const category = categories.find(c => c.id === template.categoryId);
     setFormData({
       id: template.id, title: template.title, content: template.content,
-      categoryName: category?.name || '', author: template.author || ''
+      categoryName: categories.find(c => c.id === template.categoryId)?.name || '', 
+      author: template.author || ''
     });
     setIsEditing(true); setIsAdding(false);
   };
 
   const activeCategory = categories.find(c => c.id === activeCategoryId);
-  const displayedTemplates = activeCategory?.templates 
-    ? activeCategory.templates.filter((t: any) => t.title.toLowerCase().includes(searchTerm.toLowerCase())) 
-    : [];
+  const displayedTemplates = activeCategory?.templates || [];
 
   return (
     <div className="max-w-[1600px] mx-auto h-[calc(100vh-100px)] flex flex-col gap-6 p-4 text-slate-900">
-      {/* ВЕРХНЯЯ ПАНЕЛЬ */}
       <div className="flex items-center justify-between bg-white p-6 rounded-3xl border shadow-sm flex-shrink-0">
         <h1 className="text-2xl font-bold">Tekstimallit</h1>
         <button 
           onClick={() => { setIsAdding(true); setIsEditing(false); setSelectedTemplate(null); setFormData({id:null, title:'', content:'', categoryName:'', author:''}); }}
-          className="bg-blue-600 text-white px-6 py-3 rounded-2xl font-bold hover:bg-blue-700 shadow-lg shadow-blue-100"
+          className="bg-blue-600 text-white px-6 py-3 rounded-2xl font-bold hover:bg-blue-700 shadow-lg shadow-blue-100 uppercase tracking-widest text-xs"
         >
           + UUSI MALLI
         </button>
       </div>
 
-      {/* КАТЕГОРИИ */}
       <div className="flex gap-2 overflow-x-auto no-scrollbar flex-shrink-0">
         {categories.map(cat => (
           <button key={cat.id} onClick={() => { setActiveCategoryId(cat.id); setSelectedTemplate(null); setIsAdding(false); setIsEditing(false); }}
-            className={`px-6 py-3 rounded-2xl font-bold text-sm border whitespace-nowrap transition-all ${activeCategoryId === cat.id ? 'bg-blue-600 text-white shadow-md' : 'bg-white text-slate-500'}`}>
+            className={`px-6 py-3 rounded-2xl font-bold text-sm border whitespace-nowrap transition-all ${activeCategoryId === cat.id ? 'bg-blue-600 text-white' : 'bg-white text-slate-500'}`}>
             {cat.name}
           </button>
         ))}
       </div>
 
       <div className="flex-1 grid grid-cols-12 gap-6 min-h-0 pb-4 overflow-hidden">
-        {/* СПИСОК СЛЕВА */}
         <div className="col-span-3 flex flex-col gap-4 min-h-0">
           <div className="relative">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-            <input placeholder="Hae..." className="w-full pl-12 pr-4 py-4 bg-white border border-slate-200 rounded-2xl outline-none" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+            <input placeholder="Hae..." className="w-full pl-12 pr-4 py-4 bg-white border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500/20" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
           </div>
           <div className="flex-1 overflow-y-auto space-y-2 no-scrollbar">
             {loading ? <Loader2 className="animate-spin mx-auto mt-10" /> : displayedTemplates.map((t: any) => (
@@ -197,52 +172,59 @@ export default function TemplatesPage() {
           </div>
         </div>
 
-        {/* ОСНОВНАЯ ЗОНА */}
         <div className="col-span-9 min-h-0">
           {(isAdding || isEditing) ? (
             <div className="bg-white h-full rounded-3xl border shadow-sm flex flex-col overflow-hidden animate-in slide-in-from-right-4">
               <div className="p-8 border-b flex justify-between items-center bg-slate-50/50">
-                <h2 className="text-xl font-bold">{isEditing ? 'Muokkaa mallia' : 'Uusi tekstipohja'}</h2>
-                <button onClick={() => {setIsAdding(false); setIsEditing(false);}}><X /></button>
+                <h2 className="text-xl font-bold">{isEditing ? 'Muokkaa' : 'Uusi'}</h2>
+                <button onClick={() => {setIsAdding(false); setIsEditing(false);}} className="p-2 hover:bg-slate-200 rounded-full transition-colors"><X /></button>
               </div>
-              <div className="p-8 flex-1 overflow-y-auto space-y-4 no-scrollbar">
+              <div className="p-8 flex-1 overflow-y-auto space-y-4 no-scrollbar text-slate-900">
                 <div className="grid grid-cols-2 gap-4">
                   <input placeholder="Otsikko" className="p-4 bg-slate-50 border rounded-2xl outline-none focus:bg-white" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} />
                   <input placeholder="Kategoria" className="p-4 bg-slate-50 border rounded-2xl outline-none focus:bg-white" value={formData.categoryName} onChange={e => setFormData({...formData, categoryName: e.target.value})} />
                 </div>
-                <textarea placeholder="Kirjoita sisältö..." className="w-full p-6 bg-slate-50 border rounded-3xl font-mono text-sm min-h-[350px] outline-none focus:bg-white" value={formData.content} onChange={e => setFormData({...formData, content: e.target.value})} />
-                <button onClick={handleSave} className="w-full py-4 bg-blue-600 text-white rounded-2xl font-bold uppercase tracking-widest shadow-lg shadow-blue-100">Tallenna malli</button>
+                <textarea placeholder="Sisältö..." className="w-full p-6 bg-slate-50 border rounded-3xl font-mono text-sm min-h-[350px] outline-none focus:bg-white" value={formData.content} onChange={e => setFormData({...formData, content: e.target.value})} />
+                <button onClick={handleSave} className="w-full py-4 bg-blue-600 text-white rounded-2xl font-bold uppercase tracking-widest shadow-lg shadow-blue-100">Tallenna</button>
               </div>
             </div>
           ) : selectedTemplate ? (
             <div className="grid grid-cols-2 h-full gap-6">
-              {/* ЛЕВАЯ ПАНЕЛЬ: ВЫБОР */}
               <div className="bg-white rounded-3xl border shadow-sm flex flex-col overflow-hidden">
                 <div className="p-6 border-b bg-slate-50/50 flex justify-between items-center">
-                  <span className="text-[10px] font-bold uppercase text-slate-400 tracking-widest">Valinnat</span>
-                  <button onClick={() => startEditing(selectedTemplate)} className="text-slate-400 hover:text-blue-600 transition-colors"><Edit2 size={18} /></button>
+                  <h3 className="font-bold text-slate-900 uppercase text-xs tracking-widest">Valinnat</h3>
+                  <button onClick={() => startEditing(selectedTemplate)} className="p-2 text-slate-400 hover:text-blue-600 transition-colors"><Edit2 size={18} /></button>
                 </div>
                 <div className="p-6 flex-1 overflow-y-auto no-scrollbar space-y-6">
                   {parseTemplate(selectedTemplate.content).filter(p => p.type !== 'text').map((part, idx) => {
                     
-                    // ПРОВЕРКА ВИДИМОСТИ: Здесь происходит магия
+                    // ПРОВЕРКА ЛОГИКИ
                     let isVisible = true;
                     if (part.condition) {
-                      isVisible = templateValues[part.condition.parentId] === part.condition.value;
+                      const currentVal = (templateValues[part.condition.parentId] || "").toLowerCase().trim();
+                      isVisible = currentVal === part.condition.value;
+                      console.log(`CHECKING: Field ${part.id} needs ${part.condition.parentId}=${part.condition.value}. Current is: ${currentVal}. Visible: ${isVisible}`);
                     }
+
                     if (!isVisible) return null;
 
                     return (
                       <div key={idx} className="flex flex-col gap-2 animate-in fade-in slide-in-from-top-1">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">{part.id}</label>
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">{part.displayName}</label>
                         {part.type === 'select' ? (
                           <div className="flex flex-wrap gap-2">
                             {part.options.map((opt: any) => (
-                              <button key={opt} onClick={() => setTemplateValues(prev => ({ ...prev, [part.id]: opt }))} className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all ${templateValues[part.id] === opt ? 'bg-blue-600 text-white' : 'bg-slate-50 border-slate-100 text-slate-600'}`}>{opt}</button>
+                              <button 
+                                key={opt} 
+                                onClick={() => setTemplateValues(prev => ({ ...prev, [part.id]: opt }))} 
+                                className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all ${templateValues[part.id] === opt ? 'bg-blue-600 text-white' : 'bg-slate-50 border-slate-100 text-slate-600 hover:border-blue-300'}`}
+                              >
+                                {opt}
+                              </button>
                             ))}
                           </div>
                         ) : (
-                          <input className="p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-blue-300" value={templateValues[part.id] || ''} onChange={(e) => setTemplateValues(prev => ({ ...prev, [part.id]: e.target.value }))} />
+                          <input className="p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white" value={templateValues[part.id] || ''} onChange={(e) => setTemplateValues(prev => ({ ...prev, [part.id]: e.target.value }))} />
                         )}
                       </div>
                     );
@@ -250,13 +232,12 @@ export default function TemplatesPage() {
                 </div>
               </div>
 
-              {/* ПРАВАЯ ПАНЕЛЬ: КОНСОЛЬ */}
               <div className="bg-[#0f172a] rounded-3xl flex flex-col overflow-hidden border border-slate-800 shadow-2xl">
                 <div className="p-6 border-b border-slate-800/50 flex justify-between items-center bg-slate-900/50">
                   <span className="text-emerald-500/50 text-[10px] font-bold uppercase tracking-widest font-mono">Tulos / Konsoli</span>
-                  <button onClick={handleCopy} className={`px-6 py-2 rounded-xl border text-xs font-bold transition-all ${copied ? 'bg-emerald-500 text-slate-900 shadow-lg' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'}`}>{copied ? 'KOPIOITU!' : 'KOPIOI'}</button>
+                  <button onClick={handleCopy} className={`px-6 py-2 rounded-xl border text-xs font-bold transition-all ${copied ? 'bg-emerald-500 text-slate-900 shadow-lg' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20'}`}>{copied ? 'KOPIOITU!' : 'KOPIOI'}</button>
                 </div>
-                <div className="p-8 flex-1 overflow-y-auto text-emerald-400/90 font-mono text-sm leading-relaxed whitespace-pre-wrap no-scrollbar shadow-inner">
+                <div className="p-8 flex-1 overflow-y-auto text-emerald-400/90 font-mono text-sm leading-relaxed whitespace-pre-wrap no-scrollbar">
                   {generateFinalText || "Täytä valinnat vasemmalta..."}
                 </div>
               </div>
