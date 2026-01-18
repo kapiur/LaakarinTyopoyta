@@ -26,16 +26,28 @@ export default function TemplatesPage() {
     author: ''
   });
 
-  useEffect(() => { fetchTemplates(); }, []);
-  useEffect(() => { setTemplateValues({}); }, [selectedTemplate?.id]);
+  useEffect(() => { 
+    fetchTemplates(); 
+  }, []);
+
+  useEffect(() => { 
+    setTemplateValues({}); 
+  }, [selectedTemplate?.id]);
 
   const fetchTemplates = async () => {
     try {
       const res = await fetch('/api/templates');
       const data = await res.json();
-      setCategories(Array.isArray(data) ? data : []);
-      if (data.length > 0 && !activeCategoryId) setActiveCategoryId(data[0].id);
-    } catch (err) { console.error("Virhe:", err); } finally { setLoading(false); }
+      const validData = Array.isArray(data) ? data : [];
+      setCategories(validData);
+      if (validData.length > 0 && !activeCategoryId) {
+        setActiveCategoryId(validData[0].id);
+      }
+    } catch (err) {
+      console.error("Latausvirhe:", err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const parseTemplate = (content: string) => {
@@ -56,9 +68,9 @@ export default function TemplatesPage() {
       let condition = null;
       if (showIfCond) {
         const cleanCond = showIfCond.replace('showIf:', '').trim();
-        const [pId, pVal] = cleanCond.split('=');
-        if (pId && pVal) {
-          condition = { parentId: pId.trim(), value: pVal.trim() };
+        const condParts = cleanCond.split('=');
+        if (condParts.length === 2) {
+          condition = { parentId: condParts[0].trim(), value: condParts[1].trim() };
         }
       }
 
@@ -72,7 +84,9 @@ export default function TemplatesPage() {
 
       lastIndex = regex.lastIndex;
     }
-    if (lastIndex < content.length) parts.push({ type: 'text', value: content.slice(lastIndex) });
+    if (lastIndex < content.length) {
+      parts.push({ type: 'text', value: content.slice(lastIndex) });
+    }
     return parts;
   };
 
@@ -98,6 +112,7 @@ export default function TemplatesPage() {
   }, [selectedTemplate, templateValues]);
 
   const handleCopy = () => {
+    if (!generateFinalText) return;
     navigator.clipboard.writeText(generateFinalText).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
@@ -117,11 +132,14 @@ export default function TemplatesPage() {
         body: JSON.stringify({ ...formData, author: session?.user?.email || 'Doc' }),
       });
       if (res.ok) {
-        setIsAdding(false); setIsEditing(false);
+        setIsAdding(false); 
+        setIsEditing(false);
         setFormData({ id: null, title: '', content: '', categoryName: '', author: '' });
         fetchTemplates();
       }
-    } catch (err) { alert("Virhe tallennettaessa."); }
+    } catch (err) { 
+      console.error(err); 
+    }
   };
 
   const deleteTemplate = async (id: number) => {
@@ -131,11 +149,20 @@ export default function TemplatesPage() {
     fetchTemplates();
   };
 
+  const deleteCategory = async (id: number, name: string) => {
+    if (!confirm(`Poistetaanko "${name}"?`)) return;
+    await fetch(`/api/templates?id=${id}&type=category`, { method: 'DELETE' });
+    fetchTemplates();
+  };
+
   const startEditing = (template: any) => {
     const category = categories.find(c => c.id === template.categoryId);
     setFormData({
-      id: template.id, title: template.title, content: template.content,
-      categoryName: category?.name || '', author: template.author || ''
+      id: template.id, 
+      title: template.title, 
+      content: template.content,
+      categoryName: category?.name || '', 
+      author: template.author || ''
     });
     setIsEditing(true);
     setIsAdding(false);
@@ -151,7 +178,12 @@ export default function TemplatesPage() {
       <div className="flex items-center justify-between bg-white p-6 rounded-3xl border shadow-sm flex-shrink-0">
         <h1 className="text-2xl font-bold">Tekstimallit</h1>
         <button 
-          onClick={() => { setIsAdding(true); setIsEditing(false); setSelectedTemplate(null); setFormData({id:null, title:'', content:'', categoryName:'', author:''}); }}
+          onClick={() => { 
+            setIsAdding(true); 
+            setIsEditing(false); 
+            setSelectedTemplate(null); 
+            setFormData({id:null, title:'', content:'', categoryName:'', author:''}); 
+          }}
           className="bg-blue-600 text-white px-6 py-3 rounded-2xl font-bold hover:bg-blue-700 shadow-lg shadow-blue-100 uppercase tracking-widest text-xs"
         >
           + UUSI MALLI
@@ -160,10 +192,22 @@ export default function TemplatesPage() {
 
       <div className="flex gap-2 overflow-x-auto no-scrollbar flex-shrink-0">
         {categories.map(cat => (
-          <button key={cat.id} onClick={() => { setActiveCategoryId(cat.id); setSelectedTemplate(null); setIsAdding(false); setIsEditing(false); }}
-            className={`px-6 py-3 rounded-2xl font-bold text-sm border whitespace-nowrap transition-all ${activeCategoryId === cat.id ? 'bg-blue-600 text-white shadow-md' : 'bg-white text-slate-500 hover:border-blue-300'}`}>
-            {cat.name}
-          </button>
+          <div key={cat.id} className="group relative">
+            <button 
+              onClick={() => { 
+                setActiveCategoryId(cat.id); 
+                setSelectedTemplate(null); 
+                setIsAdding(false); 
+                setIsEditing(false); 
+              }}
+              className={`px-6 py-3 rounded-2xl font-bold text-sm border whitespace-nowrap transition-all ${activeCategoryId === cat.id ? 'bg-blue-600 text-white shadow-md' : 'bg-white text-slate-500 hover:border-blue-300'}`}
+            >
+              {cat.name}
+            </button>
+            <button onClick={() => deleteCategory(cat.id, cat.name)} className="absolute -top-2 -right-1 bg-red-100 text-red-600 p-1 rounded-full opacity-0 group-hover:opacity-100 border-2 border-white shadow-sm transition-opacity">
+              <X size={12} />
+            </button>
+          </div>
         ))}
       </div>
 
@@ -201,7 +245,7 @@ export default function TemplatesPage() {
                   </div>
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Sisältö (käytä {{id:select:vaihtoehdot}})</label>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Sisältö (käytä {"{{id:select:a,b}}"})</label>
                   <textarea className="w-full p-6 bg-slate-50 border rounded-3xl font-mono text-sm min-h-[350px] outline-none focus:bg-white focus:ring-2 focus:ring-blue-500/10 transition-all" value={formData.content} onChange={e => setFormData({...formData, content: e.target.value})} />
                 </div>
               </div>
@@ -249,7 +293,7 @@ export default function TemplatesPage() {
                   <span className="text-emerald-500/50 text-[10px] font-bold uppercase tracking-widest font-mono">Tulos / Konsoli</span>
                   <button onClick={handleCopy} className={`px-6 py-2 rounded-xl border text-xs font-bold transition-all ${copied ? 'bg-emerald-500 text-slate-900 shadow-lg' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20'}`}>{copied ? 'KOPIOITU!' : 'KOPIOI'}</button>
                 </div>
-                <div className="p-8 flex-1 overflow-y-auto text-emerald-400/90 font-mono text-sm leading-relaxed whitespace-pre-wrap no-scrollbar">
+                <div className="p-8 flex-1 overflow-y-auto text-emerald-400/90 font-mono text-sm leading-relaxed whitespace-pre-wrap no-scrollbar shadow-inner">
                   {generateFinalText || "Täytä valinnat vasemmalta..."}
                 </div>
               </div>
