@@ -27,7 +27,11 @@ export default function TemplatesPage() {
   });
 
   useEffect(() => { fetchTemplates(); }, []);
-  useEffect(() => { setTemplateValues({}); }, [selectedTemplate]);
+  
+  // КРИТИЧЕСКИ ВАЖНО: Сброс при каждом выборе шаблона
+  useEffect(() => { 
+    setTemplateValues({}); 
+  }, [selectedTemplate?.id]);
 
   const fetchTemplates = async () => {
     try {
@@ -38,7 +42,7 @@ export default function TemplatesPage() {
     } catch (err) { console.error("Virhe:", err); } finally { setLoading(false); }
   };
 
-  // 1. ИСПРАВЛЕННЫЙ ПАРСЕР
+  // ПАРСЕР С ПОВЫШЕННОЙ ТОЧНОСТЬЮ
   const parseTemplate = (content: string) => {
     const parts = [];
     const regex = /{{(.*?)}}/g;
@@ -52,15 +56,16 @@ export default function TemplatesPage() {
       const rawConfig = match[1];
       const config = rawConfig.split(':').map(part => part.trim());
       
-      const id = config[0]; // Это ID поля
+      const id = config[0];
       const showIfCond = config.find(c => c.startsWith('showIf:'));
       
       let condition = null;
       if (showIfCond) {
-        // Улучшенный захват условия
-        const condParts = showIfCond.replace('showIf:', '').split('=');
-        if (condParts.length === 2) {
-          condition = { parentId: condParts[0].trim(), value: condParts[1].trim() };
+        // Силовой разбор условия без учета регистра и пробелов
+        const cleanCond = showIfCond.replace('showIf:', '').trim();
+        const [pId, pVal] = cleanCond.split('=');
+        if (pId && pVal) {
+          condition = { parentId: pId.trim(), value: pVal.trim() };
         }
       }
 
@@ -78,7 +83,7 @@ export default function TemplatesPage() {
     return parts;
   };
 
-  // 2. ИСПРАВЛЕННЫЙ ГЕНЕРАТОР ТЕКСТА
+  // ГЕНЕРАТОР: Учитывает видимость каждого сегмента
   const generateFinalText = useMemo(() => {
     if (!selectedTemplate) return "";
     const parsed = parseTemplate(selectedTemplate.content);
@@ -97,7 +102,8 @@ export default function TemplatesPage() {
         }
       }
     });
-    return result.replace(/[ ]{2,}/g, ' ').trim();
+    // Удаляем двойные пробелы и артефакты пунктуации
+    return result.replace(/[ ]{2,}/g, ' ').replace(/\s+\./g, '.').trim();
   }, [selectedTemplate, templateValues]);
 
   const handleCopy = () => {
@@ -109,22 +115,15 @@ export default function TemplatesPage() {
 
   const handleSave = async () => {
     if (!formData.title.trim() || !formData.content.trim() || !formData.categoryName.trim()) {
-      alert("Täytä kaikki kentät.");
-      return;
+      alert("Täytä kentät!"); return;
     }
-    try {
-      const method = formData.id ? 'PUT' : 'POST';
-      const res = await fetch('/api/templates', {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...formData, author: session?.user?.email || 'Doc' }),
-      });
-      if (res.ok) {
-        setIsAdding(false); setIsEditing(false);
-        setFormData({ id: null, title: '', content: '', categoryName: '', author: '' });
-        fetchTemplates();
-      }
-    } catch (err) { console.error(err); }
+    const method = formData.id ? 'PUT' : 'POST';
+    await fetch('/api/templates', {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...formData, author: session?.user?.email || 'Doc' }),
+    });
+    setIsAdding(false); setIsEditing(false); fetchTemplates();
   };
 
   const startEditing = (template: any) => {
@@ -137,28 +136,18 @@ export default function TemplatesPage() {
   };
 
   const activeCategory = categories.find(c => c.id === activeCategoryId);
-  const displayedTemplates = activeCategory?.templates 
-    ? activeCategory.templates.filter((t: any) => t.title.toLowerCase().includes(searchTerm.toLowerCase())) 
-    : [];
+  const displayedTemplates = activeCategory?.templates || [];
 
   return (
-    <div className="max-w-[1600px] mx-auto h-[calc(100vh-100px)] flex flex-col gap-6 p-4">
+    <div className="max-w-[1600px] mx-auto h-[calc(100vh-100px)] flex flex-col gap-6 p-4 text-slate-900">
       <div className="flex items-center justify-between bg-white p-6 rounded-3xl border shadow-sm flex-shrink-0">
-        <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Tekstimallit</h1>
-        <button 
-          onClick={() => { setIsAdding(true); setIsEditing(false); setFormData({id:null, title:'', content:'', categoryName:'', author:''}); }}
-          className="bg-blue-600 text-white px-6 py-3 rounded-2xl font-bold hover:bg-blue-700"
-        >
-          + UUSI MALLI
-        </button>
+        <h1 className="text-2xl font-bold">Tekstimallit</h1>
+        <button onClick={() => { setIsAdding(true); setIsEditing(false); setFormData({id:null, title:'', content:'', categoryName:'', author:''}); }} className="bg-blue-600 text-white px-6 py-3 rounded-2xl font-bold hover:bg-blue-700">+ UUSI MALLI</button>
       </div>
 
       <div className="flex gap-2 overflow-x-auto no-scrollbar flex-shrink-0">
         {categories.map(cat => (
-          <button key={cat.id} onClick={() => { setActiveCategoryId(cat.id); setSelectedTemplate(null); }}
-            className={`px-6 py-3 rounded-2xl font-bold text-sm border transition-all ${activeCategoryId === cat.id ? 'bg-blue-600 text-white shadow-md' : 'bg-white text-slate-500'}`}>
-            {cat.name}
-          </button>
+          <button key={cat.id} onClick={() => { setActiveCategoryId(cat.id); setSelectedTemplate(null); }} className={`px-6 py-3 rounded-2xl font-bold text-sm border ${activeCategoryId === cat.id ? 'bg-blue-600 text-white shadow-md' : 'bg-white text-slate-500'}`}>{cat.name}</button>
         ))}
       </div>
 
@@ -182,64 +171,46 @@ export default function TemplatesPage() {
             <div className="grid grid-cols-2 h-full gap-6">
               <div className="bg-white rounded-3xl border shadow-sm flex flex-col overflow-hidden">
                 <div className="p-4 border-b bg-slate-50/50 flex justify-between items-center">
-                  <span className="text-[10px] font-bold uppercase text-slate-400">Valinnat</span>
+                  <span className="text-[10px] font-bold uppercase text-slate-400 tracking-widest">Valinnat</span>
                   <button onClick={() => startEditing(selectedTemplate)} className="text-slate-400 hover:text-blue-600"><Edit2 size={16}/></button>
                 </div>
                 <div className="p-6 flex-1 overflow-y-auto no-scrollbar space-y-6">
-                  {parseTemplate(selectedTemplate.content)
-                    .filter(p => p.type !== 'text')
-                    .map((part, idx) => {
-                      
-                      // ЛОГИКА ВИДИМОСТИ В UI
-                      let isVisible = true;
-                      if (part.condition) {
-                        isVisible = templateValues[part.condition.parentId] === part.condition.value;
-                      }
+                  {parseTemplate(selectedTemplate.content).filter(p => p.type !== 'text').map((part, idx) => {
+                    // ПРОВЕРКА ЛОГИКИ: Если есть условие, проверяем его
+                    if (part.condition) {
+                      const currentParentVal = templateValues[part.condition.parentId];
+                      if (currentParentVal !== part.condition.value) return null;
+                    }
 
-                      if (!isVisible) return null;
-
-                      return (
-                        <div key={idx} className="flex flex-col gap-2 animate-in fade-in slide-in-from-top-1">
-                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{part.id}</label>
-                          {part.type === 'select' ? (
-                            <div className="flex flex-wrap gap-2">
-                              {part.options.map((opt: any) => (
-                                <button 
-                                  key={opt} 
-                                  onClick={() => setTemplateValues(prev => ({ ...prev, [part.id]: opt }))} 
-                                  className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all ${templateValues[part.id] === opt ? 'bg-blue-600 text-white' : 'bg-slate-50 border-slate-100 text-slate-600'}`}
-                                >
-                                  {opt}
-                                </button>
-                              ))}
-                            </div>
-                          ) : (
-                            <input 
-                              className="p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none" 
-                              value={templateValues[part.id] || ''} 
-                              onChange={(e) => setTemplateValues(prev => ({ ...prev, [part.id]: e.target.value }))} 
-                            />
-                          )}
-                        </div>
-                      );
-                    })}
+                    return (
+                      <div key={idx} className="flex flex-col gap-2 animate-in fade-in slide-in-from-top-1">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{part.id}</label>
+                        {part.type === 'select' ? (
+                          <div className="flex flex-wrap gap-2">
+                            {part.options.map((opt: any) => (
+                              <button key={opt} onClick={() => setTemplateValues(prev => ({ ...prev, [part.id]: opt }))} className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all ${templateValues[part.id] === opt ? 'bg-blue-600 text-white' : 'bg-slate-50 text-slate-600'}`}>{opt}</button>
+                            ))}
+                          </div>
+                        ) : (
+                          <input className="p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none" value={templateValues[part.id] || ''} onChange={(e) => setTemplateValues(prev => ({ ...prev, [part.id]: e.target.value }))} />
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
               <div className="bg-[#0f172a] rounded-3xl flex flex-col overflow-hidden border border-slate-800 shadow-2xl">
                 <div className="p-4 border-b border-slate-800/50 flex justify-between items-center bg-slate-900/50">
                   <span className="text-emerald-500/50 text-[10px] font-bold uppercase tracking-widest font-mono">Tulos / Konsoli</span>
-                  <button onClick={handleCopy} className={`px-4 py-2 rounded-xl border transition-all text-xs font-bold ${copied ? 'bg-emerald-500 text-slate-900 shadow-lg' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'}`}>
-                    {copied ? 'KOPIOITU!' : 'KOPIOI'}
-                  </button>
+                  <button onClick={handleCopy} className={`px-4 py-2 rounded-xl border text-xs font-bold ${copied ? 'bg-emerald-500 text-slate-900 shadow-lg' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'}`}>{copied ? 'KOPIOITU!' : 'KOPIOI'}</button>
                 </div>
                 <div className="p-8 flex-1 overflow-y-auto text-emerald-400/90 font-mono text-sm leading-relaxed whitespace-pre-wrap no-scrollbar">
-                  {generateFinalText || "Valitse asetukset..."}
+                  {generateFinalText || "Täytä valinnat..."}
                 </div>
               </div>
             </div>
           ) : (
-             /* Сюда вставьте блок для IsAdding / IsEditing из предыдущего кода, если он нужен */
-             <div className="h-full flex items-center justify-center text-slate-300 font-bold uppercase text-xs border-2 border-dashed rounded-3xl">Valitse tai luo malli</div>
+            <div className="h-full bg-white rounded-3xl border flex items-center justify-center text-slate-300 font-bold uppercase text-xs border-dashed">Valitse tai luo uusi malli</div>
           )}
         </div>
       </div>
