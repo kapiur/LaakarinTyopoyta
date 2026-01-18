@@ -19,8 +19,16 @@ export default function CalculatorsPage() {
   const [bmi, setBmi] = useState({ h: '175', w: '75' });
   const [gfr, setGfr] = useState({ age: '65', w: '75', creat: '100', sex: '1.23' });
   
-  // Обновленное состояние PEDS с кратностью приемов
-  const [peds, setPeds] = useState({ weight: '', doseMgKg: '', strength: '', timesPerDay: '1' });
+  // Добавлены поля для рецепта и флаг отображения
+  const [peds, setPeds] = useState({ 
+    weight: '', 
+    doseMgKg: '', 
+    strength: '', 
+    timesPerDay: '1',
+    days: '7',
+    bottleSize: '100',
+    showRecipe: false 
+  });
   
   const [chads, setChads] = useState({ chf: 0, ht: 0, age: 0, dm: 0, stroke: 0, vasc: 0, sex: 0 });
   const [hasbled, setHasbled] = useState({ sbp: 0, renal: 0, liver: 0, stroke: 0, bleed: 0, inr: 0, age: 0, drugs: 0, alc: 0 });
@@ -93,7 +101,6 @@ export default function CalculatorsPage() {
       setResult({ type: 'dual', score, hbScore, desc: `Aivoinfarktiriski: ${strokeRisk}% / vuosi.\nHAS-BLED: ${hbScore} p (${hbScore >= 3 ? 'SUURI' : 'EI SUURI'} VUOTORISKI).` });
     }
 
-    // Обновленная логика PEDS с суточной и разовой дозой
     if (activeTab === 'peds') {
       const w = parseFloat(peds.weight);
       const dMgKg = parseFloat(peds.doseMgKg);
@@ -107,7 +114,6 @@ export default function CalculatorsPage() {
       const singleMg = dailyMg / times;
       const singleMl = dailyMl / times;
 
-      // Округление и вывод точного значения в скобках
       const formatDose = (val: number) => {
         const rounded = Math.round(val * 100) / 100;
         return val !== rounded 
@@ -115,8 +121,7 @@ export default function CalculatorsPage() {
           : `${val.toFixed(2)} ml`;
       };
 
-      setResult(
-        `ANNOS:\n\n` +
+      let output = `PEDIATRINEN ANNOS:\n\n` +
         `Paino: ${w} kg\n` +
         `Annos: ${dMgKg} mg/kg/vrk\n` +
         `Vahvuus: ${s} mg/ml\n` +
@@ -126,8 +131,24 @@ export default function CalculatorsPage() {
         `• ${dailyMl.toFixed(2)} ml/vrk\n\n` +
         `KERTA-ANNOS (${times} krt päivässä):\n` +
         `• ${singleMg.toFixed(2)} mg / kerta\n` +
-        `• ${formatDose(singleMl)} / kerta`
-      );
+        `• ${formatDose(singleMl)} / kerta`;
+
+      // Расширенный расчет для рецепта
+      if (peds.showRecipe) {
+        const courseDays = parseInt(peds.days) || 1;
+        const bSize = parseFloat(peds.bottleSize) || 100;
+        const totalCourseMl = dailyMl * courseDays;
+        const bottlesNeeded = Math.ceil(totalCourseMl / bSize);
+
+        output += `\n\n--------------------------\n` +
+          `RESEPTISUUNNITELMA:\n` +
+          `Kuuri: ${courseDays} päivää\n` +
+          `Yhteensä: ${totalCourseMl.toFixed(1)} ml kuurin aikana\n` +
+          `Pakkauskoko: ${bSize} ml\n` +
+          `Määrä: ${bottlesNeeded} kpl (pulloa)`;
+      }
+
+      setResult(output);
     }
 
     if (activeTab === 'bmi') {
@@ -164,50 +185,6 @@ export default function CalculatorsPage() {
         <div className="bg-white rounded-[2rem] p-6 border shadow-sm space-y-4 min-h-[500px] overflow-y-auto no-scrollbar max-h-[750px]">
           <h2 className="text-lg font-bold uppercase text-blue-600 tracking-tight">{activeTab}-Laskuri</h2>
 
-          {activeTab === 'pca' && (
-            <div className="space-y-3 animate-in fade-in">
-              {showSettings && (
-                <div className="grid grid-cols-4 gap-2 p-3 bg-slate-50 rounded-xl border mb-2">
-                  {['kas', 'ad', 'spd', 'days'].map(k => (
-                    <div key={k}><label className="text-[8px] font-bold uppercase text-slate-400">{k}</label>
-                    <input value={pca[k as keyof typeof pca]} onChange={e => setPca({...pca, [k]: e.target.value})} className="w-full p-1 border rounded text-xs font-bold" /></div>
-                  ))}
-                </div>
-              )}
-              {selectedDrugs.map((sd, i) => (
-                <div key={i} className="flex gap-2">
-                  <select className="flex-1 p-2 bg-slate-50 border rounded-xl text-xs font-bold" value={sd.name} onChange={e => { const n = [...selectedDrugs]; n[i].name = e.target.value; setSelectedDrugs(n); }}>
-                    <option value="none">-- Valitse lääke --</option>
-                    {library.map(l => <option key={l.id} value={l.n}>{l.n}</option>)}
-                  </select>
-                  <input placeholder="mg/vrk" className="w-24 p-2 border rounded-xl text-center font-bold text-xs shadow-sm" value={sd.val} onChange={e => { const n = [...selectedDrugs]; n[i].val = e.target.value; setSelectedDrugs(n); }} />
-                </div>
-              ))}
-              
-              <div className="flex justify-between items-center pt-2">
-                <button onClick={() => setShowSettings(!showSettings)} className="text-[10px] font-bold text-slate-300 uppercase">⚙ Asetukset</button>
-              </div>
-
-              <div className="mt-6 p-4 bg-slate-50 rounded-[1.5rem] border border-slate-100 space-y-3">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-200 pb-1">Lääkekirjasto (DB)</p>
-                <div className="flex gap-1">
-                  <input placeholder="Nimi" value={newLibDrug.n} onChange={e => setNewLibDrug({...newLibDrug, n:e.target.value})} className="flex-1 p-2 border rounded-xl text-[10px] font-bold shadow-sm"/>
-                  <input placeholder="mg/ml" value={newLibDrug.s} onChange={e => setNewLibDrug({...newLibDrug, s:e.target.value})} className="w-16 p-2 border rounded-xl text-[10px] font-bold shadow-sm"/>
-                  <button onClick={addDrugToLib} className="p-2 bg-blue-600 text-white rounded-xl shadow-md hover:bg-blue-700 transition-all"><Plus size={16}/></button>
-                </div>
-                <div className="max-h-32 overflow-y-auto pr-1 no-scrollbar space-y-1">
-                  {library.map(l => (
-                    <div key={l.id} className="flex justify-between p-2 bg-white rounded-lg border border-slate-100 text-[10px] items-center shadow-sm">
-                      <span className="font-bold">{l.n} <span className="text-slate-400 font-normal">({l.s} mg/ml)</span></span>
-                      <button onClick={() => removeDrugFromLib(l.id)} className="text-slate-300 hover:text-red-500 transition-colors"><Trash2 size={12}/></button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Обновленный интерфейс PEDS */}
           {activeTab === 'peds' && (
             <div className="space-y-4 animate-in fade-in">
               <div className="grid grid-cols-2 gap-2">
@@ -227,6 +204,73 @@ export default function CalculatorsPage() {
               <div>
                 <label className="text-[10px] font-bold uppercase text-slate-400 ml-2">Vahvuus (mg/ml)</label>
                 <input type="number" value={peds.strength} onChange={e => setPeds({...peds, strength: e.target.value})} className="w-full p-4 bg-slate-50 border rounded-2xl font-bold" />
+              </div>
+
+              {/* Чекбокс для рецепта */}
+              <label className="flex items-center gap-3 p-4 bg-blue-50/50 rounded-2xl border border-blue-100 cursor-pointer group transition-all hover:bg-blue-50">
+                <input 
+                  type="checkbox" 
+                  checked={peds.showRecipe} 
+                  onChange={e => setPeds({...peds, showRecipe: e.target.checked})}
+                  className="w-5 h-5 rounded border-blue-300 text-blue-600 focus:ring-blue-500"
+                />
+                <span className="text-xs font-bold text-blue-700 uppercase tracking-tight">Laskelmat reseptiä varten</span>
+              </label>
+
+              {/* Дополнительные поля рецепта */}
+              {peds.showRecipe && (
+                <div className="grid grid-cols-2 gap-2 p-4 bg-slate-50 rounded-2xl border border-dashed animate-in slide-in-from-top-2">
+                  <div>
+                    <label className="text-[10px] font-bold uppercase text-slate-400 ml-1">Kesto (pv)</label>
+                    <input type="number" value={peds.days} onChange={e => setPeds({...peds, days: e.target.value})} className="w-full p-3 bg-white border rounded-xl font-bold text-sm" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold uppercase text-slate-400 ml-1">Pullo (ml)</label>
+                    <input type="number" value={peds.bottleSize} onChange={e => setPeds({...peds, bottleSize: e.target.value})} className="w-full p-3 bg-white border rounded-xl font-bold text-sm" />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Секции PCA, CHADS, BMI, GFR остаются без изменений, как в вашем предыдущем коде */}
+          {activeTab === 'pca' && (
+            <div className="space-y-3 animate-in fade-in">
+              {showSettings && (
+                <div className="grid grid-cols-4 gap-2 p-3 bg-slate-50 rounded-xl border mb-2">
+                  {['kas', 'ad', 'spd', 'days'].map(k => (
+                    <div key={k}><label className="text-[8px] font-bold uppercase text-slate-400">{k}</label>
+                    <input value={pca[k as keyof typeof pca]} onChange={e => setPca({...pca, [k]: e.target.value})} className="w-full p-1 border rounded text-xs font-bold" /></div>
+                  ))}
+                </div>
+              )}
+              {selectedDrugs.map((sd, i) => (
+                <div key={i} className="flex gap-2">
+                  <select className="flex-1 p-2 bg-slate-50 border rounded-xl text-xs font-bold" value={sd.name} onChange={e => { const n = [...selectedDrugs]; n[i].name = e.target.value; setSelectedDrugs(n); }}>
+                    <option value="none">-- Valitse lääke --</option>
+                    {library.map(l => <option key={l.id} value={l.n}>{l.n}</option>)}
+                  </select>
+                  <input placeholder="mg/vrk" className="w-24 p-2 border rounded-xl text-center font-bold text-xs shadow-sm" value={sd.val} onChange={e => { const n = [...selectedDrugs]; n[i].val = e.target.value; setSelectedDrugs(n); }} />
+                </div>
+              ))}
+              <div className="flex justify-between items-center pt-2">
+                <button onClick={() => setShowSettings(!showSettings)} className="text-[10px] font-bold text-slate-300 uppercase">⚙ Asetukset</button>
+              </div>
+              <div className="mt-6 p-4 bg-slate-50 rounded-[1.5rem] border border-slate-100 space-y-3">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-200 pb-1">Lääkekirjasto (DB)</p>
+                <div className="flex gap-1">
+                  <input placeholder="Nimi" value={newLibDrug.n} onChange={e => setNewLibDrug({...newLibDrug, n:e.target.value})} className="flex-1 p-2 border rounded-xl text-[10px] font-bold shadow-sm"/>
+                  <input placeholder="mg/ml" value={newLibDrug.s} onChange={e => setNewLibDrug({...newLibDrug, s:e.target.value})} className="w-16 p-2 border rounded-xl text-[10px] font-bold shadow-sm"/>
+                  <button onClick={addDrugToLib} className="p-2 bg-blue-600 text-white rounded-xl shadow-md hover:bg-blue-700 transition-all"><Plus size={16}/></button>
+                </div>
+                <div className="max-h-32 overflow-y-auto pr-1 no-scrollbar space-y-1">
+                  {library.map(l => (
+                    <div key={l.id} className="flex justify-between p-2 bg-white rounded-lg border border-slate-100 text-[10px] items-center shadow-sm">
+                      <span className="font-bold">{l.n} <span className="text-slate-400 font-normal">({l.s} mg/ml)</span></span>
+                      <button onClick={() => removeDrugFromLib(l.id)} className="text-slate-300 hover:text-red-500 transition-colors"><Trash2 size={12}/></button>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           )}
