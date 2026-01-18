@@ -45,6 +45,66 @@ export default function TemplatesPage() {
     }
   };
 
+  const parseTemplate = (content: string) => {
+    const parts = [];
+    const regex = /{{(.*?)}}/g;
+    let lastIndex = 0, match;
+
+    while ((match = regex.exec(content)) !== null) {
+      if (match.index > lastIndex) {
+        parts.push({ type: 'text', value: content.slice(lastIndex, match.index) });
+      }
+
+      const rawConfig = match[1];
+      const config = rawConfig.split(':');
+      
+      // Поиск условия showIf
+      const showIfCond = config.find(c => c.startsWith('showIf'));
+      let condition = null;
+      if (showIfCond) {
+        const condMatch = showIfCond.match(/showIf:(\w+)=([\w,а-яА-Я-]+)/);
+        if (condMatch) {
+          condition = { parentId: condMatch[1], value: condMatch[2] };
+        }
+      }
+
+      parts.push({ 
+        type: config.includes('select') ? 'select' : 'input', 
+        id: config[0], 
+        options: config.find(c => c.includes(','))?.split(',') || [],
+        condition,
+        raw: rawConfig 
+      });
+
+      lastIndex = regex.lastIndex;
+    }
+    if (lastIndex < content.length) parts.push({ type: 'text', value: content.slice(lastIndex) });
+    return parts;
+  };
+
+  const generateFinalText = useMemo(() => {
+    if (!selectedTemplate) return "";
+    
+    const parsed = parseTemplate(selectedTemplate.content);
+    let result = "";
+
+    parsed.forEach(part => {
+      if (part.type === 'text') {
+        result += part.value;
+      } else {
+        let visible = true;
+        if (part.condition) {
+          visible = templateValues[part.condition.parentId] === part.condition.value;
+        }
+        if (visible) {
+          result += templateValues[part.id] || `[${part.id}]`;
+        }
+      }
+    });
+
+    return result.replace(/[ ]{2,}/g, ' ').trim();
+  }, [selectedTemplate, templateValues]);
+
   const handleCopy = () => {
     if (!generateFinalText) return;
     navigator.clipboard.writeText(generateFinalText).then(() => {
@@ -59,7 +119,6 @@ export default function TemplatesPage() {
       return;
     }
 
-    // ВАЖНО: Передаем ID, чтобы API понимал - это обновление или создание нового
     const payload = {
       ...formData,
       author: formData.author || session?.user?.email || 'Doc'
@@ -107,31 +166,7 @@ export default function TemplatesPage() {
     setIsAdding(false);
   };
 
-  const parseTemplate = (content: string) => {
-    const parts = [];
-    const regex = /{{(.*?)}}/g;
-    let lastIndex = 0, match;
-    while ((match = regex.exec(content)) !== null) {
-      if (match.index > lastIndex) parts.push({ type: 'text', value: content.slice(lastIndex, match.index) });
-      const config = match[1].split(':');
-      parts.push({ type: config[1] || 'input', id: config[0], options: config[2] ? config[2].split(',') : [] });
-      lastIndex = regex.lastIndex;
-    }
-    if (lastIndex < content.length) parts.push({ type: 'text', value: content.slice(lastIndex) });
-    return parts;
-  };
-
-  const generateFinalText = useMemo(() => {
-    if (!selectedTemplate) return "";
-    return selectedTemplate.content.replace(/{{(.*?)}}/g, (match: string, p1: string) => {
-      const id = p1.split(':')[0];
-      return templateValues[id] || `[${id}]`;
-    });
-  }, [selectedTemplate, templateValues]);
-
   const activeCategory = categories.find(c => c.id === activeCategoryId);
-  
-  // ИСПРАВЛЕНИЕ: Безопасный фильтр (не упадет, если данных еще нет)
   const displayedTemplates = activeCategory?.templates 
     ? activeCategory.templates.filter((t: any) => t.title.toLowerCase().includes(searchTerm.toLowerCase())) 
     : [];
@@ -186,13 +221,13 @@ export default function TemplatesPage() {
               </div>
               <div className="p-8 flex-1 overflow-y-auto space-y-4 no-scrollbar">
                 <div className="grid grid-cols-2 gap-4">
-                  <input placeholder="Otsikko (esm. PCA-aloitus)" className="p-4 bg-slate-50 border rounded-2xl outline-none focus:bg-white transition-colors" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} />
-                  <input placeholder="Kategoria (esm. Anestesia)" className="p-4 bg-slate-50 border rounded-2xl outline-none focus:bg-white transition-colors" value={formData.categoryName} onChange={e => setFormData({...formData, categoryName: e.target.value})} />
+                  <input placeholder="Otsikko" className="p-4 bg-slate-50 border rounded-2xl outline-none" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} />
+                  <input placeholder="Kategoria" className="p-4 bg-slate-50 border rounded-2xl outline-none" value={formData.categoryName} onChange={e => setFormData({...formData, categoryName: e.target.value})} />
                 </div>
-                <textarea placeholder="Kirjoita sisältö..." className="w-full p-6 bg-slate-50 border rounded-2xl font-mono text-sm min-h-[400px] outline-none focus:bg-white transition-colors" value={formData.content} onChange={e => setFormData({...formData, content: e.target.value})} />
+                <textarea placeholder="Kirjoita sisältö..." className="w-full p-6 bg-slate-50 border rounded-2xl font-mono text-sm min-h-[400px] outline-none" value={formData.content} onChange={e => setFormData({...formData, content: e.target.value})} />
               </div>
               <div className="p-8 border-t bg-slate-50/30">
-                <button onClick={handleSave} className="w-full py-4 bg-blue-600 text-white rounded-2xl font-bold hover:bg-blue-700 transition-all uppercase tracking-widest shadow-lg shadow-blue-100">Tallenna malli</button>
+                <button onClick={handleSave} className="w-full py-4 bg-blue-600 text-white rounded-2xl font-bold hover:bg-blue-700 transition-all uppercase tracking-widest">Tallenna malli</button>
               </div>
             </div>
           ) : selectedTemplate ? (
@@ -206,18 +241,39 @@ export default function TemplatesPage() {
                   </div>
                 </div>
                 <div className="p-6 flex-1 overflow-y-auto no-scrollbar space-y-6">
-                  {parseTemplate(selectedTemplate.content).filter(p => p.type !== 'text').map((part, idx) => (
-                    <div key={idx} className="flex flex-col gap-2">
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">{part.id}</label>
-                      {part.type === 'select' ? (
-                        <div className="flex flex-wrap gap-2">{part.options.map((opt: any) => (
-                          <button key={opt} onClick={() => setTemplateValues(prev => ({ ...prev, [part.id]: opt }))} className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all ${templateValues[part.id] === opt ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-slate-50 border-slate-100 text-slate-600 hover:border-blue-300'}`}>{opt}</button>
-                        ))}</div>
-                      ) : (
-                        <input className="p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-blue-300" value={templateValues[part.id] || ''} onChange={(e) => setTemplateValues(prev => ({ ...prev, [part.id]: e.target.value }))} />
-                      )}
-                    </div>
-                  ))}
+                  {parseTemplate(selectedTemplate.content)
+                    .filter(p => p.type !== 'text')
+                    .map((part, idx) => {
+                      // Логика видимости
+                      if (part.condition) {
+                        if (templateValues[part.condition.parentId] !== part.condition.value) return null;
+                      }
+
+                      return (
+                        <div key={idx} className="flex flex-col gap-2 animate-in fade-in slide-in-from-top-1">
+                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">{part.id}</label>
+                          {part.type === 'select' ? (
+                            <div className="flex flex-wrap gap-2">
+                              {part.options.map((opt: any) => (
+                                <button 
+                                  key={opt} 
+                                  onClick={() => setTemplateValues(prev => ({ ...prev, [part.id]: opt }))} 
+                                  className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all ${templateValues[part.id] === opt ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-slate-50 border-slate-100 text-slate-600 hover:border-blue-300'}`}
+                                >
+                                  {opt}
+                                </button>
+                              ))}
+                            </div>
+                          ) : (
+                            <input 
+                              className="p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-blue-300" 
+                              value={templateValues[part.id] || ''} 
+                              onChange={(e) => setTemplateValues(prev => ({ ...prev, [part.id]: e.target.value }))} 
+                            />
+                          )}
+                        </div>
+                      );
+                    })}
                 </div>
               </div>
               <div className="bg-[#0f172a] rounded-3xl flex flex-col overflow-hidden border border-slate-800 relative shadow-2xl">
