@@ -1,6 +1,6 @@
-import { PrismaClient } from '@prisma/client';
-import axios from 'axios';
-import { XMLParser } from 'fast-xml-parser';
+const { PrismaClient } = require('@prisma/client');
+const axios = require('axios');
+const { XMLParser } = require('fast-xml-parser');
 
 const prisma = new PrismaClient();
 
@@ -8,28 +8,35 @@ async function syncFimeaMedicines() {
   console.log('--- Aloitetaan lääketietokannan päivitys ---');
 
   try {
-    // 1. Скачиваем актуальный XML-файл (Perusrekisteri)
-    // URL может меняться, Fimea предоставляет их на avoindata.fi
+    // Прямая ссылка на XML реестр (SPC данные)
     const FIMEA_URL = 'https://data.pilvi.fimea.fi/perusrekisteri/fimea_spc.xml'; 
-    console.log('Ladataan tietoja Fimeasta...');
+    console.log('Ladataan tietoja Fimeasta... (tämä voi kestää hetken)');
+    
     const response = await axios.get(FIMEA_URL);
     
-    // 2. Парсим XML
     const parser = new XMLParser({
       ignoreAttributes: false,
       attributeNamePrefix: ""
     });
+    
     const jsonData = parser.parse(response.data);
+    
+    // В структуре Fimea данные обычно лежат в root -> valmisteet -> valmiste
+    // Пробуем разные пути парсинга
+    const medicines = jsonData?.valmisteet?.valmiste || jsonData?.root?.valmiste || []; 
+    
+    if (medicines.length === 0) {
+      console.log('VAROITUS: Lääkkeitä ei löytynyt XML-tiedostosta. Tarkista XML:n rakenne.');
+      return;
+    }
 
-    // Предполагаемая структура: jsonData.reksisteri.valmiste
-    const medicines = jsonData?.root?.valmiste || []; 
     console.log(`Löydetty ${medicines.length} valmistetta. Päivitetään tietokanta...`);
 
     for (const med of medicines) {
-      // Извлекаем нужные нам поля (логика маппинга зависит от структуры XML)
       const vnr = String(med.vnr || '');
       if (!vnr) continue;
 
+      // Маппинг полей согласно вашим названиям в XML Fimea
       await prisma.medicine.upsert({
         where: { vnr: vnr },
         update: {
@@ -39,8 +46,7 @@ async function syncFimeaMedicines() {
           form: med.muoto || '',
           atcCode: med.atc_koodi || '',
           indications: med.kayttotarkoitus || '',
-          // Логика извлечения GFR может быть сложнее (поиск по тексту инструкции)
-          gfrInstructions: med.munuaisten_vajaatoiminta || null, 
+          gfrInstructions: med.munuaisten_vajaatoiminta || null,
           updatedAt: new Date(),
         },
         create: {
@@ -56,9 +62,9 @@ async function syncFimeaMedicines() {
       });
     }
 
-    console.log('--- Päivitys valmis onnistuneesti! ---');
+    console.log('--- Päivitys valmis! ---');
   } catch (error) {
-    console.error('Virhe päivityksessä:', error);
+    console.error('Virhe päivityksessä:', error.message);
   } finally {
     await prisma.$disconnect();
   }
