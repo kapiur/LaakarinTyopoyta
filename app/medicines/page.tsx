@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { 
   Search, Pill, AlertCircle, Info, 
   Stethoscope, Activity, ChevronRight, Loader2,
-  ExternalLink, FileText, ShieldCheck
+  ExternalLink, FileText, ShieldCheck, Globe
 } from 'lucide-react';
 
 export default function MedicinesPage() {
@@ -32,14 +32,16 @@ export default function MedicinesPage() {
     return () => clearTimeout(timer);
   }, [query]);
 
-  // Функция для формирования прямой ссылки на SPC
-  const getSPCLink = (med: any) => {
-    // Поиск по VNR-коду на Lääkeinfo наиболее точен
-    if (med.vnr && !med.vnr.startsWith('ID-')) {
-      return `https://laakeinfo.fi/Search.aspx?vnr=${med.vnr}`;
-    }
-    // Если VNR нет (ID-...), ищем по названию
-    return `https://laakeinfo.fi/Search.aspx?q=${encodeURIComponent(med.name)}`;
+  // НАДЕЖНЫЕ ССЫЛКИ НА ИНСТРУКЦИИ
+  const getLääkeinfoLink = (med: any) => {
+    // Lääkeinfo haku nimen perusteella
+    return `https://laakeinfo.fi/Results.aspx?q=${encodeURIComponent(med.name)}`;
+  };
+
+  const getFimeaLink = (med: any) => {
+    // Fimean lääkehaku (vnr on tarkin hakuun)
+    const searchParam = med.vnr && !med.vnr.startsWith('ID-') ? med.vnr : med.name;
+    return `https://nethaku.fimea.fi/Search.aspx?q=${encodeURIComponent(searchParam)}`;
   };
 
   return (
@@ -48,7 +50,7 @@ export default function MedicinesPage() {
       <div className="bg-white p-8 rounded-3xl border shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Lääketietokanta</h1>
-          <p className="text-slate-500 text-sm mt-1">Haku Fimean perusrekisteristä (29 628 lääkettä).</p>
+          <p className="text-slate-500 text-sm mt-1">Viralliset valmisteyhteenvedot ja ohjeet.</p>
         </div>
         <div className="relative w-full md:w-96">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
@@ -76,7 +78,7 @@ export default function MedicinesPage() {
                 className={`p-5 rounded-2xl border cursor-pointer transition-all hover:shadow-md flex items-center justify-between group ${selectedMed?.vnr === med.vnr ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-slate-100 text-slate-900 hover:border-blue-300'}`}
               >
                 <div className="flex items-center gap-4">
-                  <div className={`p-3 rounded-xl ${selectedMed?.vnr === med.vnr ? 'bg-blue-500' : 'bg-blue-50 text-blue-500'}`}>
+                  <div className={`p-3 rounded-xl ${selectedMed?.vnr === med.vnr ? 'bg-blue-500 text-white' : 'bg-blue-50 text-blue-500'}`}>
                     <Pill size={20} />
                   </div>
                   <div>
@@ -106,41 +108,42 @@ export default function MedicinesPage() {
                     <p className="text-lg text-slate-500 font-medium">{selectedMed.substance} {selectedMed.strength}</p>
                   </div>
                   <div className="text-right">
-                    <div className="text-[10px] font-bold text-slate-400 uppercase">Muoto</div>
-                    <div className="text-sm font-bold text-slate-700">{selectedMed.form}</div>
+                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Muoto</div>
+                    <div className="text-sm font-bold text-slate-700 bg-white px-3 py-1 rounded-lg border border-slate-200 mt-1">{selectedMed.form}</div>
                   </div>
                 </div>
               </div>
 
               <div className="p-8 space-y-8">
-                {/* OFFICIAL SOURCES - NEW BLOCK */}
-                <div className="space-y-3">
+                {/* OFFICIAL SPC LINKS */}
+                <div className="space-y-4">
                   <div className="flex items-center gap-2 text-slate-900 font-bold">
                     <ShieldCheck size={18} className="text-blue-600" />
-                    <h3>Virallinen valmisteyhteenveto (SPC)</h3>
+                    <h3>Valmisteyhteenveto (SPC)</h3>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
+                  
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <a 
-                      href={getSPCLink(selectedMed)} 
+                      href={getLääkeinfoLink(selectedMed)} 
                       target="_blank" 
                       rel="noopener noreferrer"
-                      className="flex items-center justify-center gap-3 p-4 bg-slate-900 text-white rounded-2xl hover:bg-slate-800 transition-all font-bold text-sm shadow-lg shadow-slate-200"
+                      className="flex items-center justify-center gap-3 p-4 bg-slate-900 text-white rounded-2xl hover:bg-slate-800 transition-all font-bold text-sm"
                     >
-                      <ExternalLink size={18} />
-                      Avaa Lääkeinfo
+                      <Globe size={18} />
+                      Avaa Lääkeinfo.fi
                     </a>
                     <a 
-                      href={`https://www.fimea.fi/haku?q=${encodeURIComponent(selectedMed.name)}`} 
+                      href={getFimeaLink(selectedMed)} 
                       target="_blank" 
                       rel="noopener noreferrer"
                       className="flex items-center justify-center gap-3 p-4 bg-white border border-slate-200 text-slate-700 rounded-2xl hover:bg-slate-50 transition-all font-bold text-sm"
                     >
                       <FileText size={18} />
-                      Hae Fimeasta
+                      Fimean Lääkehaku
                     </a>
                   </div>
-                  <p className="text-[11px] text-slate-400 italic">
-                    * Valmisteyhteenveto sisältää viralliset ohjeet munuaisten vajaatoimintaan (kohta 4.2).
+                  <p className="text-[11px] text-slate-400 leading-relaxed italic">
+                    * Linkki avaa virallisen hakuportalin. Valitse tuloslistalta oikea pakkaus lukeaksesi koko valmisteyhteenvedon.
                   </p>
                 </div>
 
@@ -155,7 +158,7 @@ export default function MedicinesPage() {
                   </div>
                 </div>
 
-                {/* ATC & FOOTER */}
+                {/* FOOTER */}
                 <div className="pt-4 border-t flex items-center justify-between text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                   <span>ATC-Koodi: {selectedMed.atcCode || 'N/A'}</span>
                   <span>Päivitetty: {new Date(selectedMed.updatedAt).toLocaleDateString('fi-FI')}</span>
@@ -165,7 +168,7 @@ export default function MedicinesPage() {
           ) : (
             <div className="h-full min-h-[400px] bg-slate-50 border-2 border-dashed border-slate-200 rounded-3xl flex flex-col items-center justify-center text-slate-400 p-8 text-center">
               <Info size={48} className="mb-4 opacity-20" />
-              <p className="font-bold uppercase text-xs tracking-widest">Valitse lääke nähdäksesi SPC-linkit</p>
+              <p className="font-bold uppercase text-[10px] tracking-widest">Valitse lääke nähdäksesi SPC-linkit</p>
             </div>
           )}
         </div>
