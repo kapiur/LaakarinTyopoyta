@@ -17,13 +17,16 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="fi">
-      <body className={`${inter.className} bg-slate-50 text-slate-900`}>
+    <html lang="fi" className="antialiased">
+      <body className={`${inter.className} bg-slate-50 text-slate-900 min-h-screen`}>
         <Providers>
           <div className="flex h-screen overflow-hidden">
+            {/* Боковая панель навигации */}
             <Sidebar />
-            <main className="flex-1 overflow-auto bg-slate-50 relative">
-              <div className="p-8">
+            
+            {/* Основной контент */}
+            <main className="flex-1 overflow-y-auto bg-slate-50 relative scroll-smooth">
+              <div className="max-w-[1600px] mx-auto p-4 md:p-8">
                 {children}
               </div>
             </main>
