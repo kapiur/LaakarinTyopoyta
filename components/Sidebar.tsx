@@ -2,7 +2,15 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
-import { LayoutDashboard, FileText, Calculator, Settings, LogOut, User } from "lucide-react";
+import { 
+  LayoutDashboard, 
+  FileText, 
+  Calculator, 
+  Settings, 
+  LogOut, 
+  User, 
+  Pill // Добавляем иконку таблетки
+} from "lucide-react";
 
 export default function Sidebar() {
   const pathname = usePathname();
@@ -14,6 +22,7 @@ export default function Sidebar() {
   const navItems = [
     { href: "/", label: "Pääsivu", icon: LayoutDashboard },
     { href: "/templates", label: "Mallit", icon: FileText },
+    { href: "/medicines", label: "Lääkkeet", icon: Pill }, // НОВЫЙ ПУНКТ
     { href: "/calculators", label: "Laskurit", icon: Calculator },
   ];
 
@@ -35,7 +44,7 @@ export default function Sidebar() {
               key={item.href} 
               href={item.href} 
               className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all group ${
-                isActive ? 'bg-blue-50 text-blue-600 font-bold' : 'text-slate-600 hover:bg-blue-50 hover:text-blue-600'
+                isActive ? 'bg-blue-50 text-blue-600 font-bold shadow-sm' : 'text-slate-600 hover:bg-blue-50 hover:text-blue-600'
               }`}
             >
               <Icon size={20} className={isActive ? '' : 'group-hover:scale-110 transition-transform'} />
@@ -47,8 +56,8 @@ export default function Sidebar() {
 
       <div className="p-4 border-t border-slate-100 space-y-2">
         {session?.user && (
-          <div className="px-4 py-2 mb-2">
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Käyttäjä</p>
+          <div className="px-4 py-2 mb-2 bg-slate-50 rounded-xl">
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider italic">Käyttäjä</p>
             <p className="text-xs font-medium text-slate-700 truncate">{session.user.email}</p>
           </div>
         )}
