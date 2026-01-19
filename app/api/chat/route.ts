@@ -5,7 +5,7 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// Промпт для генерации шаблонов с сохранением стиля
+// 1. Промпт для генерации шаблонов (существующий)
 const SYSTEM_PROMPT_MALLI = `
 Ты — эксперт по медицинской документации. Твоя задача — превратить текст реальной записи врача в интерактивный шаблон для системы «Lääkärin Työpöytä», максимально сохраняя индивидуальный стиль автора.
 Правила:
@@ -14,40 +14,62 @@ const SYSTEM_PROMPT_MALLI = `
 3. Пояснительный текст оставляй СНАРУЖИ скобок.
 `;
 
-// Промпт для медицинских консультаций с опорой на источники
+// 2. Промпт для медицинских консультаций (существующий)
 const SYSTEM_PROMPT_MEDICAL = `
 Olet asiantunteva lääkärin avustaja. 
 Velvoitteesi:
-1. Tukeudu vastauksissasi yksinomaan virallisiin ja vahvistettuihin lääketieteellisiin lähteisiin, kuten www.terveyskirjasto.fi (Duodecim), Käypä hoito -suositukset tai vastaavat luotettavat lähteet.
-2. Sinun TÄYTYY mainita käytetty lähde jokaisen lääketieteellisen vastauksen lopussa (esim. "Lähde: Terveyskirjasto.fi").
-3. Jos et löydä vahvistettua tietoa, ilmoita siitä rehellisesti. 
-4. Vastaa suomeksi, selkeästi ja ammattimaisesti.
+1. Tukeudu vastauksissasi yksinomaan virallisiin ja vahvistettuihin lääketieteellisiin lähteisiin (Terveyskirjasto, Käypä hoito).
+2. Sinun TÄYTYY mainita lähde vastauksen lopussa.
+3. Vastaa suomeksi, selkeästi ja ammattimaisesti.
 `;
+
+// 3. НОВЫЕ ПРОМПТЫ ДЛЯ ТЕКСТОВОГО ИНСТРУМЕНТАРИЯ
+const PROMPTS_TOOLS: Record<string, string> = {
+  fix: `Ты — эксперт по финской медицинской документации. 
+        Задача: исправить ошибки в тексте (грамотность, падежи, мед. термины).
+        ПРАВИЛО АНОНИМИЗАЦИИ: Заменяй любые имена, даты рождения и HETU на [NIMI] или [HETU].
+        1. Сохраняй авторский стиль и ритм. 
+        2. Исправляй только ошибки.
+        3. Формат: Исправленный текст, затем раздел "Korjaukset:" с кратким списком правок.`,
+
+  translate: `Ты — медицинский переводчик. Переведи текст на финский язык.
+              ПРАВИЛО АНОНИМИЗАЦИИ: Заменяй все персональные данные на [X].
+              Используй профессиональный финский медицинский лексикон и сохраняй структуру (Anamneesi, Status, jne).`,
+
+  summarize: `Ты — врач-эксперт. Сделай краткое медицинское резюме (Tiivistelmä) на финском.
+              ПРАВИЛО АНОНИМИЗАЦИИ: Удали все личные данные.
+              Структура: Esitiedot, Löydökset, Diagnoosi/Arvio, Suunnitelma. Стиль лаконичный.`
+};
 
 export async function POST(req: Request) {
   try {
-    const { messages } = await req.json();
-    const lastMessage = messages[messages.length - 1].content;
+    const body = await req.json();
+    const { messages, text, mode } = body;
 
-    let finalMessages = [...messages];
+    let finalMessages = [];
 
-    // Выбор системного промпта в зависимости от запроса
-    if (lastMessage.toLowerCase().startsWith('malli:')) {
+    // ЛОГИКА ОПРЕДЕЛЕНИЯ ЗАДАЧИ
+    if (text && mode && PROMPTS_TOOLS[mode]) {
+      // Работает новый инструмент (Fix/Translate/Summarize)
       finalMessages = [
-        { role: 'system', content: SYSTEM_PROMPT_MALLI },
-        ...messages
+        { role: 'system', content: PROMPTS_TOOLS[mode] },
+        { role: 'user', content: text }
       ];
-    } else {
-      finalMessages = [
-        { role: 'system', content: SYSTEM_PROMPT_MEDICAL },
-        ...messages
-      ];
+    } else if (messages) {
+      // Работает стандартный чат (Malli или Консультация)
+      const lastMessage = messages[messages.length - 1].content;
+      
+      if (lastMessage.toLowerCase().startsWith('malli:')) {
+        finalMessages = [{ role: 'system', content: SYSTEM_PROMPT_MALLI }, ...messages];
+      } else {
+        finalMessages = [{ role: 'system', content: SYSTEM_PROMPT_MEDICAL }, ...messages];
+      }
     }
 
     const response = await openai.chat.completions.create({
-      model: 'gpt-3.5-turbo', // Рекомендуется gpt-4 для более точного следования источникам
+      model: 'gpt-4o', // Обновлено для точности исправления текстов
       messages: finalMessages,
-      temperature: 0.2, // Минимальная температура для исключения галлюцинаций
+      temperature: 0.2,
     });
 
     return NextResponse.json({ content: response.choices[0].message.content });
