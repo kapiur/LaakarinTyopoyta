@@ -16,27 +16,29 @@ async function syncFimeaMedicines() {
     });
 
     console.log('Tiedosto ladattu. Jäsennellään...');
-    const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: "" });
+    const parser = new XMLParser({ 
+      ignoreAttributes: false, 
+      attributeNamePrefix: "",
+      // Fimea использует вложенность, заставляем парсер всегда делать массивы для списков
+      isArray: (name) => ["Valmiste", "valmiste"].includes(name) 
+    });
+    
     const jsonData = parser.parse(response.data);
     
-    // ПРОВЕРКА СТРУКТУРЫ: Ищем массив лекарств в разных возможных узлах
-    // В новом Perusrekisteri структура обычно: jsonData.perusrekisteri.valmisteet.valmiste
-    let medicines = jsonData?.perusrekisteri?.valmisteet?.valmiste || 
-                    jsonData?.valmisteet?.valmiste ||
-                    jsonData?.root?.valmiste ||
-                    jsonData?.valmiste;
+    // На основе вашего лога (Juuriavaimet: Perusrekisteri), настраиваем точный путь
+    // Пробуем разные варианты регистра (Valmisteet vs valmisteet)
+    const root = jsonData.Perusrekisteri || jsonData.perusrekisteri;
+    const medicines = root?.Valmisteet?.Valmiste || 
+                      root?.valmisteet?.valmiste || 
+                      root?.Valmiste || 
+                      [];
 
-    // Если всё еще не нашли, пробуем найти через поиск по ключам (защита от изменений структуры)
-    if (!medicines || !Array.isArray(medicines)) {
-       const rootKey = Object.keys(jsonData)[0];
-       medicines = jsonData[rootKey]?.valmisteet?.valmiste || jsonData[rootKey]?.valmiste;
+    if (medicines.length === 0) {
+      console.log("DEBUG: XML sisältö:", Object.keys(root || {}));
+      throw new Error('Lääkelistaa ei löytynyt Perusrekisteri-solmun alta.');
     }
 
-    if (!medicines || !Array.isArray(medicines)) {
-      throw new Error(`XML rakenne ei täsmää. Juuriavaimet: ${Object.keys(jsonData)}`);
-    }
-
-    console.log(`Löydetty ${medicines.length} valmistetta. Tallennetaan...`);
+    console.log(`Löydetty ${medicines.length} valmistetta. Tallennetaan tietokantaan...`);
 
     for (let i = 0; i < medicines.length; i++) {
       const med = medicines[i];
@@ -47,9 +49,9 @@ async function syncFimeaMedicines() {
         where: { vnr: vnr },
         update: {
           name: String(med.kauppanimi || 'Ei nimeä'),
-          substance: String(med.vaikuttava_aine || ''),
+          substance: String(med.vaikuttava_aine || med.vaikuttavat_aineet || ''),
           strength: String(med.vahvuus || ''),
-          form: String(med.muoto || ''),
+          form: String(med.muoto || med.laakemuoto || ''),
           atcCode: String(med.atc_koodi || ''),
           indications: String(med.kayttotarkoitus || ''),
           updatedAt: new Date(),
@@ -57,15 +59,17 @@ async function syncFimeaMedicines() {
         create: {
           vnr: vnr,
           name: String(med.kauppanimi || 'Ei nimeä'),
-          substance: String(med.vaikuttava_aine || ''),
+          substance: String(med.vaikuttava_aine || med.vaikuttavat_aineet || ''),
           strength: String(med.vahvuus || ''),
-          form: String(med.muoto || ''),
+          form: String(med.muoto || med.laakemuoto || ''),
           atcCode: String(med.atc_koodi || ''),
           indications: String(med.kayttotarkoitus || ''),
         },
       });
 
-      if (i % 500 === 0) console.log(`Edistyminen: ${i} / ${medicines.length}...`);
+      if (i % 500 === 0) {
+        console.log(`Edistyminen: ${i} / ${medicines.length} tallennettu...`);
+      }
     }
 
     console.log('--- Päivitys valmis onnistuneesti! ---');
