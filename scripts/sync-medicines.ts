@@ -4,6 +4,17 @@ const { XMLParser } = require('fast-xml-parser');
 
 const prisma = new PrismaClient();
 
+// Хелпер для безопасного извлечения текста из XML-узла
+// Помогает избежать [object Object], если узел содержит атрибуты
+const getText = (node) => {
+  if (!node) return '';
+  if (typeof node === 'string') return node;
+  if (typeof node === 'object') {
+    return String(node['#text'] || node.nimi || Object.values(node)[0] || '');
+  }
+  return String(node);
+};
+
 async function syncFimeaMedicines() {
   console.log('--- Aloitetaan lääketietokannan päivitys ---');
   const FIMEA_URL = 'https://data.pilvi.fimea.fi/avoin-data/Perusrekisteri.xml'; 
@@ -16,7 +27,11 @@ async function syncFimeaMedicines() {
     });
 
     console.log('Tiedosto ladattu. Jäsennellään...');
-    const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: "" });
+    const parser = new XMLParser({ 
+      ignoreAttributes: false, 
+      attributeNamePrefix: "",
+      textNodeName: "#text" // Явно указываем имя для текстового контента
+    });
     const jsonData = parser.parse(response.data);
     
     const medicines = jsonData?.Perusrekisteri?.Laakevalmiste;
@@ -30,33 +45,28 @@ async function syncFimeaMedicines() {
     for (let i = 0; i < medicines.length; i++) {
       const med = medicines[i];
       
-      // ПОПЫТКА НАЙТИ ИДЕНТИФИКАТОР (VNR или внутренний ID)
+      // Поиск VNR кода
       const pack = Array.isArray(med.Pakkaus) ? med.Pakkaus[0] : med.Pakkaus;
-      // Если VNR нет, создаем временный ID на основе индекса, чтобы данные попали в базу
-      const vnr = String(med.VnrKoodi || pack?.VnrKoodi || `ID-${i}`);
+      const vnr = String(getText(med.VnrKoodi) || getText(pack?.VnrKoodi) || `ID-${i}`);
       
-      const name = String(med.Kauppanimi || 'Ei nimeä');
-      const substance = String(med.VaikuttavaAine || med.VaikuttavatAineet || '');
+      const medicineData = {
+        name: getText(med.Kauppanimi) || 'Ei nimeä',
+        substance: getText(med.VaikuttavaAine || med.VaikuttavatAineet),
+        strength: getText(med.Vahvuus),
+        form: getText(med.Laakemuoto), // Исправляет [object Object]
+        atcCode: getText(med.AtcKoodi),
+        indications: getText(med.Kayttotarkoitus),
+      };
 
       await prisma.medicine.upsert({
         where: { vnr: vnr },
         update: {
-          name: name,
-          substance: substance,
-          strength: String(med.Vahvuus || ''),
-          form: String(med.Laakemuoto || ''),
-          atcCode: String(med.AtcKoodi || ''),
-          indications: String(med.Kayttotarkoitus || ''),
+          ...medicineData,
           updatedAt: new Date(),
         },
         create: {
           vnr: vnr,
-          name: name,
-          substance: substance,
-          strength: String(med.Vahvuus || ''),
-          form: String(med.Laakemuoto || ''),
-          atcCode: String(med.AtcKoodi || ''),
-          indications: String(med.Kayttotarkoitus || ''),
+          ...medicineData,
         },
       });
 
