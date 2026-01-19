@@ -1,6 +1,6 @@
 "use client";
 import { useState } from 'react';
-import { Send, Bot, FileText, Calculator, Scissors, Languages, ListChecks, Copy } from 'lucide-react';
+import { Send, Bot, FileText, Calculator, Scissors, Languages, ListChecks, Copy, MessageSquareShare } from 'lucide-react';
 import Link from 'next/link';
 
 export default function Dashboard() {
@@ -24,9 +24,11 @@ export default function Dashboard() {
   };
 
   // Логика чата
-  const sendMessage = async () => {
-    if (!chatInput.trim() || isChatLoading) return;
-    const userMessage = { role: 'user', content: chatInput };
+  const sendMessage = async (overrideMessage?: string) => {
+    const messageToSend = overrideMessage || chatInput;
+    if (!messageToSend.trim() || isChatLoading) return;
+
+    const userMessage = { role: 'user', content: messageToSend };
     setMessages(prev => [...prev, userMessage]);
     setChatInput('');
     setIsChatLoading(true);
@@ -49,8 +51,7 @@ export default function Dashboard() {
   };
 
   // Логика Инструментария (Кнопки)
-  const processToolText = async (modeOverride?: string) => {
-    const activeMode = modeOverride || toolMode;
+  const processToolText = async () => {
     if (!toolText.trim() || isToolLoading) return;
     setIsToolLoading(true);
 
@@ -60,7 +61,7 @@ export default function Dashboard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           text: anonymize(toolText), 
-          mode: activeMode 
+          mode: toolMode 
         }),
       });
       const data = await response.json();
@@ -72,20 +73,26 @@ export default function Dashboard() {
     }
   };
 
+  // НОВАЯ ФУНКЦИЯ: Перенос результата в чат
+  const moveResultToChat = () => {
+    if (!toolResult) return;
+    const promptForChat = `Tässä on käsitelty teksti, haluaisin kysyä siitä lisää:\n\n${toolResult}`;
+    sendMessage(promptForChat);
+  };
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 h-full">
       
-      {/* ЛЕВАЯ И ЦЕНТРАЛЬНАЯ ЧАСТЬ (Инструменты) */}
+      {/* ЛЕВАЯ И ЦЕНТРАЛЬНАЯ ЧАСТЬ */}
       <div className="lg:col-span-2 space-y-6">
         <h2 className="text-2xl font-bold text-slate-800">Työpöytä</h2>
         
-        {/* КАРТОЧКИ МОДУЛЕЙ */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Link href="/templates" className="block p-4 bg-white rounded-xl shadow-sm border border-slate-200 hover:border-blue-500 transition-all group">
             <h3 className="font-bold text-blue-700 group-hover:text-blue-600 flex items-center gap-2">
               Mallit <FileText size={18} />
             </h3>
-            <p className="text-xs text-slate-500">Tutkimusmallit и интерактивные формы.</p>
+            <p className="text-xs text-slate-500">Tutkimusmallit ja интерактивные формы.</p>
           </Link>
 
           <Link href="/calculators" className="block p-4 bg-white rounded-xl shadow-sm border border-slate-200 hover:border-blue-500 transition-all group">
@@ -96,7 +103,7 @@ export default function Dashboard() {
           </Link>
         </div>
 
-        {/* НОВЫЙ БЛОК: AI TEKSTITYÖKALU */}
+        {/* AI TEKSTITYÖKALU */}
         <div className="bg-white rounded-xl shadow-md border border-slate-200 p-6 space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
@@ -105,7 +112,6 @@ export default function Dashboard() {
             <span className="text-[10px] font-bold bg-slate-100 text-slate-500 px-2 py-1 rounded uppercase tracking-tighter">GDPR Secured</span>
           </div>
 
-          {/* Кнопки режимов */}
           <div className="flex gap-2 p-1 bg-slate-100 rounded-lg w-fit">
             {[
               { id: 'fix', label: 'Korjaa', icon: <ListChecks size={14} /> },
@@ -135,19 +141,28 @@ export default function Dashboard() {
             <button
               onClick={() => processToolText()}
               disabled={isToolLoading || !toolText}
-              className="w-full py-2.5 bg-slate-800 text-white rounded-lg font-bold hover:bg-black disabled:bg-slate-200 transition-all flex items-center justify-center gap-2"
+              className="w-full py-2.5 bg-slate-800 text-white rounded-lg font-bold hover:bg-black disabled:bg-slate-200 transition-all flex items-center justify-center gap-2 uppercase tracking-wide"
             >
-              {isToolLoading ? 'Käsitellään...' : 'SUORITA ANALYYSI'}
+              {isToolLoading ? 'Käsitellään...' : 'Suorita analyysi'}
             </button>
 
             {toolResult && (
-              <div className="mt-2 p-4 bg-blue-50/50 border border-blue-100 rounded-lg relative group">
-                <button 
-                  onClick={() => {navigator.clipboard.writeText(toolResult); alert("Kopioitu!");}}
-                  className="absolute top-2 right-2 p-1.5 bg-white border border-blue-200 rounded-md text-blue-600 hover:bg-blue-50 opacity-0 group-hover:opacity-100 transition-opacity"
-                >
-                  <Copy size={14} />
-                </button>
+              <div className="mt-2 p-4 bg-blue-50 border border-blue-100 rounded-lg relative group animate-in fade-in duration-500">
+                <div className="flex justify-end gap-2 mb-2">
+                  <button 
+                    onClick={moveResultToChat}
+                    title="Siirrä chattiin"
+                    className="p-1.5 bg-white border border-blue-200 rounded-md text-blue-600 hover:bg-blue-100 flex items-center gap-1 text-[10px] font-bold uppercase transition-all"
+                  >
+                    <MessageSquareShare size={14} /> Chattiin
+                  </button>
+                  <button 
+                    onClick={() => {navigator.clipboard.writeText(toolResult); alert("Kopioitu!");}}
+                    className="p-1.5 bg-white border border-blue-200 rounded-md text-blue-600 hover:bg-blue-100 transition-all shadow-sm"
+                  >
+                    <Copy size={14} />
+                  </button>
+                </div>
                 <pre className="text-sm text-slate-800 whitespace-pre-wrap font-sans leading-relaxed">
                   {toolResult}
                 </pre>
@@ -176,7 +191,7 @@ export default function Dashboard() {
               </div>
             </div>
           ))}
-          {isChatLoading && <div className="text-[10px] text-slate-400 animate-pulse italic text-center py-2 font-medium">Ladataan vastausta...</div>}
+          {isChatLoading && <div className="text-[10px] text-slate-400 animate-pulse italic text-center py-2 font-medium font-sans">AI vastaa...</div>}
         </div>
 
         <div className="p-4 border-t border-slate-200 bg-white rounded-b-xl">
@@ -187,19 +202,18 @@ export default function Dashboard() {
               onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
               type="text" 
               placeholder="Kysy neuvoa..." 
-              className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs"
+              className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs shadow-inner"
             />
             <button 
-              onClick={sendMessage}
+              onClick={() => sendMessage()}
               disabled={isChatLoading}
-              className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-slate-300 transition-colors"
+              className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-slate-300 transition-colors shadow-md"
             >
               <Send size={16} />
             </button>
           </div>
         </div>
       </div>
-      
     </div>
   );
 }
