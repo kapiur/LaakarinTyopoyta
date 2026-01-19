@@ -18,58 +18,68 @@ async function syncFimeaMedicines() {
     console.log('Tiedosto ladattu. Jäsennellään...');
     const parser = new XMLParser({ 
       ignoreAttributes: false, 
-      attributeNamePrefix: "",
-      isArray: (name) => ["Laakevalmiste", "Laakeaine"].includes(name) 
+      attributeNamePrefix: ""
     });
     
     const jsonData = parser.parse(response.data);
-    const root = jsonData.Perusrekisteri;
     
-    // Согласно вашему логу DEBUG, данные лежат здесь:
-    const medicines = root?.Laakevalmiste || [];
+    // Прямой доступ к массиву
+    const medicines = jsonData?.Perusrekisteri?.Laakevalmiste;
 
-    if (medicines.length === 0) {
-      console.log("DEBUG: XML sisältö:", Object.keys(root || {}));
-      throw new Error('Lääkelistaa ei löytynyt. Tarkista XML-rakenne.');
+    if (!medicines || !Array.isArray(medicines)) {
+      throw new Error('Laakevalmiste-listaa ei löytynyt. XML rakenne on ehkä muuttunut.');
     }
 
     console.log(`Löydetty ${medicines.length} valmistetta. Tallennetaan...`);
 
+    // Очистим старые тестовые данные, чтобы видеть только реальные
+    // await prisma.medicine.deleteMany({}); 
+
     for (let i = 0; i < medicines.length; i++) {
       const med = medicines[i];
       
-      // VNR код в этом файле обычно находится в структуре упаковок или в корне препарата
-      const vnr = String(med.VnrKoodi || med.Pakkaus?.VnrKoodi || '');
-      if (!vnr || vnr === 'undefined') continue;
+      // В Perusrekisteri.xml VNR код часто лежит внутри первого элемента Pakkaus
+      const pack = Array.isArray(med.Pakkaus) ? med.Pakkaus[0] : med.Pakkaus;
+      const vnr = String(med.VnrKoodi || pack?.VnrKoodi || '');
+      
+      if (!vnr || vnr === 'undefined' || vnr.length < 3) continue;
 
-      await prisma.medicine.upsert({
-        where: { vnr: vnr },
-        update: {
-          name: String(med.Kauppanimi || 'Ei nimeä'),
-          substance: String(med.VaikuttavaAine || ''),
-          strength: String(med.Vahvuus || ''),
-          form: String(med.Laakemuoto || ''),
-          atcCode: String(med.AtcKoodi || ''),
-          indications: String(med.Kayttotarkoitus || ''),
-          updatedAt: new Date(),
-        },
-        create: {
-          vnr: vnr,
-          name: String(med.Kauppanimi || 'Ei nimeä'),
-          substance: String(med.VaikuttavaAine || ''),
-          strength: String(med.Vahvuus || ''),
-          form: String(med.Laakemuoto || ''),
-          atcCode: String(med.AtcKoodi || ''),
-          indications: String(med.Kayttotarkoitus || ''),
-        },
-      });
+      try {
+        await prisma.medicine.upsert({
+          where: { vnr: vnr },
+          update: {
+            name: String(med.Kauppanimi || 'Ei nimeä'),
+            substance: String(med.VaikuttavaAine || med.VaikuttavatAineet || ''),
+            strength: String(med.Vahvuus || ''),
+            form: String(med.Laakemuoto || ''),
+            atcCode: String(med.AtcKoodi || ''),
+            indications: String(med.Kayttotarkoitus || ''),
+            updatedAt: new Date(),
+          },
+          create: {
+            vnr: vnr,
+            name: String(med.Kauppanimi || 'Ei nimeä'),
+            substance: String(med.VaikuttavaAine || med.VaikuttavatAineet || ''),
+            strength: String(med.Vahvuus || ''),
+            form: String(med.Laakemuoto || ''),
+            atcCode: String(med.AtcKoodi || ''),
+            indications: String(med.Kayttotarkoitus || ''),
+          },
+        });
+      } catch (e) {
+        // Пропускаем ошибки записи отдельных строк
+        continue;
+      }
 
-      if (i % 500 === 0) {
-        console.log(`Edistyminen: ${i} / ${medicines.length} tallennettu...`);
+      if (i % 1000 === 0) {
+        console.log(`Tallennetaan: ${i} / ${medicines.length}...`);
       }
     }
 
-    console.log('--- Päivitys valmis onnistuneesti! ---');
+    console.log('--- Päivitys valmis! ---');
+    const finalCount = await prisma.medicine.count();
+    console.log(`Tietokannassa on nyt yhteensä ${finalCount} lääkettä.`);
+
   } catch (error) {
     console.error('!!! Virhe !!!');
     console.error('Syy:', error.message);
