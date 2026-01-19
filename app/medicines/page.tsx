@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { 
   Search, Pill, AlertCircle, Info, 
   Stethoscope, Activity, ChevronRight, Loader2,
-  ExternalLink, FileText, ShieldCheck, SearchCode
+  ExternalLink, FileText, ShieldCheck, Globe, SearchCode
 } from 'lucide-react';
 
 export default function MedicinesPage() {
