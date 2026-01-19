@@ -19,51 +19,48 @@ async function syncFimeaMedicines() {
     const parser = new XMLParser({ 
       ignoreAttributes: false, 
       attributeNamePrefix: "",
-      // Fimea использует вложенность, заставляем парсер всегда делать массивы для списков
-      isArray: (name) => ["Valmiste", "valmiste"].includes(name) 
+      isArray: (name) => ["Laakevalmiste", "Laakeaine"].includes(name) 
     });
     
     const jsonData = parser.parse(response.data);
+    const root = jsonData.Perusrekisteri;
     
-    // На основе вашего лога (Juuriavaimet: Perusrekisteri), настраиваем точный путь
-    // Пробуем разные варианты регистра (Valmisteet vs valmisteet)
-    const root = jsonData.Perusrekisteri || jsonData.perusrekisteri;
-    const medicines = root?.Valmisteet?.Valmiste || 
-                      root?.valmisteet?.valmiste || 
-                      root?.Valmiste || 
-                      [];
+    // Согласно вашему логу DEBUG, данные лежат здесь:
+    const medicines = root?.Laakevalmiste || [];
 
     if (medicines.length === 0) {
       console.log("DEBUG: XML sisältö:", Object.keys(root || {}));
-      throw new Error('Lääkelistaa ei löytynyt Perusrekisteri-solmun alta.');
+      throw new Error('Lääkelistaa ei löytynyt. Tarkista XML-rakenne.');
     }
 
-    console.log(`Löydetty ${medicines.length} valmistetta. Tallennetaan tietokantaan...`);
+    console.log(`Löydetty ${medicines.length} valmistetta. Tallennetaan...`);
 
     for (let i = 0; i < medicines.length; i++) {
       const med = medicines[i];
-      const vnr = String(med.vnr || '');
-      if (!vnr) continue;
+      
+      // VNR код в этом файле обычно находится в структуре упаковок или в корне препарата
+      const vnr = String(med.VnrKoodi || med.Pakkaus?.VnrKoodi || '');
+      if (!vnr || vnr === 'undefined') continue;
 
       await prisma.medicine.upsert({
         where: { vnr: vnr },
         update: {
-          name: String(med.kauppanimi || 'Ei nimeä'),
-          substance: String(med.vaikuttava_aine || med.vaikuttavat_aineet || ''),
-          strength: String(med.vahvuus || ''),
-          form: String(med.muoto || med.laakemuoto || ''),
-          atcCode: String(med.atc_koodi || ''),
-          indications: String(med.kayttotarkoitus || ''),
+          name: String(med.Kauppanimi || 'Ei nimeä'),
+          substance: String(med.VaikuttavaAine || ''),
+          strength: String(med.Vahvuus || ''),
+          form: String(med.Laakemuoto || ''),
+          atcCode: String(med.AtcKoodi || ''),
+          indications: String(med.Kayttotarkoitus || ''),
           updatedAt: new Date(),
         },
         create: {
           vnr: vnr,
-          name: String(med.kauppanimi || 'Ei nimeä'),
-          substance: String(med.vaikuttava_aine || med.vaikuttavat_aineet || ''),
-          strength: String(med.vahvuus || ''),
-          form: String(med.muoto || med.laakemuoto || ''),
-          atcCode: String(med.atc_koodi || ''),
-          indications: String(med.kayttotarkoitus || ''),
+          name: String(med.Kauppanimi || 'Ei nimeä'),
+          substance: String(med.VaikuttavaAine || ''),
+          strength: String(med.Vahvuus || ''),
+          form: String(med.Laakemuoto || ''),
+          atcCode: String(med.AtcKoodi || ''),
+          indications: String(med.Kayttotarkoitus || ''),
         },
       });
 
