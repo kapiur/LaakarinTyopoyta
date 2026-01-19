@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "db:sync": "ts-node scripts/sync-medicines.ts"
   },
   "dependencies": {
     "react": "^18",
@@ -18,7 +19,9 @@
     "openai": "^4.24.1",
     "@prisma/client": "^5.8.1",
     "next-auth": "^4.24.5",
-    "bcryptjs": "^2.4.3"
+    "bcryptjs": "^2.4.3",
+    "axios": "^1.6.7",
+    "fast-xml-parser": "^4.3.4"
   },
   "devDependencies": {
     "typescript": "^5",
@@ -29,6 +32,7 @@
     "tailwindcss": "^3.4.1",
     "autoprefixer": "^10.4.16",
     "prisma": "^5.8.1",
-    "@types/bcryptjs": "^2.4.6"
+    "@types/bcryptjs": "^2.4.6",
+    "ts-node": "^10.9.2"
   }
 }
