@@ -16,63 +16,52 @@ async function syncFimeaMedicines() {
     });
 
     console.log('Tiedosto ladattu. Jäsennellään...');
-    const parser = new XMLParser({ 
-      ignoreAttributes: false, 
-      attributeNamePrefix: ""
-    });
-    
+    const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: "" });
     const jsonData = parser.parse(response.data);
     
-    // Прямой доступ к массиву
     const medicines = jsonData?.Perusrekisteri?.Laakevalmiste;
 
     if (!medicines || !Array.isArray(medicines)) {
-      throw new Error('Laakevalmiste-listaa ei löytynyt. XML rakenne on ehkä muuttunut.');
+      throw new Error('Laakevalmiste-listaa ei löytynyt.');
     }
 
     console.log(`Löydetty ${medicines.length} valmistetta. Tallennetaan...`);
 
-    // Очистим старые тестовые данные, чтобы видеть только реальные
-    // await prisma.medicine.deleteMany({}); 
-
     for (let i = 0; i < medicines.length; i++) {
       const med = medicines[i];
       
-      // В Perusrekisteri.xml VNR код часто лежит внутри первого элемента Pakkaus
+      // ПОПЫТКА НАЙТИ ИДЕНТИФИКАТОР (VNR или внутренний ID)
       const pack = Array.isArray(med.Pakkaus) ? med.Pakkaus[0] : med.Pakkaus;
-      const vnr = String(med.VnrKoodi || pack?.VnrKoodi || '');
+      // Если VNR нет, создаем временный ID на основе индекса, чтобы данные попали в базу
+      const vnr = String(med.VnrKoodi || pack?.VnrKoodi || `ID-${i}`);
       
-      if (!vnr || vnr === 'undefined' || vnr.length < 3) continue;
+      const name = String(med.Kauppanimi || 'Ei nimeä');
+      const substance = String(med.VaikuttavaAine || med.VaikuttavatAineet || '');
 
-      try {
-        await prisma.medicine.upsert({
-          where: { vnr: vnr },
-          update: {
-            name: String(med.Kauppanimi || 'Ei nimeä'),
-            substance: String(med.VaikuttavaAine || med.VaikuttavatAineet || ''),
-            strength: String(med.Vahvuus || ''),
-            form: String(med.Laakemuoto || ''),
-            atcCode: String(med.AtcKoodi || ''),
-            indications: String(med.Kayttotarkoitus || ''),
-            updatedAt: new Date(),
-          },
-          create: {
-            vnr: vnr,
-            name: String(med.Kauppanimi || 'Ei nimeä'),
-            substance: String(med.VaikuttavaAine || med.VaikuttavatAineet || ''),
-            strength: String(med.Vahvuus || ''),
-            form: String(med.Laakemuoto || ''),
-            atcCode: String(med.AtcKoodi || ''),
-            indications: String(med.Kayttotarkoitus || ''),
-          },
-        });
-      } catch (e) {
-        // Пропускаем ошибки записи отдельных строк
-        continue;
-      }
+      await prisma.medicine.upsert({
+        where: { vnr: vnr },
+        update: {
+          name: name,
+          substance: substance,
+          strength: String(med.Vahvuus || ''),
+          form: String(med.Laakemuoto || ''),
+          atcCode: String(med.AtcKoodi || ''),
+          indications: String(med.Kayttotarkoitus || ''),
+          updatedAt: new Date(),
+        },
+        create: {
+          vnr: vnr,
+          name: name,
+          substance: substance,
+          strength: String(med.Vahvuus || ''),
+          form: String(med.Laakemuoto || ''),
+          atcCode: String(med.AtcKoodi || ''),
+          indications: String(med.Kayttotarkoitus || ''),
+        },
+      });
 
       if (i % 1000 === 0) {
-        console.log(`Tallennetaan: ${i} / ${medicines.length}...`);
+        console.log(`Edistyminen: ${i} / ${medicines.length}...`);
       }
     }
 
