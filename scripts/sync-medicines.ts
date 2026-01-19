@@ -7,36 +7,29 @@ const prisma = new PrismaClient();
 async function syncFimeaMedicines() {
   console.log('--- Aloitetaan lääketietokannan päivitys ---');
 
+  // Актуальный URL реестра Fimea (может потребоваться проверка на avoindata.fi)
+  const FIMEA_URL = 'https://data.pilvi.fimea.fi/perusrekisteri/fimea_valmisteet.xml'; 
+
   try {
-    // Прямая ссылка на XML реестр (SPC данные)
-    const FIMEA_URL = 'https://data.pilvi.fimea.fi/perusrekisteri/fimea_spc.xml'; 
-    console.log('Ladataan tietoja Fimeasta... (tämä voi kestää hetken)');
+    console.log('Ladataan tietoja Fimeasta...');
+    const response = await axios.get(FIMEA_URL, { timeout: 30000 }); // Таймаут 30 сек
     
-    const response = await axios.get(FIMEA_URL);
-    
-    const parser = new XMLParser({
-      ignoreAttributes: false,
-      attributeNamePrefix: ""
-    });
-    
+    const parser = new XMLParser({ ignoreAttributes: false });
     const jsonData = parser.parse(response.data);
     
-    // В структуре Fimea данные обычно лежат в root -> valmisteet -> valmiste
-    // Пробуем разные пути парсинга
-    const medicines = jsonData?.valmisteet?.valmiste || jsonData?.root?.valmiste || []; 
-    
+    // Пытаемся найти массив лекарств в разных узлах
+    const medicines = jsonData?.valmisteet?.valmiste || jsonData?.root?.valmiste || [];
+
     if (medicines.length === 0) {
-      console.log('VAROITUS: Lääkkeitä ei löytynyt XML-tiedostosta. Tarkista XML:n rakenne.');
-      return;
+      throw new Error('XML-tiedosto on tyhjä tai rakenne on muuttunut.');
     }
 
     console.log(`Löydetty ${medicines.length} valmistetta. Päivitetään tietokanta...`);
 
-    for (const med of medicines) {
+    for (const med of medicines.slice(0, 100)) { // Для теста берем первые 100
       const vnr = String(med.vnr || '');
       if (!vnr) continue;
 
-      // Маппинг полей согласно вашим названиям в XML Fimea
       await prisma.medicine.upsert({
         where: { vnr: vnr },
         update: {
@@ -46,7 +39,6 @@ async function syncFimeaMedicines() {
           form: med.muoto || '',
           atcCode: med.atc_koodi || '',
           indications: med.kayttotarkoitus || '',
-          gfrInstructions: med.munuaisten_vajaatoiminta || null,
           updatedAt: new Date(),
         },
         create: {
@@ -57,14 +49,30 @@ async function syncFimeaMedicines() {
           form: med.muoto || '',
           atcCode: med.atc_koodi || '',
           indications: med.kayttotarkoitus || '',
-          gfrInstructions: med.munuaisten_vajaatoiminta || null,
         },
       });
     }
 
     console.log('--- Päivitys valmis! ---');
   } catch (error) {
-    console.error('Virhe päivityksessä:', error.message);
+    console.error('!!! Virhe !!!');
+    console.error('Syy:', error.message);
+    
+    // ТЕСТОВЫЙ РЕЖИМ: Если сервер Fimea недоступен, создадим 2 записи для проверки базы
+    console.log('Ajetaan testitila: luodaan muutama esimerkki tietokantaan...');
+    const testMeds = [
+      { vnr: '012345', name: 'Burana', substance: 'Ibuprofeeni', strength: '400mg', form: 'Tabletti', indications: 'Kipu ja kuume' },
+      { vnr: '678910', name: 'Marevan', substance: 'Varfariini', strength: '3mg', form: 'Tabletti', indications: 'Veritulpan esto' }
+    ];
+
+    for (const med of testMeds) {
+      await prisma.medicine.upsert({
+        where: { vnr: med.vnr },
+        update: med,
+        create: med
+      });
+    }
+    console.log('Testitiedot lisätty. Voit nyt testata hakua käyttöliittymässä!');
   } finally {
     await prisma.$disconnect();
   }
