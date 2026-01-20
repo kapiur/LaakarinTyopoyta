@@ -8,16 +8,18 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// --- ВАШИ СУЩЕСТВУЮЩИЕ МОДЕЛИ (БЕЗ ИЗМЕНЕНИЙ) ---
+
 model User {
-  id         Int        @id @default(autoincrement())
-  email      String     @unique
+  id         Int         @id @default(autoincrement())
+  email      String      @unique
   password   String
   name       String?
   categories Category[]
   templates  Template[]
   pcaDrugs   PcaDrug[]
-  history    AIHistory[] // Связь с историей запросов
-  createdAt  DateTime   @default(now())
+  history    AIHistory[]
+  createdAt  DateTime    @default(now())
 }
 
 model Category {
@@ -31,7 +33,7 @@ model Category {
 model Template {
   id         Int      @id @default(autoincrement())
   title      String
-  content    String   @db.Text // Используем Text для длинных шаблонов
+  content    String   @db.Text
   author     String
   categoryId Int
   category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
@@ -51,27 +53,6 @@ model PcaDrug {
   @@index([userId])
 }
 
-// --- НОВЫЙ МОДУЛЬ: СПРАВОЧНИК ЛЕКАРСТВ (FIMEA) ---
-model Medicine {
-  id                String   @id @default(cuid())
-  vnr               String   @unique // VNR-koodi
-  name              String   // Kauppanimi
-  substance         String   // Vaikuttava aine
-  strength          String   // Vahvuus
-  form              String   // Muoto
-  atcCode           String?  // ATC-koodi
-  
-  indications       String?  @db.Text // Käyttötarkoitus
-  gfrInstructions   String?  @db.Text // Munuaisten vajaatoiminta -ohje
-  standardDosage    String?  @db.Text // Annostusohje
-  
-  updatedAt         DateTime @default(now()) @updatedAt
-
-  @@index([name])
-  @@index([substance])
-}
-
-// --- НОВЫЙ МОДУЛЬ: ИСТОРИЯ ОБРАБОТКИ ТЕКСТА ---
 model AIHistory {
   id           String   @id @default(cuid())
   createdAt    DateTime @default(now())
@@ -82,4 +63,47 @@ model AIHistory {
   resultText   String   @db.Text
 
   @@index([userId])
+}
+
+// --- ОБНОВЛЕННЫЙ МОДУЛЬ: СПРАВОЧНИК ЛЕКАРСТВ (FIMEA) ---
+// Мы заменяем старую плоскую модель Medicine на трехуровневую систему
+
+model Substance {
+  id              String     @id // Название вещества (напр. "takrolimuusi")
+  laake75Class    String?    // Категория безопасности (A, B, C, D)
+  laake75Comment  String?    @db.Text // Комментарий Lääke75+
+  gfrGuidelines   String?    @db.Text // Ваши клинические заметки по GFR
+  isBiological    Boolean    @default(false)
+  medicines       Medicine[]
+}
+
+model Medicine {
+  id               String      @id // XML ID (напр. "REL53213")
+  name             String      // Kauppanimi (напр. "Advagraf")
+  atcCode          String?
+  prescriptionTerm String?     @db.Text // Maaraamisehto (Условия выписки)
+  isPediatric      Boolean     @default(false) // Lastenlaake
+  isBiosimilar     Boolean     @default(false) // Biosimilaari
+  status           String?     // Статус лицензии
+  substance        Substance?  @relation(fields: [substanceId], references: [id])
+  substanceId      String?
+  packages         Package[]
+
+  @@index([name])
+}
+
+model Package {
+  vnr             String    @id // VNR-номер (020566)
+  medicineId      String
+  medicine        Medicine  @relation(fields: [medicineId], references: [id])
+  sizeText        String?   // Текст упаковки (напр. "10 x 20 ml")
+  strength        String?   // Дозировка (1 mg)
+  form            String?   // Форма (depotkapseli)
+  container       String?   // Тара (Injektiopullo)
+  isAvailable     Boolean   @default(true) // Kaupan: 1/0
+  dddValue        Float?    // DDD (5.0)
+  dddUnit         String?   // DDD yksikkö (mg)
+  updatedAt       DateTime  @updatedAt
+
+  @@index([medicineId])
 }
