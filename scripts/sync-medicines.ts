@@ -1,36 +1,41 @@
 const { PrismaClient } = require('@prisma/client');
 const { XMLParser } = require('fast-xml-parser');
-const fs = require('fs');
 
 const prisma = new PrismaClient();
-const FIMEA_FILE_PATH = './medicines.xml'; 
+// Прямая ссылка на полную базу Fimea
+const FIMEA_URL = 'https://data.pilvi.fimea.fi/avoin-data/Perusrekisteri.xml';
 
-async function syncFullFimeaDatabase() {
-  console.log("--- СТАРТ ПОЛНОЙ СИНХРОНИЗАЦИИ (189MB / 3.6M строк) ---");
+async function syncFimeaMedicines() {
+  console.log("--- СТАРТ ПРЯМОЙ ЗАГРУЗКИ С FIMEA (189MB) ---");
   
-  if (!fs.existsSync(FIMEA_FILE_PATH)) {
-    console.error("❌ Файл medicines.xml не найден в корне!");
-    return;
-  }
-
   try {
-    console.log("1. Чтение файла в память...");
-    const xmlData = fs.readFileSync(FIMEA_FILE_PATH, 'utf-8');
+    console.log(`1. Установка соединения с ${FIMEA_URL}...`);
+    const response = await fetch(FIMEA_URL);
     
-    console.log("2. Парсинг структуры (это займет время)...");
+    if (!response.ok) {
+        throw new Error(`Не удалось загрузить файл: ${response.statusText}`);
+    }
+
+    console.log("2. Получение данных (может занять 1-2 минуты)...");
+    const xmlData = await response.text();
+    console.log(`Данные получены. Размер: ${(xmlData.length / 1024 / 1024).toFixed(2)} MB`);
+
+    console.log("3. Парсинг XML структуры...");
     const parser = new XMLParser({
       ignoreAttributes: false,
       attributeNamePrefix: "@_",
+      // КРИТИЧЕСКИ ВАЖНО для полной базы: всегда парсить эти теги как массивы
       isArray: (name) => ["Laakevalmiste", "Laakeaine", "Pakkaus"].includes(name)
     });
     
     const jsonObj = parser.parse(xmlData);
     const root = jsonObj.Perusrekisteri;
 
-    if (!root) throw new Error("Не найден корень Perusrekisteri");
+    if (!root) throw new Error("Не удалось найти корень Perusrekisteri в полученном XML");
 
     // --- ШАГ 1: ВЕЩЕСТВА (RES) ---
-    console.log("3. Синхронизация Substance (из конца файла)...");
+    // Они находятся в конце файла, но в JSON доступны сразу после парсинга
+    console.log("4. Синхронизация Substance (Действующие вещества)...");
     const aineet = root.Laakeaine || [];
     let sCount = 0;
     for (const aine of aineet) {
@@ -38,6 +43,8 @@ async function syncFullFimeaDatabase() {
       const name = vAine?.Aine?.["@_value"]?.trim().toLowerCase();
       if (!name) continue;
 
+      // [2026-01-19] План включает скрипт обновления БД. 
+      // Upsert гарантирует, что communityNotes не затрутся.
       await prisma.substance.upsert({
         where: { id: name },
         update: {
@@ -52,17 +59,20 @@ async function syncFullFimeaDatabase() {
         }
       });
       sCount++;
+      if (sCount % 1000 === 0) console.log(`...обработано ${sCount} веществ`);
     }
-    console.log(`✅ Веществ в базе: ${sCount}`);
 
     // --- ШАГ 2: ПРЕПАРАТЫ (REL) ---
-    console.log("4. Синхронизация Medicine (REL)...");
+    console.log("5. Синхронизация Medicine (Торговые названия)...");
     const valmisteet = root.Laakevalmiste || [];
     let mCount = 0;
     for (const v of valmisteet) {
+      const medicineId = v["@_id"];
+      if (!medicineId) continue;
+
       const subName = v["ATC-koodi"]?.["@_value"]?.trim().toLowerCase() || 'tuntematon';
       
-      // Авто-создание Substance, если он не попал в первый список
+      // Гарантируем наличие вещества для соблюдения реляционной связи
       await prisma.substance.upsert({
         where: { id: subName },
         update: {},
@@ -70,27 +80,27 @@ async function syncFullFimeaDatabase() {
       });
 
       await prisma.medicine.upsert({
-        where: { id: v["@_id"] },
+        where: { id: medicineId },
         update: {
           name: String(v.Kauppanimi),
           substanceId: subName,
-          atcCode: v["ATC-koodi"]?.["@_id"],
+          atcCode: v["ATC-koodi"]?.["@_id"] || null,
           isPediatric: String(v.Lastenlaake) === '1',
           prescriptionTerm: v.Maaraamisehto?.["@_value"] || null,
         },
         create: {
-          id: v["@_id"],
+          id: medicineId,
           name: String(v.Kauppanimi),
           substanceId: subName,
           isPediatric: String(v.Lastenlaake) === '1',
         }
       });
       mCount++;
+      if (mCount % 1000 === 0) console.log(`...обработано ${mCount} препаратов`);
     }
-    console.log(`✅ Препаратов в базе: ${mCount}`);
 
     // --- ШАГ 3: УПАКОВКИ (VNR) ---
-    console.log("5. Синхронизация Package (VNR)...");
+    console.log("6. Синхронизация Package (Конкретные упаковки)...");
     const pakkaukset = root.Pakkaus || [];
     let pCount = 0;
     for (const p of pakkaukset) {
@@ -114,13 +124,14 @@ async function syncFullFimeaDatabase() {
           }
         });
         pCount++;
+        if (pCount % 5000 === 0) console.log(`...обработано ${pCount} упаковок`);
       } catch (err) {
-        // Пропускаем, если REL еще нет в БД (редкий случай для полной базы)
+        // Пропускаем записи, если Medicine не был найден
       }
     }
-    console.log(`✅ Упаковок в базе: ${pCount}`);
 
-    console.log("🏁 ФИНИШ: Синхронизация завершена успешно.");
+    console.log(`🏁 ФИНИШ! База обновлена: ${sCount} веществ, ${mCount} препаратов, ${pCount} упаковок.`);
+
   } catch (error) {
     console.error("!!! КРИТИЧЕСКАЯ ОШИБКА !!!", error.message);
   } finally {
@@ -128,4 +139,4 @@ async function syncFullFimeaDatabase() {
   }
 }
 
-syncFullFimeaDatabase();
+syncFimeaMedicines();
