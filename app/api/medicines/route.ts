@@ -8,7 +8,6 @@ export async function GET(req: NextRequest) {
   const q = searchParams.get('q')?.toLowerCase() || '';
 
   try {
-    // Получаем препараты, подходящие под поиск по имени ИЛИ веществу
     const medicines = await prisma.medicine.findMany({
       where: {
         OR: [
@@ -23,18 +22,19 @@ export async function GET(req: NextRequest) {
       orderBy: { name: 'asc' }
     });
 
-    // Группируем по имени, чтобы убрать дубликаты из списка поиска
-    const uniqueMedicines = medicines.reduce((acc: any[], current) => {
-      const exists = acc.find(m => m.name.toLowerCase() === current.name.toLowerCase());
-      if (exists) {
-        // Объединяем упаковки для таблицы в карточке
-        exists.packages = [...exists.packages, ...current.packages];
+    // Группировка с сохранением Vahvuus (дозировки)
+    const grouped = medicines.reduce((acc: any[], current) => {
+      const existing = acc.find(item => item.name.toLowerCase() === current.name.toLowerCase());
+      if (existing) {
+        // Если у нас уже есть этот бренд, просто добавляем новые упаковки
+        existing.packages = [...existing.packages, ...current.packages];
         return acc;
       }
-      return [...acc, current];
+      // Если бренда нет, берем дозировку из первой попавшейся записи (она обычно общая для группы)
+      return [...acc, { ...current, strength: current.strength || "" }];
     }, []);
 
-    return NextResponse.json(uniqueMedicines.slice(0, 50));
+    return NextResponse.json(grouped);
   } catch (error) {
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
