@@ -9,13 +9,14 @@ async function syncFimeaMedicines() {
   
   try {
     const response = await fetch(FIMEA_URL);
+    if (!response.ok) throw new Error(`Lataus epäonnistui: ${response.statusText}`);
+    
     const xmlData = await response.text();
     console.log("Tiedosto ladattu. Jäsennellään...");
 
     const parser = new XMLParser({
       ignoreAttributes: false,
       attributeNamePrefix: "@_",
-      // Важно для списков упаковок и веществ
       isArray: (name) => ["Laakevalmiste", "Laakeaine", "Pakkaus"].includes(name)
     });
     
@@ -27,75 +28,107 @@ async function syncFimeaMedicines() {
     // 1. СИНХРОНИЗАЦИЯ ВЕЩЕСТВ (Substance) + Lääke75+
     console.log("Päivitetään vaikuttavat aineet (Lääke75+)...");
     const aineet = root.Laakeaine || [];
-    for (const aine of aineet) {
-      const vAine = aine.VaikuttavaAine;
-      const substanceName = vAine.Aine["@_value"].toLowerCase();
+    let substanceCount = 0;
 
-      await prisma.substance.upsert({
-        where: { id: substanceName },
-        update: {
-          laake75Class: vAine.Laake75?.Luokka?.["@_id"],
-          laake75Comment: vAine.Laake75?.KommenttiFI,
-        },
-        create: {
-          id: substanceName,
-          laake75Class: vAine.Laake75?.Luokka?.["@_id"],
-          laake75Comment: vAine.Laake75?.KommenttiFI,
-          communityNotes: "" // Сохраняем пустое при создании
-        }
-      });
+    for (const aine of aineet) {
+      // Защищенный доступ к названию вещества
+      const substanceName = aine.VaikuttavaAine?.Aine?.["@_value"]?.toLowerCase();
+
+      if (!substanceName) continue;
+
+      try {
+        await prisma.substance.upsert({
+          where: { id: substanceName },
+          update: {
+            laake75Class: aine.VaikuttavaAine.Laake75?.Luokka?.["@_id"] || null,
+            laake75Comment: aine.VaikuttavaAine.Laake75?.KommenttiFI || null,
+          },
+          create: {
+            id: substanceName,
+            laake75Class: aine.VaikuttavaAine.Laake75?.Luokka?.["@_id"] || null,
+            laake75Comment: aine.VaikuttavaAine.Laake75?.KommenttiFI || null,
+            communityNotes: "" // Инициализация, не затирает существующие при upsert update
+          }
+        });
+        substanceCount++;
+      } catch (dbError) {
+        console.warn(`⚠️ Virhe aineen ${substanceName} kohdalla:`, dbError.message);
+      }
     }
+    console.log(`Käsitelty ${substanceCount} ainetta.`);
 
     // 2. СИНХРОНИЗАЦИЯ ПРЕПАРАТОВ (Medicine)
     console.log("Päivitetään lääkevalmisteet...");
     const valmisteet = root.Laakevalmiste || [];
+    let medicineCount = 0;
+
     for (const v of valmisteet) {
       const substanceId = v["ATC-koodi"]?.["@_value"]?.toLowerCase() || 'tuntematon';
-      
-      await prisma.medicine.upsert({
-        where: { id: v["@_id"] },
-        update: {
-          name: v.Kauppanimi,
-          atcCode: v["ATC-koodi"]?.["@_id"],
-          isPediatric: v.Lastenlaake === '1',
-          prescriptionTerm: v.Maaraamisehto?.["@_value"] || null,
-          status: v.Myyntilupa?.Tila?.["@_value"],
-          isBiosimilar: v.Biosimilaari === '1',
-          substanceId: substanceId
-        },
-        create: {
-          id: v["@_id"],
-          name: v.Kauppanimi,
-          substanceId: substanceId,
-          isPediatric: v.Lastenlaake === '1',
-          isBiosimilar: v.Biosimilaari === '1',
-          prescriptionTerm: v.Maaraamisehto?.["@_value"] || null,
-        }
-      });
+      const medicineId = v["@_id"];
+
+      if (!medicineId) continue;
+
+      try {
+        await prisma.medicine.upsert({
+          where: { id: medicineId },
+          update: {
+            name: v.Kauppanimi || "Nimetön",
+            atcCode: v["ATC-koodi"]?.["@_id"] || null,
+            isPediatric: v.Lastenlaake === '1',
+            prescriptionTerm: v.Maaraamisehto?.["@_value"] || null,
+            status: v.Myyntilupa?.Tila?.["@_value"] || null,
+            isBiosimilar: v.Biosimilaari === '1',
+            substanceId: substanceId
+          },
+          create: {
+            id: medicineId,
+            name: v.Kauppanimi || "Nimetön",
+            substanceId: substanceId,
+            isPediatric: v.Lastenlaake === '1',
+            isBiosimilar: v.Biosimilaari === '1',
+            prescriptionTerm: v.Maaraamisehto?.["@_value"] || null,
+          }
+        });
+        medicineCount++;
+      } catch (dbError) {
+        console.warn(`⚠️ Virhe valmisteen ${medicineId} kohdalla:`, dbError.message);
+      }
     }
+    console.log(`Käsitelty ${medicineCount} valmistetta.`);
 
     // 3. СИНХРОНИЗАЦИЯ УПАКОВОК (Package)
     console.log("Päivitetään pakkaukset...");
     const pakkaukset = root.Pakkaus || [];
+    let packageCount = 0;
+
     for (const p of pakkaukset) {
-      await prisma.package.upsert({
-        where: { vnr: p["VNR-numero"]?.toString() },
-        update: {
-          isAvailable: p.Kaupanolo?.Kaupan === '1',
-          sizeText: p.Pakkauskokoteksti
-        },
-        create: {
-          vnr: p["VNR-numero"]?.toString(),
-          medicineId: p["@_Laakevalmiste-ref"],
-          sizeText: p.Pakkauskokoteksti,
-          isAvailable: p.Kaupanolo?.Kaupan === '1'
-        }
-      });
+      const vnr = p["VNR-numero"]?.toString();
+      if (!vnr) continue;
+
+      try {
+        await prisma.package.upsert({
+          where: { vnr: vnr },
+          update: {
+            isAvailable: p.Kaupanolo?.Kaupan === '1',
+            sizeText: p.Pakkauskokoteksti || null
+          },
+          create: {
+            vnr: vnr,
+            medicineId: p["@_Laakevalmiste-ref"],
+            sizeText: p.Pakkauskokoteksti || null,
+            isAvailable: p.Kaupanolo?.Kaupan === '1'
+          }
+        });
+        packageCount++;
+      } catch (dbError) {
+        console.warn(`⚠️ Virhe pakkauksen VNR ${vnr} kohdalla:`, dbError.message);
+      }
     }
+    console.log(`Käsitelty ${packageCount} pakkausta.`);
 
     console.log("✅ Tietokanta on nyt synkronoitu Fimean kanssa!");
   } catch (error) {
-    console.error("!!! Virhe !!!", error.message);
+    console.error("!!! Kriittinen virhe !!!", error.message);
   } finally {
     await prisma.$disconnect();
   }
