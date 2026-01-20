@@ -6,12 +6,9 @@ const FIMEA_URL = 'https://data.pilvi.fimea.fi/avoin-data/Perusrekisteri.xml';
 
 async function syncFimeaMedicines() {
   console.log("--- Aloitetaan lääketietokannan päivitys ---");
-  console.log("Ladataan tietoja Fimeasta...");
-
+  
   try {
     const response = await fetch(FIMEA_URL);
-    if (!response.ok) throw new Error(`Lataus epäonnistui: ${response.statusText}`);
-    
     const xmlData = await response.text();
     console.log("Tiedosto ladattu. Jäsennellään...");
 
@@ -21,10 +18,24 @@ async function syncFimeaMedicines() {
     });
     
     const jsonObj = parser.parse(xmlData);
-    const products = jsonObj.Perusrekisteri?.Valmisteet?.Valmiste;
+    
+    // ОТЛАДКА: Посмотрим, какие ключи есть в корне
+    const rootKey = Object.keys(jsonObj)[0];
+    console.log("Root element name:", rootKey); 
+    
+    // Пытаемся найти массив продуктов по разным путям
+    let products = jsonObj[rootKey]?.Valmisteet?.Valmiste || 
+                   jsonObj[rootKey]?.Valmiste || 
+                   jsonObj.Valmisteet?.Valmiste;
 
+    if (!products) {
+      console.log("DEBUG: XML structure keys:", Object.keys(jsonObj[rootKey] || {}));
+      throw new Error("XML-rakenne on virheellinen или данные не найдены по ожидаемым путям");
+    }
+
+    // Если в XML всего один препарат, fast-xml-parser сделает его объектом, а не массивом
     if (!Array.isArray(products)) {
-      throw new Error("XML-rakenne on virheellinen tai tiedot puuttuvat");
+      products = [products];
     }
 
     console.log(`Löydetty ${products.length} valmistetta. Tallennetaan...`);
@@ -37,18 +48,12 @@ async function syncFimeaMedicines() {
       if (!productId || !vnr) continue;
 
       try {
-        // УРОВЕНЬ 1: Вещество (Substance)
         await prisma.substance.upsert({
           where: { id: substanceId },
           update: { isBiological: p.Biologinen === '1' },
-          create: {
-            id: substanceId,
-            communityNotes: "", 
-            isBiological: p.Biologinen === '1'
-          }
+          create: { id: substanceId, communityNotes: "", isBiological: p.Biologinen === '1' }
         });
 
-        // УРОВЕНЬ 2: Препарат (Medicine)
         await prisma.medicine.upsert({
           where: { id: productId },
           update: {
@@ -72,7 +77,6 @@ async function syncFimeaMedicines() {
           }
         });
 
-        // УРОВЕНЬ 3: Упаковка (Package)
         await prisma.package.upsert({
           where: { vnr: vnr },
           update: {
@@ -97,13 +101,13 @@ async function syncFimeaMedicines() {
           }
         });
       } catch (e) {
-        // Игнорируем ошибки отдельных записей, чтобы скрипт не падал
+        // Пропускаем ошибки конкретных записей
       }
     }
 
     console.log("✅ Tietokanta on nyt synkronoitu Fimean kanssa!");
   } catch (error) {
-    console.error("!!! Virhe !!!", error);
+    console.error("!!! Virhe !!!", error.message);
   } finally {
     await prisma.$disconnect();
   }
