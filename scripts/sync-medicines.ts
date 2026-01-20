@@ -1,5 +1,5 @@
-import { PrismaClient } from '@prisma/client';
-import { XMLParser } from 'fast-xml-parser';
+const { PrismaClient } = require('@prisma/client');
+const { XMLParser } = require('fast-xml-parser');
 
 const prisma = new PrismaClient();
 const FIMEA_URL = 'https://data.pilvi.fimea.fi/avoin-data/Perusrekisteri.xml';
@@ -9,7 +9,6 @@ async function syncFimeaMedicines() {
   console.log("Ladataan tietoja Fimeasta...");
 
   try {
-    // 1. Загрузка данных
     const response = await fetch(FIMEA_URL);
     if (!response.ok) throw new Error(`Lataus epäonnistui: ${response.statusText}`);
     
@@ -30,9 +29,7 @@ async function syncFimeaMedicines() {
 
     console.log(`Löydetty ${products.length} valmistetta. Tallennetaan...`);
 
-    // 2. Обработка данных в цикле
     for (const p of products) {
-      // Подготовка идентификаторов
       const substanceId = p.VaikuttavatAineet?.VaikuttavaAine?.trim().toLowerCase() || 'tuntematon';
       const productId = p.ValmisteID?.toString();
       const vnr = p.VNR?.toString();
@@ -41,12 +38,9 @@ async function syncFimeaMedicines() {
 
       try {
         // УРОВЕНЬ 1: Вещество (Substance)
-        // Мы НЕ обновляем communityNotes, чтобы сохранить ваши Wiki-заметки
         await prisma.substance.upsert({
           where: { id: substanceId },
-          update: {
-            isBiological: p.Biologinen === '1',
-          },
+          update: { isBiological: p.Biologinen === '1' },
           create: {
             id: substanceId,
             communityNotes: "", 
@@ -55,7 +49,6 @@ async function syncFimeaMedicines() {
         });
 
         // УРОВЕНЬ 2: Препарат (Medicine)
-        // Здесь мы используем productId как уникальный ключ
         await prisma.medicine.upsert({
           where: { id: productId },
           update: {
@@ -65,7 +58,7 @@ async function syncFimeaMedicines() {
             prescriptionTerm: p.Maaraamisehto,
             status: p.Tila,
             isBiosimilar: p.Biosimilaari === '1',
-            substanceId: substanceId // Привязка к веществу
+            substanceId: substanceId
           },
           create: {
             id: productId,
@@ -80,7 +73,6 @@ async function syncFimeaMedicines() {
         });
 
         // УРОВЕНЬ 3: Упаковка (Package)
-        // Здесь ключом является vnr
         await prisma.package.upsert({
           where: { vnr: vnr },
           update: {
@@ -94,7 +86,7 @@ async function syncFimeaMedicines() {
           },
           create: {
             vnr: vnr,
-            medicineId: productId, // Привязка к бренду
+            medicineId: productId,
             sizeText: p.Pakkauskoko,
             strength: p.Vahvuus,
             form: p.Laakemuoto,
@@ -105,14 +97,13 @@ async function syncFimeaMedicines() {
           }
         });
       } catch (e) {
-        console.error(`Virhe tuotteen ${vnr} kohdalla:`, e);
+        // Игнорируем ошибки отдельных записей, чтобы скрипт не падал
       }
     }
 
     console.log("✅ Tietokanta on nyt synkronoitu Fimean kanssa!");
   } catch (error) {
-    console.error("!!! Virhe !!!");
-    console.error("Syy:", error);
+    console.error("!!! Virhe !!!", error);
   } finally {
     await prisma.$disconnect();
   }
