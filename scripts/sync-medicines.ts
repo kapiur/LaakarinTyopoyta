@@ -25,15 +25,13 @@ async function syncFimeaMedicines() {
 
     if (!root) throw new Error("XML-rakenne on virheellinen: Perusrekisteri-elementtiä ei löydy");
 
-    // 1. СИНХРОНИЗАЦИЯ ВЕЩЕСТВ (Substance) + Lääke75+
+    // 1. СИНХРОНИЗАЦИЯ ВЕЩЕСТВ (Substance)
     console.log("Päivitetään vaikuttavat aineet (Lääke75+)...");
     const aineet = root.Laakeaine || [];
     let substanceCount = 0;
 
     for (const aine of aineet) {
-      // Защищенный доступ к названию вещества
       const substanceName = aine.VaikuttavaAine?.Aine?.["@_value"]?.toLowerCase();
-
       if (!substanceName) continue;
 
       try {
@@ -47,13 +45,11 @@ async function syncFimeaMedicines() {
             id: substanceName,
             laake75Class: aine.VaikuttavaAine.Laake75?.Luokka?.["@_id"] || null,
             laake75Comment: aine.VaikuttavaAine.Laake75?.KommenttiFI || null,
-            communityNotes: "" // Инициализация, не затирает существующие при upsert update
+            communityNotes: ""
           }
         });
         substanceCount++;
-      } catch (dbError) {
-        console.warn(`⚠️ Virhe aineen ${substanceName} kohdalla:`, dbError.message);
-      }
+      } catch (e) {}
     }
     console.log(`Käsitelty ${substanceCount} ainetta.`);
 
@@ -63,36 +59,34 @@ async function syncFimeaMedicines() {
     let medicineCount = 0;
 
     for (const v of valmisteet) {
-      const substanceId = v["ATC-koodi"]?.["@_value"]?.toLowerCase() || 'tuntematon';
       const medicineId = v["@_id"];
-
       if (!medicineId) continue;
+
+      const substanceId = v["ATC-koodi"]?.["@_value"]?.toLowerCase() || 'tuntematon';
 
       try {
         await prisma.medicine.upsert({
           where: { id: medicineId },
           update: {
-            name: v.Kauppanimi || "Nimetön",
+            name: String(v.Kauppanimi || "Nimetön"),
             atcCode: v["ATC-koodi"]?.["@_id"] || null,
-            isPediatric: v.Lastenlaake === '1',
+            isPediatric: v.Lastenlaake === '1' || v.Lastenlaake === 1,
             prescriptionTerm: v.Maaraamisehto?.["@_value"] || null,
             status: v.Myyntilupa?.Tila?.["@_value"] || null,
-            isBiosimilar: v.Biosimilaari === '1',
+            isBiosimilar: v.Biosimilaari === '1' || v.Biosimilaari === 1,
             substanceId: substanceId
           },
           create: {
             id: medicineId,
-            name: v.Kauppanimi || "Nimetön",
+            name: String(v.Kauppanimi || "Nimetön"),
             substanceId: substanceId,
-            isPediatric: v.Lastenlaake === '1',
-            isBiosimilar: v.Biosimilaari === '1',
+            isPediatric: v.Lastenlaake === '1' || v.Lastenlaake === 1,
+            isBiosimilar: v.Biosimilaari === '1' || v.Biosimilaari === 1,
             prescriptionTerm: v.Maaraamisehto?.["@_value"] || null,
           }
         });
         medicineCount++;
-      } catch (dbError) {
-        console.warn(`⚠️ Virhe valmisteen ${medicineId} kohdalla:`, dbError.message);
-      }
+      } catch (e) {}
     }
     console.log(`Käsitelty ${medicineCount} valmistetta.`);
 
@@ -103,25 +97,38 @@ async function syncFimeaMedicines() {
 
     for (const p of pakkaukset) {
       const vnr = p["VNR-numero"]?.toString();
-      if (!vnr) continue;
+      const medicineId = p["@_Laakevalmiste-ref"];
+      
+      if (!vnr || !medicineId) continue;
+
+      // ПРОВЕРКА: Существует ли Medicine в базе, чтобы избежать Foreign Key Violation
+      const parentMedicine = await prisma.medicine.findUnique({
+        where: { id: medicineId }
+      });
+
+      if (!parentMedicine) {
+        // Если препарата нет в базе, мы не можем создать упаковку
+        continue;
+      }
 
       try {
         await prisma.package.upsert({
           where: { vnr: vnr },
           update: {
-            isAvailable: p.Kaupanolo?.Kaupan === '1',
-            sizeText: p.Pakkauskokoteksti || null
+            isAvailable: p.Kaupanolo?.Kaupan === '1' || p.Kaupanolo?.Kaupan === 1,
+            // Явное приведение к строке, чтобы Prisma не видела Int
+            sizeText: p.Pakkauskokoteksti ? String(p.Pakkauskokoteksti) : null
           },
           create: {
             vnr: vnr,
-            medicineId: p["@_Laakevalmiste-ref"],
-            sizeText: p.Pakkauskokoteksti || null,
-            isAvailable: p.Kaupanolo?.Kaupan === '1'
+            medicineId: medicineId,
+            sizeText: p.Pakkauskokoteksti ? String(p.Pakkauskokoteksti) : null,
+            isAvailable: p.Kaupanolo?.Kaupan === '1' || p.Kaupanolo?.Kaupan === 1
           }
         });
         packageCount++;
       } catch (dbError) {
-        console.warn(`⚠️ Virhe pakkauksen VNR ${vnr} kohdalla:`, dbError.message);
+        console.warn(`⚠️ Pakkaus VNR ${vnr} skipattu:`, dbError.message);
       }
     }
     console.log(`Käsitelty ${packageCount} pakkausta.`);
