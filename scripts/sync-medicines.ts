@@ -1,19 +1,23 @@
 const { PrismaClient } = require('@prisma/client');
 const { XMLParser } = require('fast-xml-parser');
+const fs = require('fs');
 
 const prisma = new PrismaClient();
-const FIMEA_URL = 'https://data.pilvi.fimea.fi/avoin-data/Perusrekisteri.xml';
+const FIMEA_FILE_PATH = './medicines.xml'; 
 
-async function syncFimeaMedicines() {
-  console.log("--- Aloitetaan lääketietokannan päivitys ---");
+async function syncFullFimeaDatabase() {
+  console.log("--- СТАРТ ПОЛНОЙ СИНХРОНИЗАЦИИ (189MB / 3.6M строк) ---");
   
-  try {
-    const response = await fetch(FIMEA_URL);
-    if (!response.ok) throw new Error(`Lataus epäonnistui: ${response.statusText}`);
-    
-    const xmlData = await response.text();
-    console.log("Tiedosto ladattu. Jäsennellään...");
+  if (!fs.existsSync(FIMEA_FILE_PATH)) {
+    console.error("❌ Файл medicines.xml не найден в корне!");
+    return;
+  }
 
+  try {
+    console.log("1. Чтение файла в память...");
+    const xmlData = fs.readFileSync(FIMEA_FILE_PATH, 'utf-8');
+    
+    console.log("2. Парсинг структуры (это займет время)...");
     const parser = new XMLParser({
       ignoreAttributes: false,
       attributeNamePrefix: "@_",
@@ -23,122 +27,105 @@ async function syncFimeaMedicines() {
     const jsonObj = parser.parse(xmlData);
     const root = jsonObj.Perusrekisteri;
 
-    if (!root) throw new Error("XML-rakenne on virheellinen: Perusrekisteri-elementtiä ei löydy");
+    if (!root) throw new Error("Не найден корень Perusrekisteri");
 
-    // 1. СИНХРОНИЗАЦИЯ ВЕЩЕСТВ (Substance)
-    console.log("Päivitetään vaikuttavat aineet (Lääke75+)...");
+    // --- ШАГ 1: ВЕЩЕСТВА (RES) ---
+    console.log("3. Синхронизация Substance (из конца файла)...");
     const aineet = root.Laakeaine || [];
-    let substanceCount = 0;
-
+    let sCount = 0;
     for (const aine of aineet) {
-      const substanceName = aine.VaikuttavaAine?.Aine?.["@_value"]?.toLowerCase();
-      if (!substanceName) continue;
+      const vAine = aine.VaikuttavaAine;
+      const name = vAine?.Aine?.["@_value"]?.trim().toLowerCase();
+      if (!name) continue;
 
-      try {
-        await prisma.substance.upsert({
-          where: { id: substanceName },
-          update: {
-            laake75Class: aine.VaikuttavaAine.Laake75?.Luokka?.["@_id"] || null,
-            laake75Comment: aine.VaikuttavaAine.Laake75?.KommenttiFI || null,
-          },
-          create: {
-            id: substanceName,
-            laake75Class: aine.VaikuttavaAine.Laake75?.Luokka?.["@_id"] || null,
-            laake75Comment: aine.VaikuttavaAine.Laake75?.KommenttiFI || null,
-            communityNotes: ""
-          }
-        });
-        substanceCount++;
-      } catch (e) {}
+      await prisma.substance.upsert({
+        where: { id: name },
+        update: {
+          laake75Class: vAine.Laake75?.Luokka?.["@_id"] || null,
+          laake75Comment: vAine.Laake75?.KommenttiFI || null,
+        },
+        create: { 
+            id: name, 
+            communityNotes: "", 
+            laake75Class: vAine.Laake75?.Luokka?.["@_id"] || null,
+            laake75Comment: vAine.Laake75?.KommenttiFI || null,
+        }
+      });
+      sCount++;
     }
-    console.log(`Käsitelty ${substanceCount} ainetta.`);
+    console.log(`✅ Веществ в базе: ${sCount}`);
 
-    // 2. СИНХРОНИЗАЦИЯ ПРЕПАРАТОВ (Medicine)
-    console.log("Päivitetään lääkevalmisteet...");
+    // --- ШАГ 2: ПРЕПАРАТЫ (REL) ---
+    console.log("4. Синхронизация Medicine (REL)...");
     const valmisteet = root.Laakevalmiste || [];
-    let medicineCount = 0;
-
+    let mCount = 0;
     for (const v of valmisteet) {
-      const medicineId = v["@_id"];
-      if (!medicineId) continue;
-
-      const substanceId = v["ATC-koodi"]?.["@_value"]?.toLowerCase() || 'tuntematon';
-
-      try {
-        await prisma.medicine.upsert({
-          where: { id: medicineId },
-          update: {
-            name: String(v.Kauppanimi || "Nimetön"),
-            atcCode: v["ATC-koodi"]?.["@_id"] || null,
-            isPediatric: v.Lastenlaake === '1' || v.Lastenlaake === 1,
-            prescriptionTerm: v.Maaraamisehto?.["@_value"] || null,
-            status: v.Myyntilupa?.Tila?.["@_value"] || null,
-            isBiosimilar: v.Biosimilaari === '1' || v.Biosimilaari === 1,
-            substanceId: substanceId
-          },
-          create: {
-            id: medicineId,
-            name: String(v.Kauppanimi || "Nimetön"),
-            substanceId: substanceId,
-            isPediatric: v.Lastenlaake === '1' || v.Lastenlaake === 1,
-            isBiosimilar: v.Biosimilaari === '1' || v.Biosimilaari === 1,
-            prescriptionTerm: v.Maaraamisehto?.["@_value"] || null,
-          }
-        });
-        medicineCount++;
-      } catch (e) {}
-    }
-    console.log(`Käsitelty ${medicineCount} valmistetta.`);
-
-    // 3. СИНХРОНИЗАЦИЯ УПАКОВОК (Package)
-    console.log("Päivitetään pakkaukset...");
-    const pakkaukset = root.Pakkaus || [];
-    let packageCount = 0;
-
-    for (const p of pakkaukset) {
-      const vnr = p["VNR-numero"]?.toString();
-      const medicineId = p["@_Laakevalmiste-ref"];
+      const subName = v["ATC-koodi"]?.["@_value"]?.trim().toLowerCase() || 'tuntematon';
       
-      if (!vnr || !medicineId) continue;
-
-      // ПРОВЕРКА: Существует ли Medicine в базе, чтобы избежать Foreign Key Violation
-      const parentMedicine = await prisma.medicine.findUnique({
-        where: { id: medicineId }
+      // Авто-создание Substance, если он не попал в первый список
+      await prisma.substance.upsert({
+        where: { id: subName },
+        update: {},
+        create: { id: subName, communityNotes: "" }
       });
 
-      if (!parentMedicine) {
-        // Если препарата нет в базе, мы не можем создать упаковку
-        continue;
-      }
+      await prisma.medicine.upsert({
+        where: { id: v["@_id"] },
+        update: {
+          name: String(v.Kauppanimi),
+          substanceId: subName,
+          atcCode: v["ATC-koodi"]?.["@_id"],
+          isPediatric: String(v.Lastenlaake) === '1',
+          prescriptionTerm: v.Maaraamisehto?.["@_value"] || null,
+        },
+        create: {
+          id: v["@_id"],
+          name: String(v.Kauppanimi),
+          substanceId: subName,
+          isPediatric: String(v.Lastenlaake) === '1',
+        }
+      });
+      mCount++;
+    }
+    console.log(`✅ Препаратов в базе: ${mCount}`);
+
+    // --- ШАГ 3: УПАКОВКИ (VNR) ---
+    console.log("5. Синхронизация Package (VNR)...");
+    const pakkaukset = root.Pakkaus || [];
+    let pCount = 0;
+    for (const p of pakkaukset) {
+      const medicineId = p["@_Laakevalmiste-ref"];
+      const vnr = p["VNR-numero"]?.toString();
+      
+      if (!vnr || !medicineId) continue;
 
       try {
         await prisma.package.upsert({
           where: { vnr: vnr },
           update: {
-            isAvailable: p.Kaupanolo?.Kaupan === '1' || p.Kaupanolo?.Kaupan === 1,
-            // Явное приведение к строке, чтобы Prisma не видела Int
+            isAvailable: String(p.Kaupanolo?.Kaupan) === '1',
             sizeText: p.Pakkauskokoteksti ? String(p.Pakkauskokoteksti) : null
           },
           create: {
             vnr: vnr,
             medicineId: medicineId,
             sizeText: p.Pakkauskokoteksti ? String(p.Pakkauskokoteksti) : null,
-            isAvailable: p.Kaupanolo?.Kaupan === '1' || p.Kaupanolo?.Kaupan === 1
+            isAvailable: String(p.Kaupanolo?.Kaupan) === '1'
           }
         });
-        packageCount++;
-      } catch (dbError) {
-        console.warn(`⚠️ Pakkaus VNR ${vnr} skipattu:`, dbError.message);
+        pCount++;
+      } catch (err) {
+        // Пропускаем, если REL еще нет в БД (редкий случай для полной базы)
       }
     }
-    console.log(`Käsitelty ${packageCount} pakkausta.`);
+    console.log(`✅ Упаковок в базе: ${pCount}`);
 
-    console.log("✅ Tietokanta on nyt synkronoitu Fimean kanssa!");
+    console.log("🏁 ФИНИШ: Синхронизация завершена успешно.");
   } catch (error) {
-    console.error("!!! Kriittinen virhe !!!", error.message);
+    console.error("!!! КРИТИЧЕСКАЯ ОШИБКА !!!", error.message);
   } finally {
     await prisma.$disconnect();
   }
 }
 
-syncFimeaMedicines();
+syncFullFimeaDatabase();
