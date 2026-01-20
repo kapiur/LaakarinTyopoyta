@@ -1,29 +1,37 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 
-// Это предотвращает создание множества подключений к БД при каждом запросе
-const globalForPrisma = global as unknown as { prisma: PrismaClient };
-const prisma = globalForPrisma.prisma || new PrismaClient();
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
+const prisma = new PrismaClient();
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
-  const query = searchParams.get('q');
-
-  if (!query || query.length < 2) return NextResponse.json([]);
+  const nameQuery = searchParams.get('name');
+  const substanceQuery = searchParams.get('substance');
 
   try {
     const medicines = await prisma.medicine.findMany({
       where: {
-        OR: [
-          { name: { contains: query, mode: 'insensitive' } },
-          { substance: { contains: query, mode: 'insensitive' } },
+        AND: [
+          // Фильтр по коммерческому названию (если введено)
+          nameQuery ? { name: { contains: nameQuery, mode: 'insensitive' } } : {},
+          // Фильтр по действующему веществу через связь (если введено)
+          substanceQuery ? { 
+            substance: { 
+              is: { id: { contains: substanceQuery, mode: 'insensitive' } } 
+            } 
+          } : {},
         ],
       },
-      take: 15,
+      include: {
+        substance: true,
+        packages: { where: { isAvailable: true } }
+      },
+      take: 20,
     });
+
     return NextResponse.json(medicines);
   } catch (error) {
-    return NextResponse.json({ error: 'Haku epäonnistui' }, { status: 500 });
+    console.error('API Error:', error);
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
