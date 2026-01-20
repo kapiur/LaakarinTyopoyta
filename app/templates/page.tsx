@@ -48,6 +48,29 @@ export default function TemplatesPage() {
     } catch (err) { console.error(err); } finally { setLoading(false); }
   };
 
+  const handleDeleteTemplate = async (id: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm("Haluatko varmasti poistaa tämän mallin?")) return;
+    try {
+      const res = await fetch(`/api/templates?id=${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        if (selectedTemplate?.id === id) setSelectedTemplate(null);
+        fetchTemplates();
+      }
+    } catch (err) { console.error(err); }
+  };
+
+  const handleDeleteCategory = async (id: number) => {
+    if (!confirm("Haluatko poistaa koko kategorian ja kaikki sen mallit?")) return;
+    try {
+      const res = await fetch(`/api/templates/category?id=${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        setActiveCategoryId(null);
+        fetchTemplates();
+      }
+    } catch (err) { console.error(err); }
+  };
+
   const anonymize = (text: string) => {
     const hetuRegex = /\b\d{6}[-+ABCDEF]\d{3}[0-9A-Z]\b/gi;
     return text.replace(hetuRegex, '[HETU]');
@@ -191,12 +214,20 @@ export default function TemplatesPage() {
       </div>
 
       {/* CATEGORIES */}
-      <div className="flex bg-white p-1.5 rounded-2xl border shadow-sm overflow-x-auto no-scrollbar gap-1 flex-shrink-0">
+      <div className="flex bg-white p-1.5 rounded-2xl border shadow-sm overflow-x-auto no-scrollbar gap-1 flex-shrink-0 items-center">
         {categories.map(cat => (
-          <button key={cat.id} onClick={() => { setActiveCategoryId(cat.id); setSelectedTemplate(null); setIsAdding(false); setIsEditing(false); setAiFixedText(null); }}
-            className={`px-6 py-3 rounded-xl font-bold text-[11px] uppercase tracking-wider transition-all min-w-[130px] ${activeCategoryId === cat.id ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
-            {cat.name}
-          </button>
+          <div key={cat.id} className="relative group/cat">
+            <button onClick={() => { setActiveCategoryId(cat.id); setSelectedTemplate(null); setIsAdding(false); setIsEditing(false); setAiFixedText(null); }}
+              className={`px-6 py-3 rounded-xl font-bold text-[11px] uppercase tracking-wider transition-all min-w-[130px] pr-8 ${activeCategoryId === cat.id ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
+              {cat.name}
+            </button>
+            <button 
+              onClick={(e) => { e.stopPropagation(); handleDeleteCategory(cat.id); }}
+              className={`absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-md transition-all ${activeCategoryId === cat.id ? 'text-white/50 hover:text-white' : 'text-slate-300 hover:text-red-500 opacity-0 group-hover/cat:opacity-100'}`}
+            >
+              <Trash2 size={12} />
+            </button>
+          </div>
         ))}
       </div>
 
@@ -216,14 +247,21 @@ export default function TemplatesPage() {
             {loading ? (
               <div className="flex justify-center py-10"><Loader2 className="animate-spin text-blue-500" /></div>
             ) : displayedTemplates.map((t: any) => (
-              <button 
-                key={t.id} 
-                onClick={() => { setSelectedTemplate(t); setIsAdding(false); setIsEditing(false); setAiFixedText(null); }} 
-                className={`w-full text-left p-4 rounded-2xl border transition-all group relative overflow-hidden ${selectedTemplate?.id === t.id ? 'bg-blue-600 text-white border-blue-600 shadow-lg' : 'bg-white border-slate-100 hover:border-blue-200 hover:shadow-sm'}`}
-              >
-                <span className="font-bold text-sm truncate block pr-6 relative z-10">{t.title}</span>
-                <ChevronRight size={14} className={`absolute right-4 top-1/2 -translate-y-1/2 transition-all ${selectedTemplate?.id === t.id ? 'translate-x-0 opacity-100' : 'translate-x-2 opacity-0'}`} />
-              </button>
+              <div key={t.id} className="group relative">
+                <button 
+                  onClick={() => { setSelectedTemplate(t); setIsAdding(false); setIsEditing(false); setAiFixedText(null); }} 
+                  className={`w-full text-left p-4 rounded-2xl border transition-all relative overflow-hidden pr-12 ${selectedTemplate?.id === t.id ? 'bg-blue-600 text-white border-blue-600 shadow-lg' : 'bg-white border-slate-100 hover:border-blue-200 hover:shadow-sm'}`}
+                >
+                  <span className="font-bold text-sm truncate block relative z-10">{t.title}</span>
+                  <ChevronRight size={14} className={`absolute right-4 top-1/2 -translate-y-1/2 transition-all ${selectedTemplate?.id === t.id ? 'translate-x-0 opacity-100' : 'translate-x-2 opacity-0'}`} />
+                </button>
+                <button 
+                  onClick={(e) => handleDeleteTemplate(t.id, e)}
+                  className={`absolute right-10 top-1/2 -translate-y-1/2 p-2 rounded-xl transition-all z-20 ${selectedTemplate?.id === t.id ? 'text-white/40 hover:text-white' : 'text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100'}`}
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
             ))}
           </div>
         </div>
@@ -256,15 +294,15 @@ export default function TemplatesPage() {
                 <div className="grid grid-cols-2 gap-6">
                   <div className="space-y-2">
                     <label className="text-[10px] font-black text-slate-400 ml-2 uppercase tracking-widest">Mallin Otsikko</label>
-                    <input className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:bg-white focus:ring-4 focus:ring-blue-500/5 font-bold transition-all" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} />
+                    <input className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:bg-white focus:ring-4 focus:ring-blue-500/10 font-bold transition-all" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} />
                   </div>
                   <div className="space-y-2">
                     <label className="text-[10px] font-black text-slate-400 ml-2 uppercase tracking-widest">Kategoria</label>
-                    <input className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:bg-white focus:ring-4 focus:ring-blue-500/5 font-bold transition-all" value={formData.categoryName} onChange={e => setFormData({...formData, categoryName: e.target.value})} />
+                    <input className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:bg-white focus:ring-4 focus:ring-blue-500/10 font-bold transition-all" value={formData.categoryName} onChange={e => setFormData({...formData, categoryName: e.target.value})} />
                   </div>
                 </div>
                 <div className="space-y-2 relative">
-                  <label className="text-[10px] font-black text-blue-600 uppercase ml-2 flex items-center gap-2 tracking-[0.15em]"><Bot size={14}/> Mallin sisältö (Käytä AI-painiketta ylhäällä)</label>
+                  <label className="text-[10px] font-black text-blue-600 uppercase ml-2 flex items-center gap-2 tracking-[0.15em]"><Bot size={14}/> Mallin sisältö</label>
                   <textarea 
                     className="w-full p-8 bg-slate-50 border border-slate-100 rounded-[2.5rem] font-mono text-sm min-h-[450px] outline-none focus:bg-white focus:ring-8 focus:ring-blue-500/5 transition-all leading-relaxed shadow-inner" 
                     value={formData.content} 
@@ -314,7 +352,7 @@ export default function TemplatesPage() {
                 </div>
               </div>
 
-              {/* LIGHT OUTPUT PANEL (REPLACED BLACK) */}
+              {/* OUTPUT PANEL */}
               <div className="col-span-7 bg-blue-50/30 rounded-[2.5rem] flex flex-col overflow-hidden border border-blue-100 shadow-sm relative backdrop-blur-sm">
                 <div className="p-6 border-b border-blue-100 flex justify-between items-center bg-white/60">
                   <div className="flex items-center gap-2">
@@ -376,7 +414,7 @@ export default function TemplatesPage() {
               </div>
               <ul className="space-y-4 list-disc pl-5 text-[11px] font-bold text-slate-400 uppercase tracking-tight">
                 <li>Luo automaattiset valintapainikkeet</li>
-                <li>Lisää täytettävät tekstikentät</li>
+                <li>Lisää täytеттävät tekstikentät</li>
                 <li>Korjaa kielioppia lennosta</li>
               </ul>
             </div>
