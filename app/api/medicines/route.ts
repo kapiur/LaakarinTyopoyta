@@ -11,44 +11,24 @@ export async function GET(req: NextRequest) {
   try {
     const medicines = await prisma.medicine.findMany({
       where: {
-        AND: [
-          // 1. Поиск по коммерческому названию
+        OR: [
+          // Поиск по торговому названию
           nameQuery ? { name: { contains: nameQuery, mode: 'insensitive' } } : {},
-          
-          // 2. Поиск по действующему веществу (Substance)
-          // Упростили синтаксис связи для Prisma
+          // Поиск по действующему веществу
           substanceQuery ? { 
             substanceId: { contains: substanceQuery, mode: 'insensitive' } 
           } : {},
         ],
       },
       include: {
-        // Подтягиваем Wiki-заметки, GFR и Lääke75+
-        substance: {
-          select: {
-            id: true,
-            communityNotes: true,
-            laake75Class: true,
-            laake75Comment: true,
-            gfrGuidelines: true,
-          }
-        },
-        // Подтягиваем все упаковки для интерактивной таблицы
-        packages: {
-          orderBy: {
-            strength: 'asc', // Группируем внутри карточки по дозировке
-          }
-        }
+        substance: true, // Включаем Wiki-заметки и Lääke75+
+        packages: true   // Включаем все упаковки для таблицы
       },
-      // Сортировка по алфавиту для удобства врача
       orderBy: { name: 'asc' },
-      take: 50, // Увеличили лимит, так как данных теперь 29к
+      take: 50,
     });
 
-    // Добавляем заголовок для предотвращения кэширования при обновлении базы
-    return NextResponse.json(medicines, {
-      headers: { 'Cache-Control': 'no-store' }
-    });
+    return NextResponse.json(medicines);
   } catch (error) {
     console.error('API Error:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
