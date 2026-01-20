@@ -14,95 +14,83 @@ async function syncFimeaMedicines() {
 
     const parser = new XMLParser({
       ignoreAttributes: false,
-      attributeNamePrefix: "@_"
+      attributeNamePrefix: "@_",
+      // Важно для списков упаковок и веществ
+      isArray: (name) => ["Laakevalmiste", "Laakeaine", "Pakkaus"].includes(name)
     });
     
     const jsonObj = parser.parse(xmlData);
-    
-    // ОТЛАДКА: Посмотрим, какие ключи есть в корне
-    const rootKey = Object.keys(jsonObj)[0];
-    console.log("Root element name:", rootKey); 
-    
-    // Пытаемся найти массив продуктов по разным путям
-    let products = jsonObj[rootKey]?.Valmisteet?.Valmiste || 
-                   jsonObj[rootKey]?.Valmiste || 
-                   jsonObj.Valmisteet?.Valmiste;
+    const root = jsonObj.Perusrekisteri;
 
-    if (!products) {
-      console.log("DEBUG: XML structure keys:", Object.keys(jsonObj[rootKey] || {}));
-      throw new Error("XML-rakenne on virheellinen или данные не найдены по ожидаемым путям");
+    if (!root) throw new Error("XML-rakenne on virheellinen: Perusrekisteri-elementtiä ei löydy");
+
+    // 1. СИНХРОНИЗАЦИЯ ВЕЩЕСТВ (Substance) + Lääke75+
+    console.log("Päivitetään vaikuttavat aineet (Lääke75+)...");
+    const aineet = root.Laakeaine || [];
+    for (const aine of aineet) {
+      const vAine = aine.VaikuttavaAine;
+      const substanceName = vAine.Aine["@_value"].toLowerCase();
+
+      await prisma.substance.upsert({
+        where: { id: substanceName },
+        update: {
+          laake75Class: vAine.Laake75?.Luokka?.["@_id"],
+          laake75Comment: vAine.Laake75?.KommenttiFI,
+        },
+        create: {
+          id: substanceName,
+          laake75Class: vAine.Laake75?.Luokka?.["@_id"],
+          laake75Comment: vAine.Laake75?.KommenttiFI,
+          communityNotes: "" // Сохраняем пустое при создании
+        }
+      });
     }
 
-    // Если в XML всего один препарат, fast-xml-parser сделает его объектом, а не массивом
-    if (!Array.isArray(products)) {
-      products = [products];
+    // 2. СИНХРОНИЗАЦИЯ ПРЕПАРАТОВ (Medicine)
+    console.log("Päivitetään lääkevalmisteet...");
+    const valmisteet = root.Laakevalmiste || [];
+    for (const v of valmisteet) {
+      const substanceId = v["ATC-koodi"]?.["@_value"]?.toLowerCase() || 'tuntematon';
+      
+      await prisma.medicine.upsert({
+        where: { id: v["@_id"] },
+        update: {
+          name: v.Kauppanimi,
+          atcCode: v["ATC-koodi"]?.["@_id"],
+          isPediatric: v.Lastenlaake === '1',
+          prescriptionTerm: v.Maaraamisehto?.["@_value"] || null,
+          status: v.Myyntilupa?.Tila?.["@_value"],
+          isBiosimilar: v.Biosimilaari === '1',
+          substanceId: substanceId
+        },
+        create: {
+          id: v["@_id"],
+          name: v.Kauppanimi,
+          substanceId: substanceId,
+          isPediatric: v.Lastenlaake === '1',
+          isBiosimilar: v.Biosimilaari === '1',
+          prescriptionTerm: v.Maaraamisehto?.["@_value"] || null,
+        }
+      });
     }
 
-    console.log(`Löydetty ${products.length} valmistetta. Tallennetaan...`);
-
-    for (const p of products) {
-      const substanceId = p.VaikuttavatAineet?.VaikuttavaAine?.trim().toLowerCase() || 'tuntematon';
-      const productId = p.ValmisteID?.toString();
-      const vnr = p.VNR?.toString();
-
-      if (!productId || !vnr) continue;
-
-      try {
-        await prisma.substance.upsert({
-          where: { id: substanceId },
-          update: { isBiological: p.Biologinen === '1' },
-          create: { id: substanceId, communityNotes: "", isBiological: p.Biologinen === '1' }
-        });
-
-        await prisma.medicine.upsert({
-          where: { id: productId },
-          update: {
-            name: p.Kauppanimi,
-            atcCode: p.ATCkoodi,
-            isPediatric: p.Lastenlaake === '1',
-            prescriptionTerm: p.Maaraamisehto,
-            status: p.Tila,
-            isBiosimilar: p.Biosimilaari === '1',
-            substanceId: substanceId
-          },
-          create: {
-            id: productId,
-            substanceId: substanceId,
-            name: p.Kauppanimi,
-            atcCode: p.ATCkoodi,
-            isPediatric: p.Lastenlaake === '1',
-            prescriptionTerm: p.Maaraamisehto,
-            status: p.Tila,
-            isBiosimilar: p.Biosimilaari === '1'
-          }
-        });
-
-        await prisma.package.upsert({
-          where: { vnr: vnr },
-          update: {
-            sizeText: p.Pakkauskoko,
-            strength: p.Vahvuus,
-            form: p.Laakemuoto,
-            container: p.Sailytysastia,
-            isAvailable: p.Kaupan === '1',
-            dddValue: p.DDDArvo ? parseFloat(p.DDDArvo) : null,
-            dddUnit: p.DDDYksikko
-          },
-          create: {
-            vnr: vnr,
-            medicineId: productId,
-            sizeText: p.Pakkauskoko,
-            strength: p.Vahvuus,
-            form: p.Laakemuoto,
-            container: p.Sailytysastia,
-            isAvailable: p.Kaupan === '1',
-            dddValue: p.DDDArvo ? parseFloat(p.DDDArvo) : null,
-            dddUnit: p.DDDYksikko
-          }
-        });
-      } catch (e) {
-        // Пропускаем ошибки конкретных записей
-      }
+    // 3. СИНХРОНИЗАЦИЯ УПАКОВОК (Package)
+    console.log("Päivitetään pakkaukset...");
+    const pakkaukset = root.Pakkaus || [];
+    for (const p of pakkaukset) {
+      await prisma.package.upsert({
+        where: { vnr: p["VNR-numero"]?.toString() },
+        update: {
+          isAvailable: p.Kaupanolo?.Kaupan === '1',
+          sizeText: p.Pakkauskokoteksti
+        },
+        create: {
+          vnr: p["VNR-numero"]?.toString(),
+          medicineId: p["@_Laakevalmiste-ref"],
+          sizeText: p.Pakkauskokoteksti,
+          isAvailable: p.Kaupanolo?.Kaupan === '1'
+        }
+      });
     }
 
     console.log("✅ Tietokanta on nyt synkronoitu Fimean kanssa!");
