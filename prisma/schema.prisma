@@ -11,15 +11,16 @@ datasource db {
 // --- ВАШИ СУЩЕСТВУЮЩИЕ МОДЕЛИ (БЕЗ ИЗМЕНЕНИЙ) ---
 
 model User {
-  id         Int         @id @default(autoincrement())
-  email      String      @unique
-  password   String
-  name       String?
-  categories Category[]
-  templates  Template[]
-  pcaDrugs   PcaDrug[]
-  history    AIHistory[]
-  createdAt  DateTime    @default(now())
+  id              Int              @id @default(autoincrement())
+  email           String           @unique
+  password        String
+  name            String?
+  categories      Category[]
+  templates       Template[]
+  pcaDrugs        PcaDrug[]
+  history         AIHistory[]
+  substanceNotes  Substance[]      // Связь для отслеживания авторства Wiki-заметок
+  createdAt       DateTime         @default(now())
 }
 
 model Category {
@@ -65,26 +66,31 @@ model AIHistory {
   @@index([userId])
 }
 
-// --- ОБНОВЛЕННЫЙ МОДУЛЬ: СПРАВОЧНИК ЛЕКАРСТВ (FIMEA) ---
-// Мы заменяем старую плоскую модель Medicine на трехуровневую систему
+// --- ОБНОВЛЕННЫЙ МОДУЛЬ: СПРАВОЧНИК ЛЕКАРСТВ (FIMEA + Wiki-заметки) ---
 
+// 1. Уровень Вещества: «Клинический мозг» и Wiki-сообщество
 model Substance {
   id              String     @id // Название вещества (напр. "takrolimuusi")
+  communityNotes  String?    @db.Text // Общие Wiki-заметки для всех врачей
+  lastUpdatedById Int?       // ID врача, внесшего последнюю правку
+  lastUpdatedBy   User?      @relation(fields: [lastUpdatedById], references: [id]) 
+  
   laake75Class    String?    // Категория безопасности (A, B, C, D)
-  laake75Comment  String?    @db.Text // Комментарий Lääke75+
-  gfrGuidelines   String?    @db.Text // Ваши клинические заметки по GFR
+  laake75Comment  String?    @db.Text // Официальный комментарий Lääke75+
+  gfrGuidelines   String?    @db.Text // Специфические заметки по GFR
   isBiological    Boolean    @default(false)
   medicines       Medicine[]
 }
 
+// 2. Уровень Препарата: «Рецептурный справочник»
 model Medicine {
   id               String      @id // XML ID (напр. "REL53213")
   name             String      // Kauppanimi (напр. "Advagraf")
   atcCode          String?
   prescriptionTerm String?     @db.Text // Maaraamisehto (Условия выписки)
-  isPediatric      Boolean     @default(false) // Lastenlaake
-  isBiosimilar     Boolean     @default(false) // Biosimilaari
-  status           String?     // Статус лицензии
+  isPediatric      Boolean     @default(false) // Флаг детского препарата
+  isBiosimilar     Boolean     @default(false) // Статус биосимиляра
+  status           String?     // Статус лицензии (напр. "Myyntilupa myönnetty")
   substance        Substance?  @relation(fields: [substanceId], references: [id])
   substanceId      String?
   packages         Package[]
@@ -92,6 +98,7 @@ model Medicine {
   @@index([name])
 }
 
+// 3. Уровень Упаковки: «Физические данные для рецепта и калькулятора»
 model Package {
   vnr             String    @id // VNR-номер (020566)
   medicineId      String
@@ -100,9 +107,9 @@ model Package {
   strength        String?   // Дозировка (1 mg)
   form            String?   // Форма (depotkapseli)
   container       String?   // Тара (Injektiopullo)
-  isAvailable     Boolean   @default(true) // Kaupan: 1/0
-  dddValue        Float?    // DDD (5.0)
-  dddUnit         String?   // DDD yksikkö (mg)
+  isAvailable     Boolean   @default(true) // В продаже ли сейчас
+  dddValue        Float?    // Среднесуточная доза (5.0)
+  dddUnit         String?   // Единица DDD (mg)
   updatedAt       DateTime  @updatedAt
 
   @@index([medicineId])
