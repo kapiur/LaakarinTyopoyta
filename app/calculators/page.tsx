@@ -16,15 +16,12 @@ export default function CalculatorsPage() {
   const [selectedDrugs, setSelectedDrugs] = useState([{ name: 'none', val: '' }, { name: 'none', val: '' }, { name: 'none', val: '' }]);
   const [library, setLibrary] = useState<any[]>([]);
   const [newLibDrug, setNewLibDrug] = useState({ n: '', s: '' });
-  
   const [bmi, setBmi] = useState({ h: '175', w: '75' });
   const [gfr, setGfr] = useState({ age: '65', w: '75', creat: '100', sex: '1.23' });
-  
   const [peds, setPeds] = useState({ 
     weight: '', doseMgKg: '', strength: '', timesPerDay: '1',
     days: '7', bottleSize: '100', showRecipe: false 
   });
-  
   const [chads, setChads] = useState({ chf: 0, ht: 0, age: 0, dm: 0, stroke: 0, vasc: 0, sex: 0 });
   const [hasbled, setHasbled] = useState({ sbp: 0, renal: 0, liver: 0, stroke: 0, bleed: 0, inr: 0, age: 0, drugs: 0, alc: 0 });
 
@@ -57,20 +54,32 @@ export default function CalculatorsPage() {
     fetchPcaLibrary();
   };
 
+  // --- ИСПРАВЛЕННАЯ ФУНКЦИЯ КОПИРОВАНИЯ ---
   const handleCopy = () => {
+    if (!result) return;
+
     let textToCopy = "";
-    if (typeof result === 'string') {
-      textToCopy = result;
-    } else if (result?.type === 'pca' || result?.type === 'peds_structured') {
+
+    if (result.rawText) {
+      // Для PCA и PEDS используем заранее подготовленный текст
       textToCopy = result.rawText;
-    } else {
-      textToCopy = `Tulos: ${result?.score}\n${result?.desc}`;
+    } else if (result.type === 'dual') {
+      // Для CHADS/HAS-BLED
+      textToCopy = `CHADS-VASc: ${result.score}\nHAS-BLED: ${result.hbScore}\n${result.desc}`;
+    } else if (result.type === 'single') {
+      // Для BMI и GFR
+      textToCopy = `Tulos: ${result.score}\nKuvaus: ${result.desc}`;
+    } else if (typeof result === 'string') {
+      textToCopy = result;
     }
 
     if (textToCopy) {
-      navigator.clipboard.writeText(textToCopy);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      navigator.clipboard.writeText(textToCopy).then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }).catch(err => {
+        console.error('Kopiointi epäonnistui', err);
+      });
     }
   };
 
@@ -80,7 +89,7 @@ export default function CalculatorsPage() {
       const { kas, ad, spd, days } = pca;
       const adNum = parseFloat(ad), spdNum = parseFloat(spd), dNum = parseInt(days);
       let outList: any[] = [], totMl = 0, concList: any[] = [];
-      let rawOut = `PCA-ohje: ${dNum} vrk, ${kas} ml kasetti.\n`;
+      let rawOut = `PCA-OHJE (${dNum} vrk, ${kas}ml kasetti):\n`;
 
       selectedDrugs.forEach(drug => {
         const vNum = parseFloat(drug.val);
@@ -92,12 +101,12 @@ export default function CalculatorsPage() {
         outList.push({ name: drug.name, mgDay: vNum, mgTotal: mgT.toFixed(1), mlTotal: ml.toFixed(1) });
         const c = (mgT / adNum).toFixed(libData.s < 1 ? 3 : 2);
         concList.push({ name: drug.name.split(' ')[0], conc: c });
-        rawOut += `${drug.name}: ${vNum} mg/vrk (${mgT.toFixed(1)} mg / ${dNum}vrk)\n`;
+        rawOut += `- ${drug.name}: ${vNum} mg/vrk (${mgT.toFixed(1)} mg kokonaismäärä)\n`;
       });
       
       if (outList.length === 0) return;
       const bolus = (spdNum * 2).toFixed(1);
-      rawOut += `Nopeus: ${spdNum} ml/h, Bolus: ${bolus} ml\nNaCl 0,9% ad ${adNum} ml`;
+      rawOut += `Nopeus: ${spdNum} ml/h\nBolus: ${bolus} ml\nNaCl 0,9%: ad ${adNum} ml (lisätään ${(adNum - totMl).toFixed(1)} ml)`;
       
       setResult({
         type: 'pca',
@@ -119,7 +128,7 @@ export default function CalculatorsPage() {
       const singleMl = dailyMl / times;
 
       let recipe = null;
-      let rawText = `PEDIATRINEN ANNOS:\nPaino: ${w}kg, Annos: ${dMgKg}mg/kg/vrk\nKerta-annos: ${singleMl.toFixed(2)} ml (${singleMg.toFixed(2)} mg)`;
+      let rawText = `PEDIATRINEN ANNOS:\nPaino: ${w} kg\nAnnos: ${dMgKg} mg/kg/vrk\nKerta-annos: ${singleMl.toFixed(2)} ml (${singleMg.toFixed(2)} mg) x ${times}/vrk`;
 
       if (peds.showRecipe) {
         const courseDays = parseInt(peds.days) || 1;
@@ -127,7 +136,7 @@ export default function CalculatorsPage() {
         const totalCourseMl = dailyMl * courseDays;
         const bottles = Math.ceil(totalCourseMl / bSize);
         recipe = { courseDays, totalCourseMl: totalCourseMl.toFixed(1), bSize, bottles };
-        rawText += `\nKuuri: ${courseDays} pv, Yhteensä: ${totalCourseMl.toFixed(1)} ml (${bottles} plo)`;
+        rawText += `\nKuuri: ${courseDays} vrk\nYhteensä: ${totalCourseMl.toFixed(1)} ml (${bottles} plo)`;
       }
 
       setResult({
@@ -143,7 +152,7 @@ export default function CalculatorsPage() {
       const risks = [0, 1.3, 2.2, 3.2, 4.0, 6.7, 9.8, 9.6, 12.5, 15.2];
       const strokeRisk = risks[score] || 15.2;
       const hbScore = Object.values(hasbled).reduce((a, b) => a + b, 0);
-      setResult({ type: 'dual', score, hbScore, desc: `Aivoinfarktiriski: ${strokeRisk}% / vuosi.\nHAS-BLED: ${hbScore} p (${hbScore >= 3 ? 'SUURI' : 'EI SUURI'} VUOTORISKI).` });
+      setResult({ type: 'dual', score, hbScore, desc: `Aivoinfarktiriski: ${strokeRisk}% / vuosi. HAS-BLED: ${hbScore} p.` });
     }
 
     if (activeTab === 'bmi') {
@@ -178,10 +187,10 @@ export default function CalculatorsPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* LEFT PANEL: INPUTS */}
+        {/* LEFT PANEL */}
         <div className="bg-white rounded-[2.5rem] p-6 sm:p-8 border shadow-sm flex flex-col min-h-[600px]">
           <h2 className="text-xl font-black uppercase text-blue-600 tracking-tight mb-6 flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center"><Calculator size={18}/></div>
+            <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center text-blue-600"><Calculator size={18}/></div>
             {activeTab}-Laskuri
           </h2>
           
@@ -294,11 +303,11 @@ export default function CalculatorsPage() {
               <div className="space-y-4 animate-in fade-in">
                 <div>
                   <label className="text-[10px] font-bold uppercase text-slate-400 ml-2">Pituus (cm)</label>
-                  <input type="number" placeholder="Pituus (cm)" value={bmi.h} onChange={e => setBmi({...bmi, h: e.target.value})} className="w-full p-5 bg-slate-50 border rounded-2xl font-black text-lg outline-none focus:ring-2 ring-blue-100" />
+                  <input type="number" value={bmi.h} onChange={e => setBmi({...bmi, h: e.target.value})} className="w-full p-5 bg-slate-50 border rounded-2xl font-black text-lg outline-none focus:ring-2 ring-blue-100" />
                 </div>
                 <div>
                   <label className="text-[10px] font-bold uppercase text-slate-400 ml-2">Paino (kg)</label>
-                  <input type="number" placeholder="Paino (kg)" value={bmi.w} onChange={e => setBmi({...bmi, w: e.target.value})} className="w-full p-5 bg-slate-50 border rounded-2xl font-black text-lg outline-none focus:ring-2 ring-blue-100" />
+                  <input type="number" value={bmi.w} onChange={e => setBmi({...bmi, w: e.target.value})} className="w-full p-5 bg-slate-50 border rounded-2xl font-black text-lg outline-none focus:ring-2 ring-blue-100" />
                 </div>
               </div>
             )}
@@ -323,7 +332,7 @@ export default function CalculatorsPage() {
           </button>
         </div>
 
-        {/* RIGHT PANEL: STRUCTURED RESULTS */}
+        {/* RIGHT PANEL */}
         <div className="bg-slate-50 rounded-[2.5rem] p-6 sm:p-8 shadow-sm flex flex-col border border-slate-200 min-h-[600px]">
           <div className="flex justify-between items-center mb-8">
              <p className="text-[11px] font-black text-blue-500 uppercase tracking-[0.2em] flex items-center gap-2">
@@ -340,13 +349,10 @@ export default function CalculatorsPage() {
             {result ? (
               <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300">
                 
-                {/* STRUCTURED PCA RESULT */}
                 {result.type === 'pca' && (
                   <div className="space-y-4">
                     <div className="bg-white p-6 rounded-[2rem] border shadow-sm border-blue-100">
-                      <h3 className="text-[11px] font-black text-blue-400 uppercase mb-5 flex items-center gap-2">
-                        <ClipboardList size={16}/> Perustiedot
-                      </h3>
+                      <h3 className="text-[11px] font-black text-blue-400 uppercase mb-5 flex items-center gap-2"><ClipboardList size={16}/> Perustiedot</h3>
                       <div className="grid grid-cols-2 gap-4">
                         <div className="bg-slate-50 p-4 rounded-2xl">
                           <p className="text-[10px] text-slate-400 font-bold uppercase mb-1">Kasetti / Kesto</p>
@@ -360,36 +366,23 @@ export default function CalculatorsPage() {
                     </div>
 
                     <div className="bg-white p-6 rounded-[2rem] border shadow-sm border-emerald-100">
-                      <h3 className="text-[11px] font-black text-emerald-500 uppercase mb-4 flex items-center gap-2">
-                        <Syringe size={16}/> Lääkkeet & Liuos
-                      </h3>
+                      <h3 className="text-[11px] font-black text-emerald-500 uppercase mb-4 flex items-center gap-2"><Syringe size={16}/> Lääkkeet & Liuos</h3>
                       <div className="space-y-3">
                         {result.data.outList.map((d: any, i: number) => (
                           <div key={i} className="flex justify-between items-center border-b border-slate-50 pb-3">
-                            <div>
-                              <p className="text-sm font-bold text-slate-800">{d.name}</p>
-                              <p className="text-[11px] text-slate-400 font-medium">{d.mgDay} mg/vrk</p>
-                            </div>
-                            <div className="text-right">
-                              <p className="text-sm font-black text-slate-900">{d.mgTotal} mg</p>
-                              <p className="text-[11px] text-emerald-600 font-black">{d.mlTotal} ml</p>
-                            </div>
+                            <div><p className="text-sm font-bold text-slate-800">{d.name}</p><p className="text-[11px] text-slate-400 font-medium">{d.mgDay} mg/vrk</p></div>
+                            <div className="text-right"><p className="text-sm font-black text-slate-900">{d.mgTotal} mg</p><p className="text-[11px] text-emerald-600 font-black">{d.mlTotal} ml</p></div>
                           </div>
                         ))}
                         <div className="pt-3 flex justify-between items-center bg-slate-50 p-4 rounded-2xl border border-dashed">
-                          <div>
-                            <p className="text-[10px] font-bold text-slate-400 uppercase">Perusliuos</p>
-                            <p className="text-xs font-bold text-slate-700">NaCl 0,9 % ad {result.data.adNum} ml</p>
-                          </div>
-                          <p className="text-sm font-black text-slate-900">+{(result.data.adNum - result.data.totMl).toFixed(1)} ml</p>
+                          <span className="text-xs font-bold text-slate-700">NaCl 0,9 % ad {result.data.adNum} ml</span>
+                          <span className="text-sm font-black text-slate-900">+{(result.data.adNum - result.data.totMl).toFixed(1)} ml</span>
                         </div>
                       </div>
                     </div>
 
                     <div className="bg-slate-900 p-6 rounded-[2rem] text-white shadow-xl shadow-slate-200">
-                      <h3 className="text-[11px] font-black text-white/40 uppercase mb-4 flex items-center gap-2 tracking-widest">
-                        <FlaskConical size={16} className="text-emerald-400"/> Pitoisuudet
-                      </h3>
+                      <h3 className="text-[11px] font-black text-white/40 uppercase mb-4 flex items-center gap-2 tracking-widest"><FlaskConical size={16} className="text-emerald-400"/> Pitoisuudet</h3>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         {result.data.concList.map((c: any, i: number) => (
                           <div key={i} className="bg-white/5 p-3 rounded-xl border border-white/10 flex justify-between items-center sm:block">
@@ -402,74 +395,50 @@ export default function CalculatorsPage() {
                   </div>
                 )}
 
-                {/* STRUCTURED PEDS RESULT */}
                 {result.type === 'peds_structured' && (
                   <div className="space-y-4">
                     <div className="bg-blue-600 p-8 rounded-[2.5rem] text-white shadow-2xl shadow-blue-200 relative overflow-hidden">
                       <div className="relative z-10">
-                        <p className="text-[11px] font-bold uppercase opacity-70 mb-2 tracking-widest flex items-center gap-2">
-                           <Info size={14}/> Kerta-annos ({result.data.times} x pv)
-                        </p>
+                        <p className="text-[11px] font-bold uppercase opacity-70 mb-2 tracking-widest flex items-center gap-2"><Info size={14}/> Kerta-annos</p>
                         <div className="flex items-baseline gap-2">
                           <span className="text-6xl font-black">{result.data.singleMl.toFixed(2)}</span>
                           <span className="text-2xl font-bold opacity-80">ml</span>
                         </div>
                         <div className="mt-6 pt-4 border-t border-white/20 flex justify-between items-center">
-                          <span className="text-sm font-medium opacity-90">Vastaa milligrammoina:</span>
-                          <span className="text-xl font-black">{result.data.singleMg.toFixed(2)} mg</span>
+                          <span className="text-sm font-medium opacity-90">Vastaa: {result.data.singleMg.toFixed(2)} mg</span>
+                          <span className="text-xl font-black">x {result.data.times}/vrk</span>
                         </div>
                       </div>
                       <Baby size={120} className="absolute -bottom-6 -right-6 text-white/10 rotate-12" />
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
-                      <div className="bg-white p-5 rounded-[2rem] border shadow-sm">
-                        <p className="text-[10px] font-black text-slate-400 uppercase mb-2 tracking-tight">Vuorokausi</p>
-                        <p className="text-xl font-black text-slate-800">{result.data.dailyMl.toFixed(1)} <span className="text-xs">ml/vrk</span></p>
-                        <p className="text-xs font-bold text-blue-500 mt-1">{result.data.dailyMg.toFixed(1)} mg</p>
+                      <div className="bg-white p-5 rounded-[2rem] border shadow-sm text-center">
+                        <p className="text-[10px] font-black text-slate-400 uppercase mb-1">Vuorokausi</p>
+                        <p className="text-xl font-black text-slate-800">{result.data.dailyMl.toFixed(1)} ml</p>
                       </div>
-                      <div className="bg-white p-5 rounded-[2rem] border shadow-sm">
-                        <p className="text-[10px] font-black text-slate-400 uppercase mb-2 tracking-tight">Potilaan tiedot</p>
-                        <p className="text-xl font-black text-slate-800">{result.data.w} <span className="text-xs">kg</span></p>
-                        <p className="text-xs font-bold text-slate-500 mt-1">{result.data.dMgKg} mg/kg</p>
+                      <div className="bg-white p-5 rounded-[2rem] border shadow-sm text-center">
+                        <p className="text-[10px] font-black text-slate-400 uppercase mb-1">Paino</p>
+                        <p className="text-xl font-black text-slate-800">{result.data.w} kg</p>
                       </div>
                     </div>
 
                     {result.data.recipe && (
-                      <div className="bg-amber-50 p-6 rounded-[2rem] border border-amber-100 shadow-sm">
-                        <h3 className="text-[11px] font-black text-amber-600 uppercase mb-5 flex items-center gap-2 tracking-widest">
-                          <ClipboardList size={16}/> Reseptisuunnitelma
-                        </h3>
-                        <div className="space-y-4">
-                          <div className="flex justify-between items-center text-sm font-bold text-slate-600">
-                            <span>Kuuri ({result.data.recipe.courseDays} pv)</span>
-                            <span className="text-slate-900 bg-white px-3 py-1 rounded-full border">{result.data.recipe.totalCourseMl} ml</span>
-                          </div>
-                          <div className="bg-amber-500/10 p-5 rounded-2xl flex justify-between items-center border border-amber-200/50">
-                            <div>
-                              <p className="text-[10px] font-black text-amber-800/60 uppercase mb-1">Määrätään apteekista:</p>
-                              <p className="text-lg font-black text-amber-900">{result.data.recipe.bottles} pulloa</p>
-                            </div>
-                            <div className="text-right">
-                              <p className="text-xs font-bold text-amber-800">{result.data.recipe.bSize} ml/plo</p>
-                            </div>
-                          </div>
+                      <div className="bg-amber-50 p-6 rounded-[2rem] border border-amber-100">
+                        <h3 className="text-[11px] font-black text-amber-600 uppercase mb-4 tracking-widest">Reseptisuunnitelma</h3>
+                        <div className="bg-amber-500/10 p-5 rounded-2xl flex justify-between items-center">
+                           <span className="text-sm font-black text-amber-900">{result.data.recipe.bottles} pulloa ({result.data.recipe.bSize} ml)</span>
+                           <span className="text-xs font-bold text-amber-700">Yht. {result.data.recipe.totalCourseMl} ml</span>
                         </div>
                       </div>
                     )}
                   </div>
                 )}
 
-                {/* BMI / GFR / CHADS CARD RESULTS */}
                 {result.type === 'single' && (
                   <div className="text-center bg-white p-12 rounded-[3rem] border shadow-sm flex flex-col items-center justify-center min-h-[300px]">
-                    <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center mb-6">
-                       <Scale size={32} className="text-blue-600" />
-                    </div>
                     <div className="text-8xl font-black text-slate-900 tracking-tighter mb-4">{result.score}</div>
-                    <div className="px-8 py-3 bg-blue-600 rounded-full text-[11px] font-black uppercase text-white tracking-[0.2em] shadow-lg shadow-blue-100">
-                      {result.desc}
-                    </div>
+                    <div className="px-8 py-3 bg-blue-600 rounded-full text-[11px] font-black uppercase text-white tracking-[0.2em]">{result.desc}</div>
                   </div>
                 )}
 
@@ -477,17 +446,15 @@ export default function CalculatorsPage() {
                   <div className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
                       <div className="bg-white p-8 rounded-[2.5rem] border text-center shadow-sm">
-                        <p className="text-[11px] font-black text-slate-400 uppercase mb-3 tracking-widest">CHADS-VASc</p>
+                        <p className="text-[11px] font-black text-slate-400 uppercase mb-3">CHADS-VASc</p>
                         <div className="text-6xl font-black text-blue-600">{result.score}</div>
                       </div>
-                      <div className={`p-8 rounded-[2.5rem] border text-center shadow-sm transition-colors ${result.hbScore >= 3 ? 'bg-red-50 border-red-100' : 'bg-white border-slate-200'}`}>
-                        <p className="text-[11px] font-black text-slate-400 uppercase mb-3 tracking-widest">HAS-BLED</p>
+                      <div className={`p-8 rounded-[2.5rem] border text-center shadow-sm ${result.hbScore >= 3 ? 'bg-red-50 border-red-100' : 'bg-white'}`}>
+                        <p className="text-[11px] font-black text-slate-400 uppercase mb-3">HAS-BLED</p>
                         <div className={`text-6xl font-black ${result.hbScore >= 3 ? 'text-red-600' : 'text-blue-600'}`}>{result.hbScore}</div>
                       </div>
                     </div>
-                    <div className="bg-slate-900 p-6 rounded-[2rem] text-center shadow-lg">
-                       <p className="text-[11px] font-bold text-white leading-relaxed uppercase tracking-wider">{result.desc}</p>
-                    </div>
+                    <div className="bg-slate-900 p-6 rounded-[2rem] text-center text-white text-[11px] font-bold uppercase">{result.desc}</div>
                   </div>
                 )}
               </div>
@@ -498,18 +465,6 @@ export default function CalculatorsPage() {
               </div>
             )}
           </div>
-          
-          {/* FOOTER INFO */}
-          {result && (
-            <div className="mt-8 p-4 bg-blue-50/50 rounded-2xl flex items-start gap-4 border border-blue-100/50">
-              <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
-                <AlertTriangle size={16} className="text-blue-600"/>
-              </div>
-              <p className="text-[10px] text-blue-800 leading-normal font-medium italic">
-                Tämä on kliininen laskuri hoitotyön tueksi. Tarkista laskelmat ja lääkeohjeet aina paikallisten hoitoprotokollien mukaisesti ennen käyttöä.
-              </p>
-            </div>
-          )}
         </div>
       </div>
     </div>
