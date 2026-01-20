@@ -106,7 +106,7 @@ export default function CalculatorsPage() {
       if (chads.sex === 1 && score > 0) score += 1;
       const risks = [0, 1.3, 2.2, 3.2, 4.0, 6.7, 9.8, 9.6, 12.5, 15.2], strokeRisk = risks[score] || 15.2;
       const hbScore = Object.values(hasbled).reduce((a, b) => a + b, 0);
-      setResult({ type: 'dual', score, hbScore, desc: `Aivoinfarktiriski: ${strokeRisk}% / vuosi.\nHAS-BLED: ${hbScore} p.` });
+      setResult({ type: 'dual', score, hbScore, desc: `Aivoinfarktiriski: ${strokeRisk}% / vuosi. HAS-BLED: ${hbScore} p.` });
     }
 
     if (activeTab === 'bmi') {
@@ -144,27 +144,27 @@ export default function CalculatorsPage() {
         {/* LEFT PANEL */}
         <div className="bg-white rounded-[2.5rem] p-6 sm:p-8 border shadow-sm flex flex-col min-h-[600px]">
           <h2 className="text-xl font-black uppercase text-blue-600 tracking-tight mb-6">{activeTab}-Laskuri</h2>
-          <div className="flex-1 overflow-y-auto no-scrollbar space-y-4">
+          <div className="flex-1 overflow-y-auto no-scrollbar space-y-6 pr-1">
             
             {activeTab === 'peds' && (
               <div className="space-y-4 animate-in fade-in">
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <label className="text-[10px] font-bold text-slate-400 ml-2 uppercase">Paino (kg)</label>
-                    <input type="number" value={peds.weight} onChange={e => setPeds({...peds, weight: e.target.value})} className="w-full p-4 bg-slate-50 border rounded-2xl font-bold focus:bg-white transition-colors" placeholder="15" />
+                    <input type="number" value={peds.weight} onChange={e => setPeds({...peds, weight: e.target.value})} className="w-full p-4 bg-slate-50 border rounded-2xl font-bold focus:bg-white transition-colors outline-none" placeholder="15" />
                   </div>
                   <div className="space-y-1">
                     <label className="text-[10px] font-bold text-slate-400 ml-2 uppercase">Krt / vrk</label>
-                    <input type="number" value={peds.timesPerDay} onChange={e => setPeds({...peds, timesPerDay: e.target.value})} className="w-full p-4 bg-slate-50 border rounded-2xl font-bold focus:bg-white transition-colors" placeholder="2" />
+                    <input type="number" value={peds.timesPerDay} onChange={e => setPeds({...peds, timesPerDay: e.target.value})} className="w-full p-4 bg-slate-50 border rounded-2xl font-bold focus:bg-white transition-colors outline-none" placeholder="2" />
                   </div>
                 </div>
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold text-slate-400 ml-2 uppercase">Annos (mg/kg/vrk)</label>
-                  <input type="number" value={peds.doseMgKg} onChange={e => setPeds({...peds, doseMgKg: e.target.value})} className="w-full p-4 bg-slate-50 border rounded-2xl font-bold focus:bg-white transition-colors" placeholder="10" />
+                  <input type="number" value={peds.doseMgKg} onChange={e => setPeds({...peds, doseMgKg: e.target.value})} className="w-full p-4 bg-slate-50 border rounded-2xl font-bold focus:bg-white transition-colors outline-none" placeholder="10" />
                 </div>
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold text-slate-400 ml-2 uppercase">Vahvuus (mg/ml)</label>
-                  <input type="number" value={peds.strength} onChange={e => setPeds({...peds, strength: e.target.value})} className="w-full p-4 bg-slate-50 border rounded-2xl font-bold focus:bg-white transition-colors" placeholder="30" />
+                  <input type="number" value={peds.strength} onChange={e => setPeds({...peds, strength: e.target.value})} className="w-full p-4 bg-slate-50 border rounded-2xl font-bold focus:bg-white transition-colors outline-none" placeholder="30" />
                 </div>
                 
                 <label className="flex items-center gap-3 p-4 bg-blue-50/50 rounded-2xl border border-blue-100 cursor-pointer group hover:bg-blue-50 transition-all">
@@ -208,21 +208,21 @@ export default function CalculatorsPage() {
                   <div className="grid grid-cols-4 gap-2 p-4 bg-slate-50 rounded-2xl border animate-in slide-in-from-top-2">
                     {['kas', 'ad', 'spd', 'days'].map(k => (
                       <div key={k}><label className="text-[8px] font-bold uppercase text-slate-400 ml-1">{k}</label>
-                      <input value={pca[k as keyof typeof pca]} onChange={e => setPca({...pca, [k]: e.target.value})} className="w-full p-2 border rounded-lg text-xs font-bold" /></div>
+                      <input value={pca[k as keyof typeof pca]} onChange={e => setPca({...pca, [k]: e.target.value})} className="w-full p-2 border rounded-lg text-xs font-bold outline-none" /></div>
                     ))}
                   </div>
                 )}
                 <div className="mt-6 p-5 bg-slate-50 rounded-[2rem] border border-slate-100">
-                  <label className="text-[10px] font-black text-slate-400 uppercase mb-3 flex items-center gap-2"><FlaskConical size={12}/> Lisää uusi lääke kantaan</label>
+                  <label className="text-[10px] font-black text-slate-400 uppercase mb-3 flex items-center gap-2"><FlaskConical size={12}/> Lääkekirjasto</label>
                   <div className="flex gap-1 mb-4">
-                    <input placeholder="Nimi" value={newLibDrug.n} onChange={e => setNewLibDrug({...newLibDrug, n:e.target.value})} className="flex-1 p-2.5 border rounded-xl text-xs font-bold bg-white"/>
-                    <input placeholder="mg/ml" value={newLibDrug.s} onChange={e => setNewLibDrug({...newLibDrug, s:e.target.value})} className="w-16 p-2.5 border rounded-xl text-xs font-bold bg-white"/>
-                    <button onClick={addDrugToLib} className="p-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors"><Plus size={18}/></button>
+                    <input placeholder="Nimi" value={newLibDrug.n} onChange={e => setNewLibDrug({...newLibDrug, n:e.target.value})} className="flex-1 p-2.5 border rounded-xl text-xs font-bold bg-white outline-none"/>
+                    <input placeholder="mg/ml" value={newLibDrug.s} onChange={e => setNewLibDrug({...newLibDrug, s:e.target.value})} className="w-16 p-2.5 border rounded-xl text-xs font-bold bg-white outline-none"/>
+                    <button onClick={addDrugToLib} className="p-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 active:scale-95 transition-all"><Plus size={18}/></button>
                   </div>
                   <div className="max-h-32 overflow-y-auto no-scrollbar space-y-1">
                     {library.map(l => (
                       <div key={l.id} className="flex justify-between p-2.5 bg-white rounded-xl border border-slate-100 items-center shadow-sm">
-                        <span className="text-[10px] font-bold">{l.n} <span className="text-slate-400">({l.s} mg/ml)</span></span>
+                        <span className="text-[10px] font-bold">{l.n} <span className="text-slate-400 font-normal">({l.s} mg/ml)</span></span>
                         <button onClick={() => removeDrugFromLib(l.id)} className="text-slate-300 hover:text-red-500 transition-colors"><Trash2 size={12}/></button>
                       </div>
                     ))}
@@ -231,49 +231,63 @@ export default function CalculatorsPage() {
               </div>
             )}
 
+            {activeTab === 'chads' && (
+              <div className="space-y-6 animate-in fade-in">
+                <div className="space-y-3">
+                  <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest ml-2">CHADS-VASc kriteerit</p>
+                  <div className="grid grid-cols-1 gap-1.5">
+                    {[{l:"Sydämen vajaatoiminta",k:'chf',v:1},{l:"Hypertensio",k:'ht',v:1},{l:"Ikä ≥ 75",k:'age',v:2},{l:"Ikä 65-74",k:'age',v:1},{l:"Diabetes",k:'dm',v:1},{l:"Aivoinfarkti/TIA",k:'stroke',v:2},{l:"Valtimosairaus",k:'vasc',v:1},{l:"Nainen",k:'sex',v:1}].map(i => (
+                      <button key={i.l} onClick={() => setChads({...chads, [i.k]: chads[i.k as keyof typeof chads] === i.v ? 0 : i.v})} className={`p-3 text-left rounded-xl border text-[11px] font-bold transition-all ${chads[i.k as keyof typeof chads] === i.v ? 'bg-blue-600 text-white shadow-md border-blue-600' : 'bg-slate-50 hover:bg-slate-100'}`}>{i.l}</button>
+                    ))}
+                  </div>
+                </div>
+                
+                <div className="space-y-3 pt-2">
+                  <p className="text-[10px] font-black text-red-500 uppercase tracking-widest ml-2">HAS-BLED kriteerit</p>
+                  <div className="grid grid-cols-1 gap-1.5">
+                    {[{l:"RR-syst. > 160",k:'sbp',v:1},{l:"Munuaisten vajaat.",k:'renal',v:1},{l:"Maksan vajaat.",k:'liver',v:1},{l:"Aiempi vuoto",k:'bleed',v:1},{l:"Labiili INR",k:'inr',v:1},{l:"Ikä > 65",k:'age',v:1},{l:"Lääkitys",k:'drugs',v:1},{l:"Alkoholi",k:'alc',v:1}].map(i => (
+                      <button key={i.l} onClick={() => setHasbled({...hasbled, [i.k]: hasbled[i.k as keyof typeof hasbled] === i.v ? 0 : i.v})} className={`p-3 text-left rounded-xl border text-[11px] font-bold transition-all ${hasbled[i.k as keyof typeof hasbled] === i.v ? 'bg-red-600 text-white shadow-md border-red-600' : 'bg-red-50/30 hover:bg-red-50 text-red-700 border-red-100'}`}>{i.l}</button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {activeTab === 'bmi' && (
-               <div className="space-y-4 animate-in fade-in">
+               <div className="space-y-6 animate-in fade-in">
                  <div className="space-y-1">
                    <label className="text-[10px] font-bold text-slate-400 ml-2 uppercase">Pituus (cm)</label>
-                   <input type="number" value={bmi.h} onChange={e => setBmi({...bmi, h: e.target.value})} className="w-full p-5 bg-slate-50 border rounded-2xl font-black text-lg focus:bg-white" placeholder="175" />
+                   <input type="number" value={bmi.h} onChange={e => setBmi({...bmi, h: e.target.value})} className="w-full p-5 bg-slate-50 border rounded-2xl font-black text-lg focus:bg-white outline-none transition-all" placeholder="175" />
                  </div>
                  <div className="space-y-1">
                    <label className="text-[10px] font-bold text-slate-400 ml-2 uppercase">Paino (kg)</label>
-                   <input type="number" value={bmi.w} onChange={e => setBmi({...bmi, w: e.target.value})} className="w-full p-5 bg-slate-50 border rounded-2xl font-black text-lg focus:bg-white" placeholder="75" />
+                   <input type="number" value={bmi.w} onChange={e => setBmi({...bmi, w: e.target.value})} className="w-full p-5 bg-slate-50 border rounded-2xl font-black text-lg focus:bg-white outline-none transition-all" placeholder="75" />
                  </div>
                </div>
             )}
 
             {activeTab === 'gfr' && (
-              <div className="space-y-4 animate-in fade-in">
+              <div className="space-y-6 animate-in fade-in">
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <label className="text-[10px] font-bold text-slate-400 ml-2 uppercase">Ikä</label>
-                    <input type="number" value={gfr.age} onChange={e => setGfr({...gfr, age: e.target.value})} className="w-full p-4 bg-slate-50 border rounded-2xl font-bold focus:bg-white" placeholder="65" />
+                    <input type="number" value={gfr.age} onChange={e => setGfr({...gfr, age: e.target.value})} className="w-full p-4 bg-slate-50 border rounded-2xl font-bold focus:bg-white outline-none transition-all" placeholder="65" />
                   </div>
                   <div className="space-y-1">
                     <label className="text-[10px] font-bold text-slate-400 ml-2 uppercase">Paino (kg)</label>
-                    <input type="number" value={gfr.w} onChange={e => setGfr({...gfr, w: e.target.value})} className="w-full p-4 bg-slate-50 border rounded-2xl font-bold focus:bg-white" placeholder="75" />
+                    <input type="number" value={gfr.w} onChange={e => setGfr({...gfr, w: e.target.value})} className="w-full p-4 bg-slate-50 border rounded-2xl font-bold focus:bg-white outline-none transition-all" placeholder="75" />
                   </div>
                 </div>
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold text-slate-400 ml-2 uppercase">Kreatiniini (µmol/l)</label>
-                  <input type="number" value={gfr.creat} onChange={e => setGfr({...gfr, creat: e.target.value})} className="w-full p-4 bg-slate-50 border rounded-2xl font-bold focus:bg-white" placeholder="100" />
+                  <input type="number" value={gfr.creat} onChange={e => setGfr({...gfr, creat: e.target.value})} className="w-full p-4 bg-slate-50 border rounded-2xl font-bold focus:bg-white outline-none transition-all" placeholder="100" />
                 </div>
-                <div className="flex gap-2 p-1 bg-slate-100 rounded-2xl">
-                  <button onClick={() => setGfr({...gfr, sex: '1.23'})} className={`flex-1 py-3 rounded-xl text-xs font-bold transition-all ${gfr.sex === '1.23' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500'}`}>Mies</button>
-                  <button onClick={() => setGfr({...gfr, sex: '1.04'})} className={`flex-1 py-3 rounded-xl text-xs font-bold transition-all ${gfr.sex === '1.04' ? 'bg-white shadow-sm text-pink-600' : 'text-slate-500'}`}>Nainen</button>
-                </div>
-              </div>
-            )}
-
-            {activeTab === 'chads' && (
-              <div className="space-y-4 animate-in fade-in">
-                <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest ml-2">CHADS-VASc kriteerit</p>
-                <div className="grid grid-cols-1 gap-1.5">
-                  {[{l:"Sydämen vajaatoiminta",k:'chf',v:1},{l:"Hypertensio",k:'ht',v:1},{l:"Ikä ≥ 75",k:'age',v:2},{l:"Ikä 65-74",k:'age',v:1},{l:"Diabetes",k:'dm',v:1},{l:"Aivoinfarkti/TIA",k:'stroke',v:2},{l:"Valtimosairaus",k:'vasc',v:1},{l:"Nainen",k:'sex',v:1}].map(i => (
-                    <button key={i.l} onClick={() => setChads({...chads, [i.k]: chads[i.k as keyof typeof chads] === i.v ? 0 : i.v})} className={`p-3 text-left rounded-xl border text-[11px] font-bold transition-all ${chads[i.k as keyof typeof chads] === i.v ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-50 hover:bg-slate-100'}`}>{i.l}</button>
-                  ))}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 ml-2 uppercase">Sukupuoli</label>
+                  <div className="flex gap-2 p-1 bg-slate-100 rounded-2xl">
+                    <button onClick={() => setGfr({...gfr, sex: '1.23'})} className={`flex-1 py-3 rounded-xl text-xs font-bold transition-all ${gfr.sex === '1.23' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500'}`}>Mies</button>
+                    <button onClick={() => setGfr({...gfr, sex: '1.04'})} className={`flex-1 py-3 rounded-xl text-xs font-bold transition-all ${gfr.sex === '1.04' ? 'bg-white shadow-sm text-pink-600' : 'text-slate-500'}`}>Nainen</button>
+                  </div>
                 </div>
               </div>
             )}
@@ -291,7 +305,7 @@ export default function CalculatorsPage() {
                <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div> Tulos
              </p>
              {result && (
-               <button onClick={handleCopy} className={`px-4 py-2 rounded-xl font-bold text-[10px] transition-all flex items-center gap-2 shadow-sm ${copied ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+               <button onClick={handleCopy} className={`px-4 py-2 rounded-xl font-bold text-[10px] transition-all flex items-center gap-2 shadow-sm ${copied ? 'bg-emerald-500 text-white shadow-md border-emerald-500' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
                  {copied ? <Check size={14}/> : <Copy size={14}/>} {copied ? 'KOPIOITU' : 'KOPIOI'}
                </button>
              )}
@@ -300,7 +314,6 @@ export default function CalculatorsPage() {
           <div className="flex-1 overflow-y-auto no-scrollbar">
             {result ? (
               <div className="animate-in fade-in zoom-in-95 duration-200">
-                {/* PCA: CLEAN TEXT VIEW */}
                 {result.type === 'text' && (
                   <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100 shadow-inner">
                     <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-slate-800 font-medium">
@@ -309,7 +322,6 @@ export default function CalculatorsPage() {
                   </div>
                 )}
 
-                {/* PEDS: STRUCTURED CARDS */}
                 {result.type === 'peds_card' && (
                   <div className="space-y-4">
                     <div className="bg-blue-600 p-8 rounded-[2rem] text-white shadow-xl shadow-blue-100 relative overflow-hidden">
@@ -319,12 +331,12 @@ export default function CalculatorsPage() {
                       <Baby className="absolute -bottom-4 -right-4 size-32 text-white/10" />
                     </div>
                     <div className="grid grid-cols-2 gap-3">
-                      <div className="bg-slate-50 p-5 rounded-3xl border border-slate-100">
+                      <div className="bg-slate-50 p-5 rounded-3xl border border-slate-100 text-center">
                         <p className="text-[9px] font-black text-slate-400 uppercase tracking-tight">Vuorokausi</p>
                         <p className="text-xl font-black text-slate-900">{result.data.dailyMl.toFixed(1)} ml</p>
                         <p className="text-[10px] text-slate-500 font-bold">{result.data.dailyMg.toFixed(1)} mg</p>
                       </div>
-                      <div className="bg-slate-50 p-5 rounded-3xl border border-slate-100">
+                      <div className="bg-slate-50 p-5 rounded-3xl border border-slate-100 text-center">
                         <p className="text-[9px] font-black text-slate-400 uppercase tracking-tight">Potilas</p>
                         <p className="text-xl font-black text-slate-900">{result.data.w} kg</p>
                         <p className="text-[10px] text-slate-500 font-bold">{result.data.dMgKg} mg/kg</p>
@@ -332,20 +344,19 @@ export default function CalculatorsPage() {
                     </div>
                     {result.data.recipeData && (
                       <div className="bg-amber-50 p-6 rounded-3xl border border-amber-100">
-                        <p className="text-[10px] font-black text-amber-600 uppercase mb-3 tracking-widest">Resepti ({result.data.recipeData.courseDays} vrk)</p>
+                        <p className="text-[10px] font-black text-amber-600 uppercase mb-3 tracking-widest text-center">Reseptisuunnitelma ({result.data.recipeData.courseDays} pv)</p>
                         <div className="flex justify-between items-center bg-white p-5 rounded-2xl border border-amber-200 shadow-sm">
                           <div>
                             <span className="text-lg font-black text-slate-800">{result.data.recipeData.bottles} pulloa</span>
-                            <p className="text-[10px] text-slate-400 font-bold uppercase">{result.data.recipeData.bSize} ml pakkaus</p>
+                            <p className="text-[10px] text-slate-400 font-bold uppercase">{result.data.recipeData.bSize} ml/plo</p>
                           </div>
-                          <span className="text-xs font-black text-amber-600 bg-amber-50 px-3 py-1 rounded-lg">Yht: {result.data.recipeData.totalMl} ml</span>
+                          <span className="text-xs font-black text-amber-600 bg-amber-50 px-3 py-1 rounded-lg border border-amber-100">Yht: {result.data.recipeData.totalMl} ml</span>
                         </div>
                       </div>
                     )}
                   </div>
                 )}
 
-                {/* BMI/GFR/CHADS */}
                 {result.type === 'single' && (
                   <div className="text-center bg-slate-50 p-12 rounded-[3rem] border border-slate-100 shadow-inner">
                     <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -355,6 +366,7 @@ export default function CalculatorsPage() {
                     <p className="px-6 py-2 bg-blue-600 text-white inline-block rounded-full text-[10px] font-black uppercase tracking-widest shadow-lg shadow-blue-100">{result.desc}</p>
                   </div>
                 )}
+
                 {result.type === 'dual' && (
                   <div className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
@@ -367,7 +379,7 @@ export default function CalculatorsPage() {
                         <div className={`text-6xl font-black ${result.hbScore >= 3 ? 'text-red-500' : 'text-blue-600'}`}>{result.hbScore}</div>
                       </div>
                     </div>
-                    <div className="bg-slate-900 p-6 rounded-[2rem] text-center text-white text-[11px] font-bold uppercase tracking-wide leading-relaxed">
+                    <div className="bg-slate-900 p-6 rounded-[2rem] text-center text-white text-[11px] font-bold uppercase tracking-wide leading-relaxed shadow-lg">
                       {result.desc}
                     </div>
                   </div>
@@ -376,7 +388,7 @@ export default function CalculatorsPage() {
             ) : (
               <div className="h-full flex flex-col items-center justify-center text-slate-200 py-20">
                 <Calculator size={64} strokeWidth={1} />
-                <p className="text-[10px] font-black uppercase tracking-widest mt-4">Valitse työkalu ja syötä arvot</p>
+                <p className="text-[10px] font-black uppercase tracking-widest mt-4 italic">Valitse työkalu ja syötä arvot</p>
               </div>
             )}
           </div>
