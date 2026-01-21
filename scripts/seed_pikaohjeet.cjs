@@ -3,146 +3,107 @@ const prisma = new PrismaClient();
 
 async function main() {
   const card = await prisma.clinicalCard.upsert({
-    where: { slug: "diabetes-2" },
-    update: {
-      title: "Diabetes 2",
-      subtitle: "Pikaohje (terveysasema)",
-      tags: ["diabetes", "T2D", "CKD", "RR", "albuminuria", "insuliini"],
-      environment: "terveysasema",
-      audience: "aikuinen",
-      isPublished: true,
-      updatedByName: "seed",
-      updatedByEmail: null,
-      updatedByUserId: null,
-    },
+    where: { slug: "hengitysfunktio-astma-copd" },
+    update: {},
     create: {
-      slug: "diabetes-2",
-      title: "Diabetes 2",
-      subtitle: "Pikaohje (terveysasema)",
-      tags: ["diabetes", "T2D", "CKD", "RR", "albuminuria", "insuliini"],
-      environment: "terveysasema",
-      audience: "aikuinen",
+      slug: "hengitysfunktio-astma-copd",
+      title: "Hengitysfunktio ja oireiden hallinta",
+      subtitle: "Astman ja COPD:n diagnostiikka sekä seuranta",
+      environment: "Terveysasema",
+      audience: "Lääkärit",
+      tags: ["Astma", "COPD", "Spirometria", "PEF"],
       isPublished: true,
-      updatedByName: "seed",
-      updatedByEmail: null,
-      updatedByUserId: null,
+      updatedByName: "System Seed",
     },
   });
 
+  // Очистка старых данных перед наполнением
   await prisma.clinicalSection.deleteMany({ where: { cardId: card.id } });
   await prisma.clinicalField.deleteMany({ where: { cardId: card.id } });
   await prisma.clinicalRule.deleteMany({ where: { cardId: card.id } });
 
+  // 1. Поля ввода (Параметры пациента)
   await prisma.clinicalField.createMany({
     data: [
-      { cardId: card.id, key: "ika", label: "Ikä", type: "number", unit: "v", order: 10, isUniversal: true },
-      { cardId: card.id, key: "rr_syst", label: "RR syst", type: "number", unit: "mmHg", order: 20, isUniversal: true },
-      { cardId: card.id, key: "rr_diast", label: "RR diast", type: "number", unit: "mmHg", order: 30, isUniversal: true },
-      { cardId: card.id, key: "dm2", label: "Diabetes", type: "select", options: ["ei", "T2"], order: 40, isUniversal: true },
-      { cardId: card.id, key: "egfr", label: "eGFR", type: "number", unit: "ml/min/1.73m²", order: 50, isUniversal: true },
-
-      { cardId: card.id, key: "hba1c", label: "HbA1c", type: "number", unit: "mmol/mol", order: 110, isUniversal: false },
-      { cardId: card.id, key: "albuminuria", label: "Albuminuria", type: "select", options: ["ei", "kyllä"], order: 120, isUniversal: false },
-      { cardId: card.id, key: "ylipaino", label: "Ylipaino", type: "select", options: ["ei", "kyllä"], order: 130, isUniversal: false },
-      { cardId: card.id, key: "injektiot", label: "Valmis injektioihin", type: "select", options: ["ei", "kyllä"], order: 140, isUniversal: false },
+      { cardId: card.id, key: "f_fev1_fvc", label: "FEV1/FVC (z-arvo)", type: "number", unit: "z", order: 10, isUniversal: true },
+      { cardId: card.id, key: "f_pef_var", label: "PEF-vaihtelu (2 vk)", type: "number", unit: "%", order: 20, isUniversal: false },
+      { cardId: card.id, key: "f_act_score", label: "Astmatesti (ACT)", type: "number", unit: "pist", order: 30, isUniversal: false },
+      { cardId: card.id, key: "f_cat_score", label: "CAT-pisteet (COPD)", type: "number", unit: "pist", order: 40, isUniversal: false },
+      { cardId: card.id, key: "f_smoke", label: "Tupakointi", type: "select", options: ["ei", "kyllä"], order: 50, isUniversal: true },
+      { cardId: card.id, key: "f_eos", label: "B-Eos (Eosinofiilit)", type: "number", unit: "x10⁹/l", order: 60, isUniversal: true },
     ],
   });
 
+  // 2. Секции контента (Инструкции)
   await prisma.clinicalSection.createMany({
     data: [
       {
         cardId: card.id,
-        key: "minimi",
-        title: "Tarkista aina vastaanotolla",
+        key: "s_diag",
+        title: "Diagnostiikka (Spirometria & PEF)",
         order: 10,
-        content:
-          "- HbA1c (tavoite yksilöllinen)\n- eGFR\n- RR\n- paino/BMI\n- U-Alb/Krea\n- lipidit\n- lääkitys + siedettävyys\n- motivaatio\n\nElintapahoito on aina perusta.",
-        highlightCallout: null,
+        content: 
+          "### Obstruktion kriteerit\n" +
+          "- **COPD**: Post-BD FEV1/FVC < -1.65 z-arvoa.\n" +
+          "- **Astma (BD-vaste)**: FEV1 tai FVC kasvaa ≥ 12 % ja ≥ 200 ml.\n\n" +
+          "### PEF-seuranta (2 vk)\n" +
+          "- Diagnostinen vaihtelu ≥ 20 % tai BD-vaste ≥ 15 % (≥ 3 krt/2 vk).\n" +
+          "- **Oikea tekniikka**: Seisten, max sisäänhengitys, 3 yritystä, paras kirjataan.",
       },
       {
         cardId: card.id,
-        key: "perus",
-        title: "Ensimmäinen linja",
+        key: "s_astma_mgmt",
+        title: "Astman hallinta (GINA)",
         order: 20,
-        content:
-          "Metformiini, jos ei vasta-aihetta. Titraa siedon mukaan kohti maksimiannosta. Jos GI-oireita: hitaampi titraus / depot.",
-        highlightCallout: null,
+        content: 
+          "### Oirehallinta (ACT)\n" +
+          "- **Hyvä hallinta**: 20-25 pistettä. Jatka nykyistä hoitoa.\n" +
+          "- **Huono hallinta**: < 20 pistettä. Tarkista tekniikka ja harkitse lääkityksen nostoa.\n\n" +
+          "### Lääkehoito (MART-malli)\n" +
+          "- Suositeltu (Track 1): ICS-formoteroli tarvittaessa + ylläpitona.\n" +
+          "- Säännöllinen ICS on hoidon perusta.",
       },
       {
         cardId: card.id,
-        key: "tehostus",
-        title: "HbA1c yli tavoitteen – tehostus",
+        key: "s_copd_mgmt",
+        title: "COPD:n hoidon aloitus (GOLD)",
         order: 30,
-        content:
-          "Valinta potilasprofiilin mukaan:\n\n- Ylipaino / CV-riski: SGLT2 (eGFR-rajojen mukaan)\n- Iäkäs/hauras: DPP-4\n- BMI > 30: GLP-1 (ei yhdessä DPP-4)\n\nJos tablettivaihtoehdot eivät riitä: harkitse insuliinia.",
-        highlightCallout: "HbA1c yli tavoitteen – tehosta hoitoa ja sovi kontrolli.",
+        content: 
+          "### Aloitusprofiili\n" +
+          "- **Ryhmä A** (vähän oireita): Mikä tahansa bronkodilaattori.\n" +
+          "- **Ryhmä B** (paljon oireita): LABA + LAMA.\n" +
+          "- **Ryhmä E** (pahenemisvaiheet): LABA + LAMA. Lisää ICS, jos Eos ≥ 0.30.",
       },
       {
         cardId: card.id,
-        key: "ckd",
-        title: "CKD (eGFR) – annosrajat",
+        key: "s_life",
+        title: "Elintavat ja rokotukset",
         order: 40,
-        content:
-          "eGFR < 60: huomioi annosrajoitukset.\n\n- Metformiini: annos alas\n- DPP-4: annoskorjaus\n- SGLT2: eGFR-rajojen mukaan\n- Insuliini: tarvittaessa",
-        highlightCallout: "eGFR < 60 – tarkista annokset ja valinnat.",
-      },
-      {
-        cardId: card.id,
-        key: "rr",
-        title: "RR ja albuminuria (aina rinnalla)",
-        order: 50,
-        content:
-          "Albuminuriassa ACEi/AT2 maksimiin. Seuraa K ja krea.\n\nRR-tavoite yksilöllinen; albuminuriassa pyri tiukempaan tavoitteeseen.",
-        highlightCallout: "Albuminuria/RR – ACEi/AT2 ja seuranta.",
-      },
-      {
-        cardId: card.id,
-        key: "insuliini",
-        title: "Milloin insuliini",
-        order: 60,
-        content:
-          "Harkitse, jos HbA1c pysyy korkeana ≥2–3 lääkkeellä tai oireinen hyperglykemia.\n\nAloitus: basaali 10 E/vrk, titraa +2–3 E / 2 vrk (paastosokeritavoite).",
-        highlightCallout: "Tavoite ei täyty – harkitse basaali-insuliinia.",
-      },
-      {
-        cardId: card.id,
-        key: "kirjaus",
-        title: "Kirjaa aina",
-        order: 70,
-        content:
-          "HbA1c (nyt/tavoite), eGFR, RR, paino/BMI, lääkemuutos + perustelu, kontrolli 3–6 kk + labrat.",
-        highlightCallout: null,
+        content: 
+          "### Rokotukset\n" +
+          "- Influenssa, COVID-19, Pneumokokki.\n\n" +
+          "### Tupakointi ja paino\n" +
+          "- Tupakoinnin lopettaminen on hoidon perusta.\n" +
+          "- Obeeseilla 5-10 % painonlasku parantaa hallintaa.",
       },
     ],
   });
 
+  // 3. Динамические правила (Rules)
   await prisma.clinicalRule.createMany({
     data: [
-      { cardId: card.id, fieldKey: "egfr", operator: "<", value: "60", highlightSectionKey: "ckd", addHint: "eGFR < 60: annosrajat ja valinnat.", priority: 10 },
-      { cardId: card.id, fieldKey: "albuminuria", operator: "==", value: "kyllä", highlightSectionKey: "rr", addHint: "Albuminuria: ACEi/AT2 + seuranta.", priority: 20 },
-      { cardId: card.id, fieldKey: "rr_syst", operator: ">=", value: "140", highlightSectionKey: "rr", addHint: "RR koholla: tehosta hoitoa ja kontrolli.", priority: 30 },
-      { cardId: card.id, fieldKey: "hba1c", operator: ">=", value: "58", highlightSectionKey: "tehostus", addHint: "HbA1c yli tavoitteen: tehostusporras.", priority: 40 },
-      { cardId: card.id, fieldKey: "injektiot", operator: "==", value: "kyllä", highlightSectionKey: "insuliini", addHint: "Valmis injektioihin: GLP-1/insuliini helpompi.", priority: 60 },
+      { cardId: card.id, fieldKey: "f_fev1_fvc", operator: "lt", value: "-1.65", highlightSectionKey: "s_diag", addHint: "Obstruktiivinen löydös havaittu (z < -1.65).", priority: 20 },
+      { cardId: card.id, fieldKey: "f_pef_var", operator: "gte", value: "20", highlightSectionKey: "s_diag", addHint: "Astmalle tyypillinen PEF-vaihtelu (≥ 20%).", priority: 40 },
+      { cardId: card.id, fieldKey: "f_act_score", operator: "lt", value: "20", highlightSectionKey: "s_astma_mgmt", addHint: "Astma ei ole hallinnassa. Tehosta hoitoa.", priority: 40 },
+      { cardId: card.id, fieldKey: "f_cat_score", operator: "gte", value: "10", highlightSectionKey: "s_copd_mgmt", addHint: "CAT ≥ 10: Oireinen COPD. Harkitse kaksoisavaavaa (LABA+LAMA).", priority: 50 },
+      { cardId: card.id, fieldKey: "f_smoke", operator: "eq", value: "kyllä", highlightSectionKey: "s_life", addHint: "Huom! Tupakointi heikentää ICS-vastetta ja pahentaa COPD:tä.", priority: 20 },
+      { cardId: card.id, fieldKey: "f_eos", operator: "gte", value: "0.3", highlightSectionKey: "s_copd_mgmt", addHint: "Eosinofiilit ≥ 0.30: ICS hyödyllinen COPD:n pahenemisvaiheiden ehkäisyssä.", priority: 50 },
     ],
   });
 
-  await prisma.clinicalRevision.create({
-    data: {
-      cardId: card.id,
-      action: "seed_card",
-      summary: "Seeded diabetes-2 card",
-      editorName: "seed",
-      payload: { slug: card.slug },
-    },
-  });
-
-  console.log("Seed OK:", card.slug);
+  console.log("Seed OK: Hengitysfunktio-kortti luotu.");
 }
 
 main()
-  .then(() => prisma.$disconnect())
-  .catch(async (e) => {
-    console.error(e);
-    await prisma.$disconnect();
-    process.exit(1);
-  });
+  .catch((e) => { console.error(e); process.exit(1); })
+  .finally(() => prisma.$disconnect());
