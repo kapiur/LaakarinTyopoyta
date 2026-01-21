@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "db:sync": "ts-node scripts/sync-medicines.ts"
+    "db:sync": "ts-node scripts/sync-medicines.ts",
+    "seed:pikaohjeet": "ts-node scripts/seed-pikaohjeet.ts"
   },
   "dependencies": {
     "react": "^18",
