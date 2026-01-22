@@ -195,24 +195,26 @@ export default function TemplatesPage() {
   return (
     <div className="max-w-[1600px] mx-auto h-[calc(100vh-100px)] flex flex-col gap-4 p-4 text-slate-900 font-sans relative animate-in fade-in duration-700">
       
-      {/* HEADER */}
-      <div className="flex items-center justify-between bg-white p-6 rounded-[2.5rem] border shadow-sm flex-shrink-0">
-        <div className="flex items-center gap-4">
-          <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-blue-100">
-            <Layout size={24} />
-          </div>
-          <div>
-            <h1 className="text-2xl font-black text-slate-800 tracking-tight uppercase italic">Tekstimallit</h1>
-            <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.3em]">Smart Documentation Hub</p>
-          </div>
-        </div>
-        <button 
-          onClick={() => { setIsAdding(true); setIsEditing(false); setSelectedTemplate(null); setFormData({id:null, title:'', content:'', categoryName:'', author:''}); }}
-          className="bg-slate-900 text-white px-8 py-4 rounded-2xl font-black hover:bg-black shadow-xl shadow-slate-100 uppercase tracking-widest text-[10px] transition-all active:scale-95 flex items-center gap-2"
-        >
-          <Plus size={16} /> Uusi Malli
-        </button>
-      </div>
+  {/* HEADER */}
+<div className="flex items-center justify-between bg-white p-6 rounded-[2.5rem] border shadow-sm flex-shrink-0">
+  <div className="flex items-center gap-4">
+    <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-blue-100">
+      <Layout size={24} />
+    </div>
+    <div>
+      {/* Убираем font-black, uppercase и italic. Ставим font-bold и нормальный регистр */}
+      <h1 className="text-2xl font-bold text-slate-800 tracking-tight">Tekstimallit</h1>
+      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Smart Documentation Hub</p>
+    </div>
+  </div>
+  <button 
+    onClick={() => { setIsAdding(true); setIsEditing(false); setSelectedTemplate(null); setFormData({id:null, title:'', content:'', categoryName:'', author:''}); }}
+    // Делаем кнопку синей, как в Pikaohjeet (Muokkaa), но с вашим текстом
+    className="bg-blue-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-blue-700 shadow-lg shadow-blue-100 transition-all active:scale-95 flex items-center gap-2 text-sm"
+  >
+    <Plus size={18} /> Uusi malli
+  </button>
+</div>
 
       {/* CATEGORIES */}
       <div className="flex bg-white p-2 rounded-2xl border shadow-sm overflow-x-auto no-scrollbar gap-2 flex-shrink-0 items-center">
