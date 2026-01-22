@@ -134,7 +134,7 @@ model ClinicalCard {
   sections        ClinicalSection[]
   fields          ClinicalField[]
   rules           ClinicalRule[]
-  revisions       ClinicalRevision[] // Это поле вызывало ошибку, так как не было модели ниже
+  revisions       ClinicalRevision[]
 }
 
 model ClinicalSection {
@@ -146,9 +146,11 @@ model ClinicalSection {
   order            Int            @default(0)
   content          String         @db.Text
   highlightCallout String?
+  
+  // Обратная связь для правил
   rules            ClinicalRule[]
 
-  @@unique([cardId, key])
+  @@unique([cardId, key]) // Обязательно для связи в ClinicalRule
   @@index([cardId, order])
 }
 
@@ -164,9 +166,11 @@ model ClinicalField {
   options     String[]       @default([])
   order       Int            @default(0)
   isUniversal Boolean        @default(false)
+  
+  // Обратная связь для правил
   rules       ClinicalRule[]
 
-  @@unique([cardId, key])
+  @@unique([cardId, key]) // Обязательно для связи в ClinicalRule
   @@index([cardId, order])
 }
 
@@ -174,19 +178,24 @@ model ClinicalRule {
   id                  Int              @id @default(autoincrement())
   cardId              Int
   card                ClinicalCard     @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  
+  // Связь с полем
   fieldKey            String
   field               ClinicalField    @relation(fields: [cardId, fieldKey], references: [cardId, key], onDelete: Cascade)
+  
   operator            String
   value               String
+  
+  // Связь с секцией
   highlightSectionKey String?
   section             ClinicalSection? @relation(fields: [cardId, highlightSectionKey], references: [cardId, key], onDelete: Cascade)
+  
   addHint             String?
   priority            Int              @default(50)
 
   @@index([cardId, priority])
 }
 
-// ЭТУ МОДЕЛЬ НУЖНО ДОБАВИТЬ:
 model ClinicalRevision {
   id           Int          @id @default(autoincrement())
   cardId       Int
@@ -195,11 +204,9 @@ model ClinicalRevision {
   editorUserId String?
   editorEmail  String?
   editorName   String?
-  action       String       // "create_card" | "full_sync" | "update_section"
+  action       String
   summary      String?
   payload      Json?
 
   @@index([cardId, createdAt])
-}
-  @@index([cardId, priority])
 }
