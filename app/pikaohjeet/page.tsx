@@ -4,8 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
 import {
   BookOpen, Search, Loader2, ChevronRight, Sparkles, Edit2, X, Save,
-  AlertTriangle, Info, CheckCircle2, History, Tag, Trash2, Plus, 
-  Settings, FileText, Zap, ChevronDown
+  AlertTriangle, CheckCircle2, Trash2, Plus, 
+  Settings, Zap
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 
@@ -110,7 +110,7 @@ export default function PikaohjeetPage() {
     try {
       const res = await fetch("/api/pikaohjeet", { cache: "no-store" });
       const data = await res.json();
-      setCards(data.sort((a: any, b: any) => a.title.localeCompare(b.title, "fi")));
+      setCards(Array.isArray(data) ? data.sort((a: any, b: any) => a.title.localeCompare(b.title, "fi")) : []);
       if (!activeSlug && data.length > 0) setActiveSlug(data[0].slug);
     } catch (e) { console.error(e); } finally { setLoadingList(false); }
   };
@@ -127,6 +127,27 @@ export default function PikaohjeetPage() {
         rules: [...(data.rules || [])]
       });
     } catch (e) { setCard(null); } finally { setLoadingCard(false); }
+  };
+
+  const handleCreateNew = async () => {
+    const title = prompt("Anna uuden kortin nimi (esim. Verenpaine):");
+    if (!title) return;
+
+    try {
+      const res = await fetch("/api/pikaohjeet", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Virhe luomisessa");
+      
+      await fetchCards();
+      setActiveSlug(data.slug);
+      setIsEditing(true);
+    } catch (e: any) {
+      alert(e.message);
+    }
   };
 
   const filteredCards = useMemo(() => {
@@ -172,7 +193,6 @@ export default function PikaohjeetPage() {
     } catch (e: any) { setSaveErr(e.message); } finally { setSaving(false); }
   };
 
-  // --- Render Helpers ---
   const renderFieldInput = (f: ClinicalField) => {
     const value = params[f.key];
     const inputBase = "w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-blue-500/10 font-medium text-sm transition-all";
@@ -213,7 +233,7 @@ export default function PikaohjeetPage() {
           <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-blue-100"><BookOpen size={20} /></div>
           <div>
             <h1 className="text-xl font-bold text-slate-800 tracking-tight">Pikaohjeet</h1>
-            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">Kliiniset kortit — terveysasema</p>
+            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">Kliiniset ohjekortit</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -225,6 +245,13 @@ export default function PikaohjeetPage() {
       <main className="flex-1 grid grid-cols-12 gap-6 min-h-0 overflow-hidden">
         {/* Left List */}
         <aside className="col-span-3 flex flex-col gap-4 min-h-0">
+          <button 
+            onClick={handleCreateNew}
+            className="w-full py-3 bg-blue-50 text-blue-600 border border-blue-200 border-dashed rounded-2xl font-bold text-xs uppercase tracking-widest hover:bg-blue-100 transition-all flex items-center justify-center gap-2"
+          >
+            <Plus size={16} /> Uusi pikaohje
+          </button>
+          
           <div className="relative">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
             <input placeholder="Etsi pikaohje..." className="w-full pl-11 pr-4 py-3 bg-white border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500/10 font-medium text-sm transition-all shadow-sm" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
@@ -244,7 +271,9 @@ export default function PikaohjeetPage() {
 
         {/* Right Content */}
         <section className="col-span-9 min-h-0">
-          {!card ? (
+          {loadingCard ? (
+            <div className="h-full flex items-center justify-center bg-white rounded-[2rem] border"><Loader2 className="animate-spin text-blue-500" /></div>
+          ) : !card ? (
             <div className="h-full bg-white rounded-[2rem] border border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-400 gap-3">
               <BookOpen size={48} strokeWidth={1} className="opacity-20" />
               <span className="font-semibold text-xs uppercase tracking-widest opacity-50">Valitse ohje listasta</span>
@@ -264,6 +293,7 @@ export default function PikaohjeetPage() {
                       {renderFieldInput(f)}
                     </div>
                   ))}
+                  {(!card.fields || card.fields.length === 0) && <p className="text-[10px] text-slate-400 text-center py-10">Ei määritettyjä parametreja</p>}
                 </div>
               </div>
 
@@ -299,14 +329,12 @@ export default function PikaohjeetPage() {
         </section>
       </main>
 
-      {/* Styles for scrollbar */}
       <style jsx global>{`.custom-scrollbar::-webkit-scrollbar { width: 5px; } .custom-scrollbar::-webkit-scrollbar-track { background: transparent; } .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; } .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #cbd5e1; }`}</style>
 
       {/* CMS MODAL */}
       {isEditing && card && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-6 animate-in fade-in">
           <div className="bg-white rounded-[2.5rem] shadow-2xl max-w-5xl w-full h-[90vh] flex flex-col overflow-hidden border">
-            {/* Modal Header */}
             <header className="p-6 bg-slate-900 text-white flex justify-between items-center shrink-0">
               <div className="flex items-center gap-6">
                 <span className="font-bold text-sm uppercase tracking-widest flex items-center gap-2"><Settings size={18}/> Muokkaa korttia</span>
@@ -320,7 +348,6 @@ export default function PikaohjeetPage() {
             </header>
 
             <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
-              {/* TAB: CONTENT */}
               {editTab === "content" && (
                 <div className="space-y-6">
                   {draft.sections.sort((a,b)=>a.order-b.order).map((s, idx) => (
@@ -349,7 +376,6 @@ export default function PikaohjeetPage() {
                 </div>
               )}
 
-              {/* TAB: FIELDS */}
               {editTab === "fields" && (
                 <div className="space-y-4">
                   {draft.fields.sort((a,b)=>a.order-b.order).map((f, idx) => (
@@ -391,7 +417,6 @@ export default function PikaohjeetPage() {
                 </div>
               )}
 
-              {/* TAB: RULES */}
               {editTab === "rules" && (
                 <div className="space-y-4">
                   {draft.rules.map((r, idx) => (
