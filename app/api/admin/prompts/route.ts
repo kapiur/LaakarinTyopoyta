@@ -24,3 +24,15 @@ export async function DELETE(req: Request) {
   await prisma.adminPrompt.delete({ where: { id } });
   return NextResponse.json({ success: true });
 }
+
+export async function PUT(req: Request) {
+  try {
+    const { id, label, content } = await req.json();
+    const updatedPrompt = await prisma.adminPrompt.update({
+      where: { id },
+      data: { label, content }
+    });
+    return NextResponse.json(updatedPrompt);
+  } catch (error) {
+    return NextResponse.json({ error: 'Update failed' }, { status: 500 });
+}
