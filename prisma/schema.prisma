@@ -210,3 +210,10 @@ model ClinicalRevision {
 
   @@index([cardId, createdAt])
 }
+
+model AdminPrompt {
+  id        String   @id @default(cuid())
+  label     String
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+}
