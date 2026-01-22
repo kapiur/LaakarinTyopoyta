@@ -1,67 +1,57 @@
 "use client";
-import { useState } from 'react';
-import { useSession } from "next-auth/react";
-import { redirect } from 'next/navigation';
+import { useState, useEffect } from 'react';
 import { 
-  Wand2, Save, Terminal, Copy, MessageSquare, 
-  Trash2, Plus, Zap, Stethoscope, FileSearch, GraduationCap 
+  Wand2, Plus, Settings2, Loader2, Trash2, 
+  Stethoscope, Zap, Copy, ClipboardList 
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 
 export default function AdminPromptsPage() {
-  const { data: session, status } = useSession();
-  
-  // 1. ЗАЩИТА: Замените на ваш email
-  const ADMIN_EMAIL = "jurii@kapustin.fi"; 
-
-  if (status === "unauthenticated" || (session?.user?.email !== ADMIN_EMAIL)) {
-    // redirect('/'); // Раскомментируйте для жесткой защиты
-  }
-
   const [text, setText] = useState('');
   const [result, setResult] = useState('');
   const [loading, setLoading] = useState(false);
+  const [prompts, setPrompts] = useState<any[]>([]);
+  const [showNewPromptForm, setShowNewPromptForm] = useState(false);
+  const [newPrompt, setNewPrompt] = useState({ label: '', content: '' });
 
-  // 2. ВАШИ ПЕРСОНАЛЬНЫЕ ПРОМПТЫ
-  const customPrompts = [
-    { 
-      id: 'epicrisis', 
-      label: 'Strukturoi Epikriisi', 
-      icon: <Stethoscope size={16} />,
-      prompt: "Strukturoi seuraava teksti selkeäksi epikriisiksi: Tulovaihe, Tutkimukset, Hoito ja kulku, Jatkosuunnitelma. Käytä lääketieteellistä kieltä." 
-    },
-    { 
-      id: 'patient_edu', 
-      label: 'Potilasohjeeksi', 
-      icon: <GraduationCap size={16} />,
-      prompt: "Muuta tämä lääketieteellinen teksti selkeäksi ja ymmärrettäväksi potilasohjeeksi. Vältä vaikeita termejä." 
-    },
-    { 
-      id: 'differential', 
-      label: 'Erotusdiagnostiikka', 
-      icon: <FileSearch size={16} />,
-      prompt: "Analysoi oireet ja löydökset. Listaa 3 todennäköisintä erotusdiagnostista vaihtoehtoa ja tarvittavat jatkotutkimukset." 
-    },
-    { 
-      id: 'english_pro', 
-      label: 'Проф. Английский', 
-      icon: <Zap size={16} />,
-      prompt: "Translate this medical text into professional English suitable for a scientific journal." 
-    }
-  ];
+  // Загрузка кнопок из БД
+  const fetchPrompts = async () => {
+    const res = await fetch('/api/admin/prompts');
+    const data = await res.json();
+    setPrompts(data);
+  };
 
-  const runPrompt = async (systemPrompt: string) => {
+  useEffect(() => { fetchPrompts(); }, []);
+
+  // Сохранение новой кнопки в БД
+  const addPrompt = async () => {
+    if (!newPrompt.label || !newPrompt.content) return;
+    await fetch('/api/admin/prompts', {
+      method: 'POST',
+      body: JSON.stringify(newPrompt),
+    });
+    setNewPrompt({ label: '', content: '' });
+    setShowNewPromptForm(false);
+    fetchPrompts();
+  };
+
+  // Удаление кнопки
+  const deletePrompt = async (id: string) => {
+    await fetch('/api/admin/prompts', {
+      method: 'DELETE',
+      body: JSON.stringify({ id }),
+    });
+    fetchPrompts();
+  };
+
+  const runPrompt = async (pContent: string) => {
     if (!text.trim() || loading) return;
     setLoading(true);
-
     try {
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          text: text, 
-          customPrompt: systemPrompt // Мы передадим это как инструкцию
-        }),
+        body: JSON.stringify({ text, customPrompt: pContent }),
       });
       const data = await response.json();
       setResult(data.content);
@@ -73,73 +63,94 @@ export default function AdminPromptsPage() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6 p-6 animate-in fade-in duration-500">
-      <header className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-3">
-            <Terminal className="text-blue-600" /> Admin Prompt Lab
-          </h1>
-          <p className="text-sm text-slate-500">Työkalut tekstin syvään analyysiin ja muotoiluun.</p>
+    <div className="max-w-[1400px] mx-auto p-6 space-y-8 animate-in fade-in duration-500">
+      {/* HEADER */}
+      <header className="flex items-center justify-between bg-white p-8 rounded-[2.5rem] border shadow-sm">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 bg-slate-900 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-slate-200">
+            <Settings2 size={24} />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-slate-800 tracking-tight">Prompt Lab</h1>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Database Sync Active</p>
+          </div>
         </div>
-        <div className="px-4 py-1.5 bg-amber-50 text-amber-700 rounded-full text-[10px] font-bold border border-amber-200 uppercase tracking-widest">
-          Personal Access Only
-        </div>
+        <button 
+          onClick={() => setShowNewPromptForm(!showNewPromptForm)}
+          className="bg-blue-600 text-white px-6 py-3 rounded-xl font-bold text-xs uppercase hover:bg-blue-700 transition-all shadow-lg shadow-blue-100 flex items-center gap-2"
+        >
+          <Plus size={16} /> Lisää uusi työkalu
+        </button>
       </header>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Input Area */}
-        <div className="space-y-4">
-          <textarea
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder="Liitä raaka teksti tähän..."
-            className="w-full h-[400px] p-6 bg-white border border-slate-200 rounded-[2rem] shadow-sm outline-none focus:ring-4 focus:ring-blue-500/5 transition-all resize-none font-mono text-sm"
-          />
-          
-          <div className="grid grid-cols-2 gap-3">
-            {customPrompts.map((p) => (
-              <button
-                key={p.id}
-                onClick={() => runPrompt(p.prompt)}
-                disabled={loading || !text}
-                className="flex items-center gap-3 p-4 bg-white border border-slate-200 rounded-2xl hover:border-blue-500 hover:bg-blue-50 transition-all text-left group"
-              >
-                <div className="w-8 h-8 bg-slate-100 rounded-lg flex items-center justify-center text-slate-600 group-hover:bg-blue-600 group-hover:text-white transition-colors">
-                  {p.icon}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        {/* КНОПКИ (ЛЕВАЯ ПАНЕЛЬ) */}
+        <div className="lg:col-span-4 space-y-6">
+          {showNewPromptForm && (
+            <div className="bg-blue-50 border border-blue-100 p-6 rounded-[2rem] space-y-4 animate-in slide-in-from-top-4">
+              <input 
+                placeholder="Napin nimi..." 
+                className="w-full p-3 bg-white border rounded-xl text-sm font-bold outline-none"
+                value={newPrompt.label}
+                onChange={e => setNewPrompt({...newPrompt, label: e.target.value})}
+              />
+              <textarea 
+                placeholder="System Prompt (Ohjeet)..." 
+                className="w-full h-32 p-3 bg-white border rounded-xl text-xs outline-none"
+                value={newPrompt.content}
+                onChange={e => setNewPrompt({...newPrompt, content: e.target.value})}
+              />
+              <button onClick={addPrompt} className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold text-[10px] uppercase tracking-widest">Tallenna tietokantaan</button>
+            </div>
+          )}
+
+          <div className="bg-white rounded-[2rem] border shadow-sm">
+            <div className="p-6 border-b bg-slate-50/50 flex items-center gap-2">
+              <span className="text-[10px] font-bold text-slate-500 uppercase">Tallennetut työkalut</span>
+            </div>
+            <div className="p-4 space-y-2">
+              {prompts.map((p) => (
+                <div key={p.id} className="group relative flex items-center gap-2">
+                  <button
+                    onClick={() => runPrompt(p.content)}
+                    disabled={loading || !text}
+                    className="flex-1 flex items-center gap-4 p-4 rounded-2xl hover:bg-blue-50 border border-transparent hover:border-blue-100 transition-all text-left"
+                  >
+                    <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center text-slate-500 group-hover:text-blue-600 group-hover:bg-white shadow-sm transition-all">
+                      <Zap size={16} />
+                    </div>
+                    <span className="text-sm font-bold text-slate-700">{p.label}</span>
+                  </button>
+                  <button 
+                    onClick={() => deletePrompt(p.id)}
+                    className="p-2 text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
+                  >
+                    <Trash2 size={16} />
+                  </button>
                 </div>
-                <span className="text-xs font-bold text-slate-700 uppercase tracking-tight">{p.label}</span>
-              </button>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
 
-        {/* Output Area */}
-        <div className="flex flex-col">
-          <div className="flex-1 bg-slate-900 rounded-[2rem] p-8 text-slate-300 overflow-auto shadow-2xl relative min-h-[500px]">
-            {loading && (
-              <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center rounded-[2rem] z-10">
-                <Loader2 className="animate-spin text-blue-500" size={32} />
+        {/* РАБОЧАЯ ОБЛАСТЬ (ЦЕНТР) */}
+        <div className="lg:col-span-8">
+          <div className="bg-white rounded-[2.5rem] border shadow-sm overflow-hidden flex flex-col min-h-[600px]">
+            <textarea
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              placeholder="Liitä käsiteltävä teksti tähän..."
+              className="w-full h-64 p-8 outline-none text-slate-700 border-b font-medium resize-none"
+            />
+            <div className="flex-1 p-8 bg-blue-50/10 relative">
+              {loading && (
+                <div className="absolute inset-0 bg-white/60 backdrop-blur-sm flex items-center justify-center z-10">
+                  <Loader2 className="animate-spin text-blue-600" size={32} />
+                </div>
+              )}
+              <div className="prose prose-sm max-w-none">
+                {result ? <ReactMarkdown>{result}</ReactMarkdown> : <span className="text-slate-400 italic">Tulos ilmestyy tähän...</span>}
               </div>
-            )}
-            
-            <div className="flex justify-between items-center mb-6">
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">AI Result</span>
-              {result && (
-                <button 
-                  onClick={() => {navigator.clipboard.writeText(result); alert("Kopioitu!");}}
-                  className="p-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-400 transition-colors"
-                >
-                  <Copy size={16} />
-                </button>
-              )}
-            </div>
-
-            <div className="prose prose-invert prose-sm max-w-none">
-              {result ? (
-                <ReactMarkdown>{result}</ReactMarkdown>
-              ) : (
-                <p className="text-slate-600 italic">Tulos ilmestyy tähän...</p>
-              )}
             </div>
           </div>
         </div>
@@ -147,7 +158,3 @@ export default function AdminPromptsPage() {
     </div>
   );
 }
-
-const Loader2 = ({ className, size }: { className?: string, size?: number }) => (
-  <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg>
-);
