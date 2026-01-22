@@ -5,66 +5,50 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// 1. Промпт для генерации шаблонов (существующий)
+// --- СТАНДАРТНЫЕ ПРОМПТЫ ---
 const SYSTEM_PROMPT_MALLI = `
 Ты — эксперт по медицинской документации. Твоя задача — превратить текст реальной записи врача в интерактивный шаблон для системы «Lääkärin Työpöytä», максимально сохраняя индивидуальный стиль автора.
 Правила:
 1. Сохраняй авторское построение предложений и терминологию.
 2. Используй синтаксис {{название}} для полей и {{название:select:вариант1,вариант2}} для списков.
-3. Пояснительный текст оставляй СНАРУЖИ скобок.
 `;
 
-// 2. Промпт для медицинских консультаций (существующий)
 const SYSTEM_PROMPT_MEDICAL = `
 Olet asiantunteva lääkärin avustaja. 
-Velvoitteesi:
-1. Tukeudu vastauksissasi yksinomaan virallisiin ja vahvistettuihin lääketieteellisiin lähteisiin (Terveyskirjasto, Käypä hoito).
-2. Sinun TÄYTYY mainita lähde vastauksen lopussa.
-3. Vastaa suomeksi, selkeästi ja ammattimaisesti.
+Tukeudu vastauksissasi virallisiin ja vahvistettuihin lääketieteellisiin lähteisiin.
+Vastaa suomeksi, selkeästi ja ammattimaisesti. Mainitse lähde vastauksen lopussa.
 `;
 
-// 3. НОВЫЕ ПРОМПТЫ ДЛЯ ТЕКСТОВОГО ИНСТРУМЕНТАРИЯ
 const PROMPTS_TOOLS: Record<string, string> = {
-  fix: `Ты — эксперт по финской медицинской документации. 
-        Задача: исправить ошибки в тексте (грамотность, падежи, мед. термины).
-        ПРАВИЛО АНОНИМИЗАЦИИ: Заменяй любые имена, даты рождения и HETU на [NIMI] или [HETU].
-        1. Сохраняй авторский стиль и ритм. 
-        2. Исправляй только ошибки.
-        3. Формат: Исправленный текст, затем раздел "Korjaukset:" с кратким списком правок.`,
-
-  translate: `Ты — медицинский переводчик. Переведи предоставленный текст на профессиональный финский язык.
-              ВАЖНОЕ ПРАВИЛО ВВОДА: Пользователь может писать запрос транслитерацией 
-              (латинскими буквами вместо кириллицы, например: "perevedi", "vyspiis", "diagnoz"). 
-              Ты ОБЯЗАН понимать такой ввод как русский язык и выполнять перевод на финский.
-
-              СТРОГОЕ ПРАВИЛО АНОНИМИЗАЦИИ: Заменяй все персональные данные на [X].
-              
-              Требования к результату:
-              1. Используй официальную финскую медицинскую терминологию.
-              2. Сохраняй структуру (Anamneesi, Status, Suunnitelma).
-              3. Стиль должен быть лаконичным (врачебным).`,
-
-  summarize: `Ты — врач-эксперт. Сделай краткое медицинское резюме (Tiivistelmä) на финском.
-              ПРАВИЛО АНОНИМИЗАЦИИ: Удали все личные данные.
-              Структура: Esitiedot, Löydökset, Diagnoosi/Arvio, Suunnitelma. Стиль лаконичный.`
+  fix: `Ты — эксперт по финской медицинской документации. Исправляй ошибки, анонимизируй данные [HETU]. Формат: Исправленный текст + раздел "Korjaukset:".`,
+  translate: `Ты — медицинский переводчик. Переводи на профессиональный финский. Понимай транслитерацию. Анонимизируй всё через [X].`,
+  summarize: `Ты — врач-эксперт. Сделай краткое медицинское резюме (Tiivistelmä) на финском. Структура: Esitiedot, Löydökset, Diagnoosi, Suunnitelma.`
 };
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { messages, text, mode } = body;
+    // Извлекаем сообщения для чата ИЛИ текст/режим/кастомный промпт для инструментов
+    const { messages, text, mode, customPrompt } = body;
 
-    let finalMessages = [];
+    let finalMessages: any[] = [];
 
-    // ЛОГИКА ОПРЕДЕЛЕНИЯ ЗАДАЧИ
-    if (text && mode && PROMPTS_TOOLS[mode]) {
-      // Работает новый инструмент (Fix/Translate/Summarize)
+    // 1. ПРИОРИТЕТ: Кастомный промпт из Admin Prompt Lab
+    if (customPrompt && text) {
+      finalMessages = [
+        { role: 'system', content: customPrompt },
+        { role: 'user', content: text }
+      ];
+    } 
+    // 2. ВТОРОЙ ПРИОРИТЕТ: Текстовый инструментарий (Fix/Translate/Summarize)
+    else if (text && mode && PROMPTS_TOOLS[mode]) {
       finalMessages = [
         { role: 'system', content: PROMPTS_TOOLS[mode] },
         { role: 'user', content: text }
       ];
-    } else if (messages) {
-      // Работает стандартный чат (Malli или Консультация)
+    } 
+    // 3. ТРЕТИЙ ПРИОРИТЕТ: Стандартный чат
+    else if (messages && messages.length > 0) {
       const lastMessage = messages[messages.length - 1].content;
       
       if (lastMessage.toLowerCase().startsWith('malli:')) {
@@ -72,16 +56,18 @@ export async function POST(req: Request) {
       } else {
         finalMessages = [{ role: 'system', content: SYSTEM_PROMPT_MEDICAL }, ...messages];
       }
+    } else {
+      return NextResponse.json({ error: 'Puuttuvat tiedot' }, { status: 400 });
     }
 
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o', // Обновлено для точности исправления текстов
+      model: 'gpt-4o', // Оставляем 4o для высокой точности
       messages: finalMessages,
-      temperature: 0.2,
+      temperature: 0.2, // Низкая температура для минимизации галлюцинаций
     });
 
     return NextResponse.json({ content: response.choices[0].message.content });
-  } catch (error) {
+  } catch (error: any) {
     console.error("AI Error:", error);
     return NextResponse.json({ error: 'AI-palvelinvirhe' }, { status: 500 });
   }
