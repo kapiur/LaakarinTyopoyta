@@ -8,21 +8,23 @@ import {
   Calculator, 
   Settings, 
   LogOut, 
-  User, 
-  Pill // Добавляем иконку таблетки
+  Pill,
+  Zap,
+  Terminal // Иконка для секретной лаборатории
 } from "lucide-react";
 
 export default function Sidebar() {
   const pathname = usePathname();
   const { data: session } = useSession();
 
-  // Не показываем меню на странице логина
   if (pathname === '/login') return null;
 
+  // Основные навигационные элементы
   const navItems = [
     { href: "/", label: "Pääsivu", icon: LayoutDashboard },
     { href: "/templates", label: "Mallit", icon: FileText },
-    { href: "/medicines", label: "Lääkkeet", icon: Pill }, // НОВЫЙ ПУНКТ
+    { href: "/pikaohjeet", label: "Pikaohjeet", icon: Zap }, // НОВЫЙ ПУНКТ
+    { href: "/medicines", label: "Lääkkeet", icon: Pill },
     { href: "/calculators", label: "Laskurit", icon: Calculator },
   ];
 
@@ -74,6 +76,17 @@ export default function Sidebar() {
           <LogOut size={20} className="group-hover:translate-x-1 transition-transform" />
           <span className="text-sm">Kirjaudu ulos</span>
         </button>
+
+        {/* СЕКРЕТНАЯ КНОПКА (PROMPT LAB) */}
+        <div className="pt-4 mt-2 border-t border-slate-50 flex justify-center">
+          <Link 
+            href="/admin/prompts" 
+            className="flex items-center gap-1.5 text-[9px] font-bold text-slate-200 hover:text-slate-400 transition-colors uppercase tracking-[0.2em] group"
+          >
+            <Terminal size={10} className="opacity-50 group-hover:opacity-100" />
+            <span>Lab v0.8.2</span>
+          </Link>
+        </div>
       </div>
     </aside>
   );
