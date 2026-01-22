@@ -3,28 +3,32 @@ import { NextResponse } from 'next/server';
 
 const prisma = new PrismaClient();
 
+// GET: Получение всех промптов
 export async function GET() {
-  const prompts = await prisma.adminPrompt.findMany({
-    orderBy: { createdAt: 'asc' }
-  });
-  return NextResponse.json(prompts);
+  try {
+    const prompts = await prisma.adminPrompt.findMany({
+      orderBy: { createdAt: 'asc' }
+    });
+    return NextResponse.json(prompts);
+  } catch (error) {
+    return NextResponse.json({ error: 'Haku epäonnistui' }, { status: 500 });
+  }
 }
 
+// POST: Создание нового промпта
 export async function POST(req: Request) {
-  const { label, content } = await req.json();
-  const newPrompt = await prisma.adminPrompt.create({
-    data: { label, content }
-  });
-  return NextResponse.json(newPrompt);
+  try {
+    const { label, content } = await req.json();
+    const newPrompt = await prisma.adminPrompt.create({
+      data: { label, content }
+    });
+    return NextResponse.json(newPrompt);
+  } catch (error) {
+    return NextResponse.json({ error: 'Luominen epäonnistui' }, { status: 500 });
+  }
 }
 
-// Добавьте этот метод, если захотите удалять кнопки
-export async function DELETE(req: Request) {
-  const { id } = await req.json();
-  await prisma.adminPrompt.delete({ where: { id } });
-  return NextResponse.json({ success: true });
-}
-
+// PUT: Обновление существующего промпта
 export async function PUT(req: Request) {
   try {
     const { id, label, content } = await req.json();
@@ -34,5 +38,17 @@ export async function PUT(req: Request) {
     });
     return NextResponse.json(updatedPrompt);
   } catch (error) {
-    return NextResponse.json({ error: 'Update failed' }, { status: 500 });
+    return NextResponse.json({ error: 'Päivitys epäonnistui' }, { status: 500 });
+  }
+}
+
+// DELETE: Удаление промпта
+export async function DELETE(req: Request) {
+  try {
+    const { id } = await req.json();
+    await prisma.adminPrompt.delete({ where: { id } });
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    return NextResponse.json({ error: 'Poisto epäonnistui' }, { status: 500 });
+  }
 }
