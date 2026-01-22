@@ -114,84 +114,92 @@ model Package {
 
   @@index([medicineId])
 }
-// --- НОВЫЙ МОДУЛЬ: KLIINISET PIKAOHJEET (общие для всех пользователей + аудит правок) ---
+// --- НОВЫЙ МОДУЛЬ: KLIINISET PIKAOHJEET ---
 
 model ClinicalCard {
-  id          Int      @id @default(autoincrement())
-  slug        String   @unique
-  title       String
-  subtitle    String?
-  environment String   @default("terveysasema")
-  audience    String   @default("aikuinen")
-  tags        String[] @default([])
-  isPublished Boolean  @default(true)
-
-  // Audit: last edit
-  updatedAt       DateTime @updatedAt
-  createdAt       DateTime @default(now())
+  id              Int                @id @default(autoincrement())
+  slug            String             @unique
+  title           String
+  subtitle        String?
+  environment     String             @default("terveysasema")
+  audience        String             @default("aikuinen")
+  tags            String[]           @default([])
+  isPublished     Boolean            @default(true)
+  updatedAt       DateTime           @updatedAt
+  createdAt       DateTime           @default(now())
   updatedByUserId String?
   updatedByEmail  String?
   updatedByName   String?
 
-  sections  ClinicalSection[]
-  fields    ClinicalField[]
-  rules     ClinicalRule[]
-  revisions ClinicalRevision[]
+  sections        ClinicalSection[]
+  fields          ClinicalField[]
+  rules           ClinicalRule[]
+  revisions       ClinicalRevision[] // Это поле вызывало ошибку, так как не было модели ниже
 }
 
 model ClinicalSection {
-  id        Int          @id @default(autoincrement())
-  cardId    Int
-  card      ClinicalCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
-
-  key       String
-  title     String
-  order     Int          @default(0)
-  content   String       @db.Text
+  id               Int            @id @default(autoincrement())
+  cardId           Int
+  card             ClinicalCard   @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  key              String
+  title            String
+  order            Int            @default(0)
+  content          String         @db.Text
   highlightCallout String?
-  rules ClinicalRule[] // Правила, которые подсвечивают эту секцию
+  rules            ClinicalRule[]
 
   @@unique([cardId, key])
   @@index([cardId, order])
 }
 
 model ClinicalField {
-  id          Int          @id @default(autoincrement())
+  id          Int            @id @default(autoincrement())
   cardId      Int
-  card        ClinicalCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
-
+  card        ClinicalCard   @relation(fields: [cardId], references: [id], onDelete: Cascade)
   key         String
   label       String
-  type        String       // "number" | "select" | "boolean"
+  type        String
   unit        String?
   placeholder String?
-  options     String[]     @default([])
-  order       Int          @default(0)
-  isUniversal Boolean      @default(false)
-  rules ClinicalRule[] // Правила, которые зависят от этого поля
+  options     String[]       @default([])
+  order       Int            @default(0)
+  isUniversal Boolean        @default(false)
+  rules       ClinicalRule[]
 
   @@unique([cardId, key])
   @@index([cardId, order])
 }
 
 model ClinicalRule {
-  id        Int          @id @default(autoincrement())
-  cardId    Int
-  card      ClinicalCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
-
-  // Связь с полем: если поле удаляется, правило тоже должно исчезнуть
-  fieldKey  String
-  field     ClinicalField @relation(fields: [cardId, fieldKey], references: [cardId, key], onDelete: Cascade)
-
-  operator  String       // "<" | "<=" | ">" | ">=" | "==" | "!=" | "truthy"
-  value     String
-
-  // Связь с секцией: если секция удаляется, правило (или ссылка на подсветку) очищается
+  id                  Int              @id @default(autoincrement())
+  cardId              Int
+  card                ClinicalCard     @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  fieldKey            String
+  field               ClinicalField    @relation(fields: [cardId, fieldKey], references: [cardId, key], onDelete: Cascade)
+  operator            String
+  value               String
   highlightSectionKey String?
   section             ClinicalSection? @relation(fields: [cardId, highlightSectionKey], references: [cardId, key], onDelete: Cascade)
-  
   addHint             String?
-  priority            Int          @default(50)
+  priority            Int              @default(50)
 
+  @@index([cardId, priority])
+}
+
+// ЭТУ МОДЕЛЬ НУЖНО ДОБАВИТЬ:
+model ClinicalRevision {
+  id           Int          @id @default(autoincrement())
+  cardId       Int
+  card         ClinicalCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  createdAt    DateTime     @default(now())
+  editorUserId String?
+  editorEmail  String?
+  editorName   String?
+  action       String       // "create_card" | "full_sync" | "update_section"
+  summary      String?
+  payload      Json?
+
+  @@index([cardId, createdAt])
+}
   @@index([cardId, priority])
 }
