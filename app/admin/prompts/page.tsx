@@ -12,7 +12,7 @@ export default function AdminPromptsPage() {
   const { data: session, status } = useSession();
   
   // 1. ЗАЩИТА: Замените на ваш email
-  const ADMIN_EMAIL = "your-email@example.com"; 
+  const ADMIN_EMAIL = "jurii@kapustin.fi"; 
 
   if (status === "unauthenticated" || (session?.user?.email !== ADMIN_EMAIL)) {
     // redirect('/'); // Раскомментируйте для жесткой защиты
