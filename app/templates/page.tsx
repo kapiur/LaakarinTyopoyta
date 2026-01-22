@@ -4,9 +4,8 @@ import { useSession } from "next-auth/react";
 import { 
   Plus, Search, Trash2, ChevronRight, 
   Copy, Loader2, X, Edit2, Bot, Sparkles, Wand2, HelpCircle, 
-  FileText, Layout, MessageSquare
+  FileText, Layout, MessageSquare, Share2
 } from 'lucide-react';
-import ReactMarkdown from 'react-markdown';
 
 export default function TemplatesPage() {
   const { data: session } = useSession();
@@ -20,6 +19,13 @@ export default function TemplatesPage() {
   const [copied, setCopied] = useState(false);
   const [templateValues, setTemplateValues] = useState<Record<string, string>>({});
 
+  // Состояния для Share
+  const [isSharing, setIsSharing] = useState(false);
+  const [shareEmail, setShareEmail] = useState('');
+  const [shareLoading, setShareLoading] = useState(false);
+  const [sharingType, setSharingType] = useState<'template' | 'category'>('template');
+
+  // AI состояния
   const [isChecking, setIsChecking] = useState(false);
   const [aiFixedText, setAiFixedText] = useState<string | null>(null);
   const [isGeneratingMalli, setIsGeneratingMalli] = useState(false);
@@ -48,6 +54,35 @@ export default function TemplatesPage() {
     } catch (err) { console.error(err); } finally { setLoading(false); }
   };
 
+  const handleShare = async () => {
+    if (!shareEmail.trim()) return;
+    setShareLoading(true);
+    try {
+      // Если делимся категорией, отправляем запрос для каждого шаблона в ней
+      // В идеале лучше сделать отдельный API роут для категорий, 
+      // но для восстановления используем существующий роут share
+      const templatesToShare = sharingType === 'category' 
+        ? categories.find(c => c.id === activeCategoryId)?.templates || []
+        : [selectedTemplate];
+
+      for (const t of templatesToShare) {
+        await fetch('/api/templates/share', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ templateId: t.id, targetEmail: shareEmail.toLowerCase().trim() }),
+        });
+      }
+      
+      alert(sharingType === 'category' ? "Koko kategoria jaettu!" : "Malli jaettu!");
+      setIsSharing(false);
+      setShareEmail('');
+    } catch (err) {
+      alert("Jakamisvirhe");
+    } finally {
+      setShareLoading(false);
+    }
+  };
+
   const handleDeleteTemplate = async (id: number, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!confirm("Haluatko varmasti poistaa tämän mallin?")) return;
@@ -73,8 +108,7 @@ export default function TemplatesPage() {
 
   const anonymize = (text: string) => {
     const hetuRegex = /\b\d{6}[-+ABCDEF]\d{3}[0-9A-Z]\b/gi;
-    const phoneRegex = /\b(04\d|050)\s?\d{3}\s?\d{3,4}\b/g;
-    return text.replace(hetuRegex, '[HETU]').replace(phoneRegex, '[TEL]');
+    return text.replace(hetuRegex, '[HETU]');
   };
 
   const handleGenerateMalli = async () => {
@@ -193,43 +227,49 @@ export default function TemplatesPage() {
   const displayedTemplates = activeCategory?.templates || [];
 
   return (
-    <div className="max-w-[1600px] mx-auto h-[calc(100vh-100px)] flex flex-col gap-4 p-4 text-slate-900 font-sans relative animate-in fade-in duration-700">
+    <div className="max-w-[1600px] mx-auto h-[calc(100vh-100px)] flex flex-col gap-4 p-4 text-slate-900 font-sans relative animate-in fade-in duration-500">
       
-  {/* HEADER */}
-<div className="flex items-center justify-between bg-white p-6 rounded-[2.5rem] border shadow-sm flex-shrink-0">
-  <div className="flex items-center gap-4">
-    <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-blue-100">
-      <Layout size={24} />
-    </div>
-    <div>
-      {/* Убираем font-black, uppercase и italic. Ставим font-bold и нормальный регистр */}
-      <h1 className="text-2xl font-bold text-slate-800 tracking-tight">Tekstimallit</h1>
-      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Smart Documentation Hub</p>
-    </div>
-  </div>
-  <button 
-    onClick={() => { setIsAdding(true); setIsEditing(false); setSelectedTemplate(null); setFormData({id:null, title:'', content:'', categoryName:'', author:''}); }}
-    // Делаем кнопку синей, как в Pikaohjeet (Muokkaa), но с вашим текстом
-    className="bg-blue-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-blue-700 shadow-lg shadow-blue-100 transition-all active:scale-95 flex items-center gap-2 text-sm"
-  >
-    <Plus size={18} /> Uusi malli
-  </button>
-</div>
+      {/* HEADER */}
+      <div className="flex items-center justify-between bg-white p-6 rounded-[2.5rem] border shadow-sm flex-shrink-0">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-blue-100">
+            <Layout size={24} />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-slate-800 tracking-tight">Tekstimallit</h1>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Hallinta ja generointi</p>
+          </div>
+        </div>
+        <button 
+          onClick={() => { setIsAdding(true); setIsEditing(false); setSelectedTemplate(null); setFormData({id:null, title:'', content:'', categoryName:'', author:''}); }}
+          className="bg-blue-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-blue-700 shadow-lg shadow-blue-100 transition-all active:scale-95 flex items-center gap-2 text-sm"
+        >
+          <Plus size={18} /> Uusi malli
+        </button>
+      </div>
 
       {/* CATEGORIES */}
       <div className="flex bg-white p-2 rounded-2xl border shadow-sm overflow-x-auto no-scrollbar gap-2 flex-shrink-0 items-center">
         {categories.map(cat => (
           <div key={cat.id} className="relative group/cat">
             <button onClick={() => { setActiveCategoryId(cat.id); setSelectedTemplate(null); setIsAdding(false); setIsEditing(false); setAiFixedText(null); }}
-              className={`px-6 py-3 rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all min-w-[140px] pr-8 ${activeCategoryId === cat.id ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-50'}`}>
+              className={`px-6 py-3 rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all min-w-[140px] pr-12 ${activeCategoryId === cat.id ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-50'}`}>
               {cat.name}
             </button>
-            <button 
-              onClick={(e) => { e.stopPropagation(); handleDeleteCategory(cat.id); }}
-              className={`absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-md transition-all ${activeCategoryId === cat.id ? 'text-white/50 hover:text-white' : 'text-slate-300 hover:text-red-500 opacity-0 group-hover/cat:opacity-100'}`}
-            >
-              <Trash2 size={12} />
-            </button>
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover/cat:opacity-100 transition-all">
+               <button 
+                onClick={(e) => { e.stopPropagation(); setSharingType('category'); setActiveCategoryId(cat.id); setIsSharing(true); }}
+                className={`p-1 rounded-md ${activeCategoryId === cat.id ? 'text-white/50 hover:text-white' : 'text-slate-300 hover:text-blue-500'}`}
+              >
+                <Share2 size={12} />
+              </button>
+              <button 
+                onClick={(e) => { e.stopPropagation(); handleDeleteCategory(cat.id); }}
+                className={`p-1 rounded-md ${activeCategoryId === cat.id ? 'text-white/50 hover:text-white' : 'text-slate-300 hover:text-red-500'}`}
+              >
+                <Trash2 size={12} />
+              </button>
+            </div>
           </div>
         ))}
       </div>
@@ -241,12 +281,12 @@ export default function TemplatesPage() {
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-blue-500 transition-colors" size={16} />
             <input 
               placeholder="Etsi malleja..." 
-              className="w-full pl-12 pr-4 py-4 bg-white border border-slate-100 rounded-2xl outline-none focus:ring-4 focus:ring-blue-500/5 font-bold text-sm transition-all" 
+              className="w-full pl-12 pr-4 py-4 bg-white border border-slate-100 rounded-2xl outline-none focus:ring-4 focus:ring-blue-500/5 font-bold text-sm transition-all shadow-sm" 
               value={searchTerm} 
               onChange={(e) => setSearchTerm(e.target.value)} 
             />
           </div>
-          <div className="flex-1 overflow-y-auto space-y-2 no-scrollbar pr-1">
+          <div className="flex-1 overflow-y-auto space-y-2 no-scrollbar">
             {loading ? (
               <div className="flex justify-center py-10"><Loader2 className="animate-spin text-blue-500" /></div>
             ) : displayedTemplates.map((t: any) => (
@@ -255,7 +295,7 @@ export default function TemplatesPage() {
                   onClick={() => { setSelectedTemplate(t); setIsAdding(false); setIsEditing(false); setAiFixedText(null); }} 
                   className={`w-full text-left p-4 rounded-2xl border transition-all relative overflow-hidden pr-12 ${selectedTemplate?.id === t.id ? 'bg-blue-600 text-white border-blue-600 shadow-lg' : 'bg-white border-slate-50 hover:border-blue-200'}`}
                 >
-                  <span className="font-bold text-xs truncate block relative z-10 uppercase tracking-tight">{t.title}</span>
+                  <span className="font-bold text-xs truncate block relative z-10">{t.title}</span>
                   <ChevronRight size={14} className={`absolute right-4 top-1/2 -translate-y-1/2 transition-all ${selectedTemplate?.id === t.id ? 'translate-x-0 opacity-100' : 'translate-x-2 opacity-0'}`} />
                 </button>
                 <button 
@@ -272,20 +312,20 @@ export default function TemplatesPage() {
         {/* WORK AREA */}
         <div className="col-span-9 min-h-0">
           {(isAdding || isEditing) ? (
-            <div className="bg-white h-full rounded-[3rem] border shadow-sm flex flex-col overflow-hidden animate-in slide-in-from-right-8 duration-500">
+            <div className="bg-white h-full rounded-[3rem] border shadow-sm flex flex-col overflow-hidden animate-in slide-in-from-right-8">
               <div className="p-8 border-b flex justify-between items-center bg-slate-50/20">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center text-blue-600">
                     <Edit2 size={18} />
                   </div>
-                  <h2 className="text-lg font-black uppercase tracking-tight text-slate-800">{isEditing ? 'Muokkaa mallia' : 'Luo uusi malli'}</h2>
+                  <h2 className="text-lg font-bold text-slate-800">{isEditing ? 'Muokkaa mallia' : 'Luo uusi malli'}</h2>
                 </div>
                 <div className="flex gap-3">
                   <button onClick={() => setShowHelp(true)} className="p-3 text-slate-300 hover:text-blue-600 transition-colors"><HelpCircle size={20} /></button>
                   <button 
                     onClick={handleGenerateMalli}
                     disabled={isGeneratingMalli || !formData.content}
-                    className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-700 transition-all disabled:opacity-50 shadow-lg shadow-blue-100"
+                    className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-100 disabled:opacity-50"
                   >
                     {isGeneratingMalli ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />}
                     AI-Rakenne
@@ -297,33 +337,33 @@ export default function TemplatesPage() {
                 <div className="grid grid-cols-2 gap-8">
                   <div className="space-y-2">
                     <label className="text-[9px] font-black text-slate-400 ml-4 uppercase tracking-[0.2em]">Mallin Otsikko</label>
-                    <input className="w-full p-4 bg-slate-50 border-none rounded-2xl outline-none focus:bg-white focus:ring-4 focus:ring-blue-500/5 font-bold transition-all" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} />
+                    <input className="w-full p-4 bg-slate-50 border-none rounded-2xl outline-none focus:bg-white focus:ring-4 focus:ring-blue-500/5 font-bold transition-all shadow-inner" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} />
                   </div>
                   <div className="space-y-2">
                     <label className="text-[9px] font-black text-slate-400 ml-4 uppercase tracking-[0.2em]">Kategoria</label>
-                    <input className="w-full p-4 bg-slate-50 border-none rounded-2xl outline-none focus:bg-white focus:ring-4 focus:ring-blue-500/5 font-bold transition-all" value={formData.categoryName} onChange={e => setFormData({...formData, categoryName: e.target.value})} />
+                    <input className="w-full p-4 bg-slate-50 border-none rounded-2xl outline-none focus:bg-white focus:ring-4 focus:ring-blue-500/5 font-bold transition-all shadow-inner" value={formData.categoryName} onChange={e => setFormData({...formData, categoryName: e.target.value})} />
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[9px] font-black text-blue-600 uppercase ml-4 flex items-center gap-2 tracking-[0.2em]"><Bot size={14}/> Rakenne & Muuttujat</label>
+                  <label className="text-[9px] font-black text-blue-600 uppercase ml-4 flex items-center gap-2 tracking-[0.2em]"><Bot size={14}/> Sisältö & Muuttujat</label>
                   <textarea 
-                    className="w-full p-8 bg-slate-50 border-none rounded-[2.5rem] font-mono text-sm min-h-[400px] outline-none focus:bg-white focus:ring-8 focus:ring-blue-500/5 transition-all leading-relaxed shadow-inner overflow-hidden" 
+                    className="w-full p-8 bg-slate-50 border-none rounded-[2.5rem] font-mono text-sm min-h-[400px] outline-none focus:bg-white focus:ring-8 focus:ring-blue-500/5 transition-all leading-relaxed shadow-inner" 
                     value={formData.content} 
                     onChange={e => setFormData({...formData, content: e.target.value})} 
                   />
                 </div>
-                <button onClick={handleSave} className="w-full py-5 bg-slate-900 text-white rounded-[2rem] font-black uppercase tracking-[0.25em] shadow-2xl shadow-slate-200 hover:bg-black transition-all text-[11px] active:scale-[0.99]">Tallenna Järjestelmään</button>
+                <button onClick={handleSave} className="w-full py-5 bg-slate-900 text-white rounded-[2rem] font-black uppercase tracking-[0.2em] shadow-xl shadow-slate-200 hover:bg-black transition-all text-[11px]">Tallenna Järjestelmään</button>
               </div>
             </div>
           ) : selectedTemplate ? (
             <div className="grid grid-cols-12 h-full gap-6">
               <div className="col-span-5 bg-white rounded-[3rem] border shadow-sm flex flex-col overflow-hidden">
                 <div className="p-6 border-b bg-slate-50/20 flex justify-between items-center">
-                  <div className="flex items-center gap-2">
-                    <MessageSquare size={14} className="text-slate-300" />
-                    <span className="font-black text-slate-400 uppercase text-[9px] tracking-[0.2em]">Määritä parametrit</span>
+                  <div className="flex items-center gap-2 text-slate-400">
+                    <MessageSquare size={14} />
+                    <span className="font-black uppercase text-[9px] tracking-[0.2em]">Parametrit</span>
                   </div>
-                  <button onClick={() => startEditing(selectedTemplate)} className="p-2.5 text-slate-300 hover:text-blue-600 transition-all bg-white rounded-xl border border-slate-50 shadow-sm"><Edit2 size={16} /></button>
+                  <button onClick={() => startEditing(selectedTemplate)} className="p-2.5 text-slate-300 hover:text-blue-600 transition-all bg-white rounded-xl border border-slate-100 shadow-sm"><Edit2 size={16} /></button>
                 </div>
                 <div className="p-8 flex-1 overflow-y-auto no-scrollbar space-y-8">
                   {parseTemplate(selectedTemplate.content).filter(p => p.type !== 'text').map((part, idx) => {
@@ -340,13 +380,13 @@ export default function TemplatesPage() {
                           <div className="flex flex-wrap gap-2">
                             {part.options.map((opt: any) => (
                               <button key={opt} onClick={() => { setTemplateValues(prev => ({ ...prev, [part.id]: opt })); setAiFixedText(null); }} 
-                                className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-tight border transition-all ${templateValues[part.id] === opt ? 'bg-slate-900 text-white border-slate-900 shadow-lg' : 'bg-slate-50 border-slate-100 text-slate-400 hover:border-blue-300 hover:bg-white'}`}>
+                                className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase border transition-all ${templateValues[part.id] === opt ? 'bg-slate-900 text-white border-slate-900 shadow-lg' : 'bg-slate-50 border-slate-100 text-slate-400 hover:border-blue-300 hover:bg-white'}`}>
                                 {opt}
                               </button>
                             ))}
                           </div>
                         ) : (
-                          <input className="p-4 bg-slate-50 border-none rounded-2xl outline-none focus:bg-white focus:ring-4 focus:ring-blue-500/5 font-bold text-sm transition-all" value={templateValues[part.id] || ''} onChange={(e) => { setTemplateValues(prev => ({ ...prev, [part.id]: e.target.value })); setAiFixedText(null); }} />
+                          <input className="p-4 bg-slate-50 border-none rounded-2xl outline-none focus:bg-white focus:ring-4 focus:ring-blue-500/5 font-bold text-sm transition-all shadow-inner" value={templateValues[part.id] || ''} onChange={(e) => { setTemplateValues(prev => ({ ...prev, [part.id]: e.target.value })); setAiFixedText(null); }} />
                         )}
                       </div>
                     );
@@ -358,9 +398,14 @@ export default function TemplatesPage() {
                 <div className="p-6 border-b border-blue-50 flex justify-between items-center bg-white/40 backdrop-blur-md">
                   <div className="flex items-center gap-2">
                     <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-                    <span className="text-slate-400 text-[9px] font-black uppercase tracking-[0.2em]">Dokumentaatio</span>
+                    <span className="text-slate-400 text-[9px] font-black uppercase tracking-[0.2em]">Tulos</span>
                   </div>
                   <div className="flex gap-2">
+                    {/* Кнопка Share для шаблона */}
+                    <button onClick={() => { setSharingType('template'); setIsSharing(true); }}
+                      className="px-5 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 text-[9px] font-black tracking-widest uppercase transition-all hover:bg-slate-50 flex items-center gap-2 shadow-sm">
+                      <Share2 size={12} /> Jaa
+                    </button>
                     <button onClick={handleAICheck} disabled={isChecking || !generateFinalText}
                       className={`px-5 py-2.5 rounded-xl text-[9px] font-black tracking-widest uppercase transition-all flex items-center gap-2 shadow-sm ${aiFixedText ? 'bg-blue-600 text-white' : 'bg-white text-blue-600 border-blue-100 hover:bg-blue-50'}`}>
                       {isChecking ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
@@ -371,20 +416,20 @@ export default function TemplatesPage() {
                     </button>
                   </div>
                 </div>
-                <div className="p-12 flex-1 overflow-y-auto text-slate-800 font-sans text-lg leading-relaxed whitespace-pre-wrap no-scrollbar font-medium">
+                <div className="p-12 flex-1 overflow-y-auto text-slate-800 font-sans text-lg leading-relaxed whitespace-pre-wrap no-scrollbar">
                   {isChecking ? (
-                    <div className="flex flex-col items-center justify-center h-full gap-4 text-blue-400 animate-pulse">
+                    <div className="flex flex-col items-center justify-center h-full gap-4 text-blue-300 animate-pulse">
                       <Bot size={48} strokeWidth={1} />
-                      <span className="text-[10px] font-black uppercase tracking-widest">Muotoillaan kliinistä tekstiä...</span>
+                      <span className="text-[10px] font-black uppercase tracking-widest">Hiotaan tekstiä...</span>
                     </div>
                   ) : (
-                    generateFinalText || <span className="text-slate-200 italic font-light">Täytä parametrit vasemmalta...</span>
+                    generateFinalText || <span className="text-slate-200 italic font-light">Määritä parametrit...</span>
                   )}
                 </div>
                 {aiFixedText && (
-                  <div className="absolute bottom-10 left-10 right-10 p-5 bg-white border border-blue-100 rounded-[2rem] shadow-2xl animate-in slide-in-from-bottom-6 duration-500 flex items-center gap-4">
+                  <div className="absolute bottom-10 left-10 right-10 p-5 bg-white border border-blue-100 rounded-[2rem] shadow-2xl flex items-center gap-4 animate-in slide-in-from-bottom-6">
                     <div className="w-10 h-10 bg-blue-600 rounded-2xl flex items-center justify-center text-white shrink-0"><Bot size={18} /></div>
-                    <span className="text-[10px] font-bold text-blue-800 uppercase tracking-tight leading-tight">AI on optimoinut tekstin kliinisen standardin mukaiseksi.</span>
+                    <span className="text-[10px] font-bold text-blue-800 uppercase tracking-tight">AI on optimoinut tekstin kliiniseen muotoon.</span>
                   </div>
                 )}
               </div>
@@ -398,21 +443,62 @@ export default function TemplatesPage() {
         </div>
       </div>
 
+      {/* SHARE MODAL */}
+      {isSharing && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/40 backdrop-blur-md p-4 animate-in fade-in duration-300">
+          <div className="bg-white rounded-[3rem] shadow-2xl max-w-md w-full overflow-hidden border">
+            <div className="p-8 border-b bg-slate-900 flex justify-between items-center text-white">
+              <div className="flex items-center gap-3 font-black uppercase text-xs tracking-widest">
+                <Share2 size={18} /> {sharingType === 'category' ? 'Jaa kategoria' : 'Jaa malli'}
+              </div>
+              <button onClick={() => setIsSharing(false)} className="p-2 hover:bg-white/20 rounded-full transition-colors"><X size={20} /></button>
+            </div>
+            <div className="p-10 space-y-6">
+              <div className="space-y-2">
+                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-4">Vastaanottajan sähköposti</label>
+                <input 
+                  type="email"
+                  placeholder="matti.meikalainen@terveys.fi"
+                  className="w-full p-4 bg-slate-50 border-none rounded-2xl outline-none focus:ring-4 focus:ring-blue-500/5 font-bold transition-all shadow-inner"
+                  value={shareEmail}
+                  onChange={(e) => setShareEmail(e.target.value)}
+                />
+              </div>
+              <p className="text-[10px] text-slate-400 italic px-4 leading-relaxed">
+                {sharingType === 'category' 
+                  ? "Kaikki tämän kategorian mallit kopioidaan toisen käyttäjän tilille." 
+                  : "Tämä malli kopioidaan suoraan toisen käyttäjän vastaavaan kategoriaan."}
+              </p>
+            </div>
+            <div className="p-8 bg-slate-50 border-t flex gap-3 justify-end">
+              <button onClick={() => setIsSharing(false)} className="px-6 py-4 text-slate-400 font-black uppercase tracking-widest text-[10px]">Peruuta</button>
+              <button 
+                onClick={handleShare}
+                disabled={shareLoading || !shareEmail}
+                className="px-10 py-4 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 transition-all text-[10px] shadow-lg shadow-blue-100 disabled:opacity-50"
+              >
+                {shareLoading ? <Loader2 size={14} className="animate-spin" /> : 'Lähetä'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* HELP MODAL */}
       {showHelp && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-md p-4 animate-in fade-in duration-300">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-md p-4 animate-in fade-in">
           <div className="bg-white rounded-[3rem] shadow-2xl max-w-lg w-full overflow-hidden border">
             <div className="p-8 border-b bg-slate-900 flex justify-between items-center text-white">
               <div className="flex items-center gap-3 font-black uppercase text-xs tracking-widest"><Sparkles size={18} /> AI Rakenneohje</div>
               <button onClick={() => setShowHelp(false)} className="p-2 hover:bg-white/20 rounded-full transition-colors"><X size={20} /></button>
             </div>
-            <div className="p-10 space-y-6 text-xs text-slate-500 leading-relaxed">
-              <p className="font-bold">AI osaa rakentaa dynaamisia tekstimalleja sekunneissa.</p>
-              <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100 font-mono text-[10px] space-y-3">
-                 <div className="text-blue-600 font-black uppercase text-[8px]">Käytä näin:</div>
+            <div className="p-10 space-y-6 text-xs text-slate-500 leading-relaxed font-medium">
+              <p>AI osaa rakentaa dynaamisia tekstimalleja sekunneissa vapaasta tekstistä.</p>
+              <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100 font-mono text-[10px] space-y-3 shadow-inner">
+                 <div className="text-blue-600 font-black uppercase text-[8px]">Esimerkki:</div>
                  <div className="text-slate-700 italic">"Potilas tajuissaan, vatsa pehmeä."</div>
-                 <div className="pt-2 text-slate-400">--- Результат ---</div>
-                 <div className="text-slate-800">"Potilas {"{{taju:select:tajuissaan,unelias}}"}. Vatsa {"{{vatsa:select:pehmeä,arka}}"}. "</div>
+                 <div className="text-slate-800 pt-2 font-bold">AI luo automaattisesti valinnat:</div>
+                 <div className="text-blue-800">"Potilas {"{{taju:select:tajuissaan,unelias}}"}. Vatsa {"{{vatsa:select:pehmeä,arka}}"}. "</div>
               </div>
             </div>
             <div className="p-8 bg-slate-50 border-t flex justify-end">
