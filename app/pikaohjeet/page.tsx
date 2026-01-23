@@ -300,7 +300,7 @@ export default function PikaohjeetPage() {
                 </div>
                 <div className="col-span-8 bg-slate-50/30 overflow-y-auto p-12 space-y-8 custom-scrollbar relative">
                    <header className="mb-10 border-b border-blue-100 pb-6">
-                      <h2 className="text-3xl font-bold tracking-tight text-slate-800">{card.title}</h2>
+                      <h2 className="text-4xl font-bold tracking-tight text-slate-800">{card.title}</h2>
                       {card.subtitle && <p className="text-md text-slate-500 font-medium mt-2">{card.subtitle}</p>}
                    </header>
                    <div className="space-y-6">
@@ -308,11 +308,11 @@ export default function PikaohjeetPage() {
                         const hl = sectionHighlights[s.key];
                         return (
                           <div key={s.key} className={classNames("p-8 rounded-[2rem] border transition-all duration-500 shadow-sm", hl?.severity === "danger" ? "bg-rose-50 border-rose-200" : hl?.severity === "warning" ? "bg-amber-50 border-amber-200" : hl?.severity === "info" ? "bg-blue-50 border-blue-200" : "bg-white border-slate-100")}>
-                            <div className="flex justify-between items-start mb-4">
-                              <h3 className={classNames("text-[10px] font-black uppercase tracking-widest", hl?.severity === "danger" ? "text-rose-800" : hl?.severity === "warning" ? "text-amber-800" : hl?.severity === "info" ? "text-blue-800" : "text-slate-400")}>{s.title}</h3>
+                            <div className="flex justify-between items-start mb-6">
+                              <h3 className={classNames("text-[13px] font-bold uppercase tracking-wide", hl?.severity === "danger" ? "text-rose-900" : hl?.severity === "warning" ? "text-amber-900" : hl?.severity === "info" ? "text-blue-900" : "text-slate-800")}>{s.title}</h3>
                               <div className="flex flex-col gap-1.5">{hl?.hints.map((h, i) => <div key={i} className="px-3 py-1 bg-white border border-slate-100 rounded-xl text-[10px] font-bold flex items-center gap-1.5 shadow-sm animate-in slide-in-from-right-2"><AlertTriangle size={12} className="text-amber-500" /> {h}</div>)}</div>
                             </div>
-                            <div className="prose prose-slate max-w-none text-slate-700 font-medium leading-relaxed text-sm"><ReactMarkdown>{s.content}</ReactMarkdown></div>
+                            <div className="prose prose-slate max-w-none text-slate-700 font-medium leading-relaxed text-[15px]"><ReactMarkdown>{s.content}</ReactMarkdown></div>
                           </div>
                         );
                       })}
@@ -485,7 +485,7 @@ export default function PikaohjeetPage() {
                     </div>
                   ))}
                   <button onClick={()=>setDraft(d => ({ ...d, rules: [...d.rules, { fieldKey: draft.fields[0]?.key || "", operator:">", value:"0", highlightSectionKey:null, addHint:"", priority:50 }] }))} className="w-full py-6 border-2 border-dashed border-blue-200 rounded-[2rem] text-blue-400 hover:bg-blue-50 transition-all flex items-center justify-center gap-3 font-black text-xs uppercase tracking-widest">
-                    <Zap size={20}/> Lisää uusi sääntöryhmä
+                    <Zap size={20}/> Lisää uusi sääntöрыбба
                   </button>
                 </div>
                )}
@@ -497,7 +497,7 @@ export default function PikaohjeetPage() {
                  <button onClick={()=>setIsEditing(false)} className="px-8 py-4 font-black text-xs uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-colors">Peruuta</button>
                  <button onClick={handleSave} disabled={saving} className="bg-slate-900 text-white px-12 py-4 rounded-2xl font-black uppercase text-[11px] tracking-widest shadow-2xl shadow-slate-200 hover:bg-black disabled:opacity-50 flex items-center gap-3 active:scale-[0.98] transition-all">
                     {saving ? <Loader2 size={16} className="animate-spin text-blue-400" /> : <Save size={16} className="text-blue-400" />} 
-                    {saving ? 'Tallennetaan...' : 'Päivitä kortti'}
+                    {saving ? 'Tallennetaan...' : 'Päivitä kortти'}
                  </button>
                </div>
             </footer>
