@@ -86,6 +86,9 @@ export default function PikaohjeetPage() {
     rules: ClinicalRule[];
   }>({ sections: [], fields: [], rules: [] });
   
+  // Локальное состояние для ввода опций, чтобы не обрезать пробелы при вводе
+  const [optionsInput, setOptionsInput] = useState<Record<number, string>>({});
+
   const [saving, setSaving] = useState(false);
   const [saveOk, setSaveOk] = useState<string | null>(null);
 
@@ -115,11 +118,20 @@ export default function PikaohjeetPage() {
     if (!card) return;
     setDraftTitle(card.title);
     setDraftSubtitle(card.subtitle || "");
+    const fields = JSON.parse(JSON.stringify(card.fields || [])).map((f: any) => ({...f, options: f.options || []}));
     setDraft({
       sections: JSON.parse(JSON.stringify(card.sections || [])),
-      fields: JSON.parse(JSON.stringify(card.fields || [])).map((f: any) => ({...f, options: f.options || []})),
+      fields,
       rules: JSON.parse(JSON.stringify(card.rules || []))
     });
+    
+    // Инициализируем текстовое поле для каждой карточки типа select
+    const optInputMap: Record<number, string> = {};
+    fields.forEach((f: any, idx: number) => {
+      if (f.type === "select") optInputMap[idx] = f.options.join(", ");
+    });
+    setOptionsInput(optInputMap);
+
     setIsEditing(true);
   };
 
@@ -189,7 +201,7 @@ export default function PikaohjeetPage() {
   };
 
   const handleCreateNew = async () => {
-    const title = prompt("Anna uuden kortин nimi (esim. Verenpaine):");
+    const title = prompt("Anna uuden kortin nimi (esim. Verenpaine):");
     if (!title) return;
     try {
       const res = await fetch("/api/pikaohjeet", {
@@ -408,11 +420,21 @@ export default function PikaohjeetPage() {
                       {f.type === "select" && (
                         <div className="col-span-4 space-y-2">
                            <label className="text-[9px] font-black text-blue-500 uppercase tracking-widest">Vaihtoehdot (pilkulla erotettu)</label>
-                           <input className="w-full p-3.5 bg-white border border-blue-200 rounded-xl text-xs font-bold" placeholder="Esim: Tyyppi 1, Tyyppi 2" value={f.options?.join(", ") || ""} onChange={e => {
+                           <input 
+                              className="w-full p-3.5 bg-white border border-blue-200 rounded-xl text-xs font-bold" 
+                              placeholder="Esim: Tyyppi 1, Tyyppi 2" 
+                              value={optionsInput[idx] ?? ""} 
+                              onChange={e => {
+                                 const val = e.target.value;
+                                 // Обновляем текст в локальном поле (можно печатать пробелы и запятые)
+                                 setOptionsInput(prev => ({...prev, [idx]: val}));
+                                 
+                                 // Преобразуем в массив для сохранения
                                  const newF = [...draft.fields];
-                                 newF[idx].options = e.target.value.split(",").map(s => s.trim()).filter(Boolean);
+                                 newF[idx].options = val.split(",").map(s => s.trim()).filter(Boolean);
                                  setDraft({...draft, fields: newF});
-                              }} />
+                              }} 
+                           />
                         </div>
                       )}
                       <div className="col-span-2 flex justify-center pb-1">
@@ -477,7 +499,7 @@ export default function PikaohjeetPage() {
                       </div>
                     </div>
                   ))}
-                  <button onClick={()=>setDraft(d => ({ ...d, rules: [...d.rules, { fieldKey: draft.fields[0]?.key || "", operator:">", value:"0", highlightSectionKey:null, addHint:"", priority:50 }] }))} className="w-full py-6 border-2 border-dashed border-blue-200 rounded-[2rem] text-blue-400 hover:bg-blue-50 transition-all flex items-center justify-center gap-3 font-black text-xs uppercase tracking-widest"><Zap size={20}/> Lisää uusi sääntöryhmä</button>
+                  <button onClick={()=>setDraft(d => ({ ...d, rules: [...d.rules, { fieldKey: draft.fields[0]?.key || "", operator:">", value:"0", highlightSectionKey:null, addHint:"", priority:50 }] }))} className="w-full py-6 border-2 border-dashed border-blue-200 rounded-[2rem] text-blue-400 hover:bg-blue-50 transition-all flex items-center justify-center gap-3 font-black text-xs uppercase tracking-widest"><Zap size={20}/> Lisää uusi sääntöryhmэ</button>
                 </div>
                )}
             </div>
