@@ -278,22 +278,22 @@ export default function PikaohjeetPage() {
         <section className="col-span-9 min-h-0 bg-white rounded-[2.5rem] border shadow-sm flex flex-col overflow-hidden">
            {loadingCard ? <div className="flex-1 flex items-center justify-center"><Loader2 className="animate-spin text-blue-500" /></div> : card ? (
              <div className="flex-1 grid grid-cols-12 min-h-0">
-                <div className="col-span-4 border-r overflow-y-auto p-8 space-y-6 custom-scrollbar bg-white">
-                  <div className="flex items-center gap-2 mb-4">
+                <div className="col-span-4 border-r overflow-y-auto p-8 space-y-8 custom-scrollbar bg-white">
+                  <div className="flex items-center gap-2 mb-2">
                     <Settings size={14} className="text-blue-500"/>
-                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Parametrit</span>
+                    <span className="text-[11px] font-black text-slate-400 uppercase tracking-[0.1em]">Parametrit</span>
                   </div>
                   {card.fields?.sort((a,b)=>a.order-b.order).map(f => (
-                    <div key={f.key} className="space-y-2">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{f.label}</label>
+                    <div key={f.key} className="space-y-2.5">
+                      <label className="text-[12px] font-bold text-slate-800 uppercase tracking-tight ml-1">{f.label}</label>
                       <div className="relative">
                         <input 
-                          className="w-full p-3 bg-white border border-slate-200 rounded-xl outline-none focus:ring-4 focus:ring-blue-500/5 font-bold transition-all shadow-sm placeholder:text-slate-200" 
+                          className="w-full p-4 bg-white border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-blue-500/5 font-bold transition-all shadow-sm placeholder:text-slate-200" 
                           placeholder={f.placeholder || ""} 
                           value={params[f.key] || ""} 
                           onChange={e => setParams({...params, [f.key]: e.target.value})} 
                         />
-                        {f.unit && <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[9px] font-black text-slate-300 uppercase">{f.unit}</span>}
+                        {f.unit && <span className="absolute right-5 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-300 uppercase">{f.unit}</span>}
                       </div>
                     </div>
                   ))}
@@ -471,7 +471,7 @@ export default function PikaohjeetPage() {
                             <Plus size={14}/> Lisää ehto (Добавить условие "И")
                           </button>
                           <div className="w-48 space-y-2">
-                             <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Väri (Priority)</label>
+                             <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Väри (Priority)</label>
                              <select className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-[10px] font-black outline-none focus:ring-4 focus:ring-blue-500/5 uppercase" value={group[0].priority} onChange={e => { group.forEach((rg: any) => rg.priority = parseInt(e.target.value)); setDraft({...draft}); }}>
                                 <option value="50">Info (Sininen)</option><option value="40">Warning (Keltainen)</option><option value="20">Danger (Punainen)</option>
                              </select>
