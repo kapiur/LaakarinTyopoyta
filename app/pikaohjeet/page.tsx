@@ -5,7 +5,7 @@ import { useSession } from "next-auth/react";
 import {
   BookOpen, Search, Loader2, ChevronRight, Sparkles, Edit2, X, Save,
   AlertTriangle, CheckCircle2, Trash2, Plus, 
-  Settings, Zap
+  Settings, Zap, RotateCcw
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 
@@ -39,29 +39,37 @@ function classNames(...arr: Array<string | false | null | undefined>) {
 }
 
 function safeNum(v: any): number | null {
-  if (v === null || v === undefined) return null;
+  if (v === null || v === undefined || v === "") return null;
   const n = Number(String(v).replace(",", "."));
   return Number.isFinite(n) ? n : null;
 }
 
 function evalRule(rule: ClinicalRule, fieldValue: any): boolean {
+  if (fieldValue === undefined || fieldValue === null || fieldValue === "") return false;
+
   const op = (rule.operator || "").toLowerCase().trim();
   const rhsRaw = rule.value;
-  const fvStr = String(fieldValue ?? "").trim().toLowerCase();
   
   if (op === "truthy" || op === "true") {
     if (typeof fieldValue === "boolean") return fieldValue;
-    return ["1", "true", "yes", "kyllä", "on"].includes(fvStr);
+    return ["1", "true", "yes", "kyllä", "on"].includes(String(fieldValue).toLowerCase());
   }
   
   const fn = safeNum(fieldValue);
   const rn = safeNum(rhsRaw);
 
-  if (op === "eq" || op === "==") return (fn !== null && rn !== null) ? fn === rn : fvStr === String(rhsRaw).toLowerCase();
-  if (op === "gt" || op === ">") return fn !== null && rn !== null && fn > rn;
-  if (op === "lt" || op === "<") return fn !== null && rn !== null && fn < rn;
-  if (op === "gte" || op === ">=") return fn !== null && rn !== null && fn >= rn;
-  if (op === "lte" || op === "<=") return fn !== null && rn !== null && fn <= rn;
+  if (fn !== null && rn !== null) {
+    if (op === "eq" || op === "==") return fn === rn;
+    if (op === "gt" || op === ">") return fn > rn;
+    if (op === "lt" || op === "<") return fn < rn;
+    if (op === "gte" || op === ">=") return fn >= rn;
+    if (op === "lte" || op === "<=") return fn <= rn;
+  }
+
+  // Строковое сравнение
+  const fvStr = String(fieldValue).trim().toLowerCase();
+  const rvStr = String(rhsRaw).trim().toLowerCase();
+  if (op === "eq" || op === "==") return fvStr === rvStr;
 
   return false;
 }
@@ -86,9 +94,7 @@ export default function PikaohjeetPage() {
     rules: ClinicalRule[];
   }>({ sections: [], fields: [], rules: [] });
   
-  // Локальное состояние для ввода опций, чтобы не обрезать пробелы при вводе
   const [optionsInput, setOptionsInput] = useState<Record<number, string>>({});
-
   const [saving, setSaving] = useState(false);
   const [saveOk, setSaveOk] = useState<string | null>(null);
 
@@ -125,13 +131,11 @@ export default function PikaohjeetPage() {
       rules: JSON.parse(JSON.stringify(card.rules || []))
     });
     
-    // Инициализируем текстовое поле для каждой карточки типа select
     const optInputMap: Record<number, string> = {};
     fields.forEach((f: any, idx: number) => {
       if (f.type === "select") optInputMap[idx] = f.options.join(", ");
     });
     setOptionsInput(optInputMap);
-
     setIsEditing(true);
   };
 
@@ -143,7 +147,7 @@ export default function PikaohjeetPage() {
     const groupIds = Array.from(new Set(groupedRules.map(r => r.groupId)));
     const groupHits = groupIds.map(gid => {
       const rulesInGroup = groupedRules.filter(r => r.groupId === gid);
-      return rulesInGroup.every(r => evalRule(r, params[r.fieldKey])) ? rulesInGroup[0] : null;
+      return rulesInGroup.length > 0 && rulesInGroup.every(r => evalRule(r, params[r.fieldKey])) ? rulesInGroup[0] : null;
     }).filter((r): r is ClinicalRule => r !== null);
 
     return [...soloHits, ...groupHits].map(r => ({
@@ -201,7 +205,7 @@ export default function PikaohjeetPage() {
   };
 
   const handleCreateNew = async () => {
-    const title = prompt("Anna uuden kortin nimi (esim. Verenpaine):");
+    const title = prompt("Anna uuden kortin nimi:");
     if (!title) return;
     try {
       const res = await fetch("/api/pikaohjeet", {
@@ -284,9 +288,14 @@ export default function PikaohjeetPage() {
            {loadingCard ? <div className="flex-1 flex items-center justify-center"><Loader2 className="animate-spin text-blue-500" /></div> : card ? (
              <div className="flex-1 grid grid-cols-12 min-h-0">
                 <div className="col-span-4 border-r overflow-y-auto p-8 space-y-8 custom-scrollbar bg-white">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Settings size={14} className="text-blue-500"/>
-                    <span className="text-[11px] font-black text-slate-400 uppercase tracking-[0.1em]">Parametrit</span>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                        <Settings size={14} className="text-blue-500"/>
+                        <span className="text-[11px] font-black text-slate-400 uppercase tracking-[0.1em]">Parametrit</span>
+                    </div>
+                    <button onClick={() => setParams({})} className="text-[10px] font-bold text-slate-300 hover:text-blue-500 flex items-center gap-1 transition-colors">
+                        <RotateCcw size={12}/> Tyhjennä
+                    </button>
                   </div>
                   {card.fields?.sort((a,b)=>a.order-b.order).map(f => (
                     <div key={f.key} className="space-y-3">
@@ -294,13 +303,13 @@ export default function PikaohjeetPage() {
                       <div className="flex flex-wrap gap-2">
                         {f.type === "boolean" ? (
                            <div className="flex gap-2 w-full">
-                              <button onClick={() => setParams({...params, [f.key]: true})} className={classNames("flex-1 py-3 rounded-xl font-bold text-sm border transition-all", params[f.key] === true ? "bg-blue-600 border-blue-600 text-white shadow-md" : "bg-white border-slate-200 text-slate-400 hover:bg-slate-50")}>Kyllä</button>
-                              <button onClick={() => setParams({...params, [f.key]: false})} className={classNames("flex-1 py-3 rounded-xl font-bold text-sm border transition-all", params[f.key] === false ? "bg-blue-600 border-blue-600 text-white shadow-md" : "bg-white border-slate-200 text-slate-400 hover:bg-slate-50")}>Ei</button>
+                              <button onClick={() => setParams({...params, [f.key]: params[f.key] === true ? null : true})} className={classNames("flex-1 py-3 rounded-xl font-bold text-sm border transition-all", params[f.key] === true ? "bg-blue-600 border-blue-600 text-white shadow-md" : "bg-white border-slate-200 text-slate-400 hover:bg-slate-50")}>Kyllä</button>
+                              <button onClick={() => setParams({...params, [f.key]: params[f.key] === false ? null : false})} className={classNames("flex-1 py-3 rounded-xl font-bold text-sm border transition-all", params[f.key] === false ? "bg-blue-600 border-blue-600 text-white shadow-md" : "bg-white border-slate-200 text-slate-400 hover:bg-slate-50")}>Ei</button>
                            </div>
                         ) : f.type === "select" ? (
                           <div className="flex flex-wrap gap-2 w-full">
                             {f.options?.map(opt => (
-                              <button key={opt} onClick={() => setParams({...params, [f.key]: opt})} className={classNames("px-4 py-2 rounded-xl font-bold text-xs border transition-all", params[f.key] === opt ? "bg-blue-600 border-blue-600 text-white" : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50")}>
+                              <button key={opt} onClick={() => setParams({...params, [f.key]: params[f.key] === opt ? null : opt})} className={classNames("px-4 py-2 rounded-xl font-bold text-xs border transition-all", params[f.key] === opt ? "bg-blue-600 border-blue-600 text-white" : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50")}>
                                 {opt}
                               </button>
                             ))}
@@ -420,21 +429,13 @@ export default function PikaohjeetPage() {
                       {f.type === "select" && (
                         <div className="col-span-4 space-y-2">
                            <label className="text-[9px] font-black text-blue-500 uppercase tracking-widest">Vaihtoehdot (pilkulla erotettu)</label>
-                           <input 
-                              className="w-full p-3.5 bg-white border border-blue-200 rounded-xl text-xs font-bold" 
-                              placeholder="Esim: Tyyppi 1, Tyyppi 2" 
-                              value={optionsInput[idx] ?? ""} 
-                              onChange={e => {
+                           <input className="w-full p-3.5 bg-white border border-blue-200 rounded-xl text-xs font-bold" placeholder="Esim: Tyyppi 1, Tyyppi 2" value={optionsInput[idx] ?? ""} onChange={e => {
                                  const val = e.target.value;
-                                 // Обновляем текст в локальном поле (можно печатать пробелы и запятые)
                                  setOptionsInput(prev => ({...prev, [idx]: val}));
-                                 
-                                 // Преобразуем в массив для сохранения
                                  const newF = [...draft.fields];
                                  newF[idx].options = val.split(",").map(s => s.trim()).filter(Boolean);
                                  setDraft({...draft, fields: newF});
-                              }} 
-                           />
+                              }} />
                         </div>
                       )}
                       <div className="col-span-2 flex justify-center pb-1">
@@ -499,7 +500,7 @@ export default function PikaohjeetPage() {
                       </div>
                     </div>
                   ))}
-                  <button onClick={()=>setDraft(d => ({ ...d, rules: [...d.rules, { fieldKey: draft.fields[0]?.key || "", operator:">", value:"0", highlightSectionKey:null, addHint:"", priority:50 }] }))} className="w-full py-6 border-2 border-dashed border-blue-200 rounded-[2rem] text-blue-400 hover:bg-blue-50 transition-all flex items-center justify-center gap-3 font-black text-xs uppercase tracking-widest"><Zap size={20}/> Lisää uusi sääntöryhmэ</button>
+                  <button onClick={()=>setDraft(d => ({ ...d, rules: [...d.rules, { fieldKey: draft.fields[0]?.key || "", operator:">", value:"0", highlightSectionKey:null, addHint:"", priority:50 }] }))} className="w-full py-6 border-2 border-dashed border-blue-200 rounded-[2rem] text-blue-400 hover:bg-blue-50 transition-all flex items-center justify-center gap-3 font-black text-xs uppercase tracking-widest"><Zap size={20}/> Lisää uusi sääntöryhmä</button>
                 </div>
                )}
             </div>
