@@ -132,7 +132,7 @@ export default function PikaohjeetPage() {
     
     const optInputMap: Record<number, string> = {};
     fields.forEach((f: any, idx: number) => {
-      if (f.type === "select") optInputMap[idx] = f.options.join(", ");
+      if (f.type === "select") optInputMap[idx] = (f.options || []).join(", ");
     });
     setOptionsInput(optInputMap);
     setIsEditing(true);
@@ -173,6 +173,12 @@ export default function PikaohjeetPage() {
     if (!card) return;
     setSaving(true);
     try {
+      // ИСПРАВЛЕНИЕ: Перед сохранением убеждаемся, что у сгруппированных правил есть groupId
+      const cleanedRules = draft.rules.map(r => {
+        const { id, cardId, ...rest } = r as any;
+        return rest;
+      });
+
       const res = await fetch(`/api/pikaohjeet/${card.slug}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -181,7 +187,7 @@ export default function PikaohjeetPage() {
           subtitle: draftSubtitle,
           sections: draft.sections.map(({ id, cardId, ...rest }: any) => rest),
           fields: draft.fields.map(({ id, cardId, ...rest }: any) => rest),
-          rules: draft.rules.map(({ id, cardId, ...rest }: any) => rest),
+          rules: cleanedRules,
         }),
       });
       if (!res.ok) throw new Error("Tallennus epäonnistui");
@@ -221,12 +227,14 @@ export default function PikaohjeetPage() {
 
   const addConditionToRule = (groupId: string | null, baseRule: ClinicalRule) => {
     const newGroupId = groupId || `group_${Date.now()}`;
+    const newRules = [...draft.rules];
+    
+    // Если у базового правила не было группы, присваиваем её
     if (!baseRule.groupId) {
-      const newRules = [...draft.rules];
       const target = newRules.find(r => r === baseRule);
       if (target) target.groupId = newGroupId;
-      setDraft({ ...draft, rules: newRules });
     }
+
     const newRule: ClinicalRule = {
       groupId: newGroupId,
       fieldKey: draft.fields[0]?.key || "",
@@ -236,7 +244,8 @@ export default function PikaohjeetPage() {
       highlightSectionKey: baseRule.highlightSectionKey,
       addHint: baseRule.addHint
     };
-    setDraft(d => ({ ...d, rules: [...d.rules, newRule] }));
+    
+    setDraft(d => ({ ...d, rules: [...newRules, newRule] }));
   };
 
   return (
@@ -399,7 +408,6 @@ export default function PikaohjeetPage() {
                       }} />
                     </div>
                   ))}
-                  {/* КНОПКА ВОССТАНОВЛЕНА ТУТ */}
                   <button onClick={()=>setDraft(d => ({ ...d, sections: [...d.sections, { key:`sec_${Date.now()}`, title:"Uusi osio", order: draft.sections.length*10, content:"" }] }))} className="w-full py-8 border-2 border-dashed border-slate-200 rounded-[2rem] text-slate-300 hover:border-blue-400 hover:text-blue-500 hover:bg-blue-50/30 transition-all flex items-center justify-center gap-3 font-black text-xs uppercase tracking-widest">
                     <Plus size={24}/> Lisää uusi osio
                   </button>
@@ -457,7 +465,8 @@ export default function PikaohjeetPage() {
                {editTab === "rules" && (
                 <div className="space-y-6 animate-in slide-in-from-bottom-4">
                   {Object.values(draft.rules.reduce((acc: any, r) => {
-                    const key = r.groupId || `solo_${Math.random()}`;
+                    // Используем сохраненный groupId или генерируем стабильный временный ключ для текущей сессии редактирования
+                    const key = r.groupId || `temp_group_${draft.rules.indexOf(r)}`;
                     if (!acc[key]) acc[key] = [];
                     acc[key].push(r);
                     return acc;
@@ -511,7 +520,7 @@ export default function PikaohjeetPage() {
             </div>
 
             <footer className="p-8 border-t bg-slate-50 flex justify-between items-center shrink-0">
-               <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest italic">Tietokanta päivittyy tallennettaessa.</div>
+               <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest italic">Tietokнта päivittyy tallennettaessa.</div>
                <div className="flex gap-4">
                  <button onClick={()=>setIsEditing(false)} className="px-8 py-4 font-black text-xs uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-colors">Peruuta</button>
                  <button onClick={handleSave} disabled={saving} className="bg-slate-900 text-white px-12 py-4 rounded-2xl font-black uppercase text-[11px] tracking-widest shadow-2xl shadow-slate-200 hover:bg-black disabled:opacity-50 flex items-center gap-3 active:scale-[0.98] transition-all">
