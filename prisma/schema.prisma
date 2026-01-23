@@ -178,7 +178,9 @@ model ClinicalRule {
   id                  Int              @id @default(autoincrement())
   cardId              Int
   card                ClinicalCard     @relation(fields: [cardId], references: [id], onDelete: Cascade)
-  
+
+  groupId             String?
+
   // Связь с полем
   fieldKey            String
   field               ClinicalField    @relation(fields: [cardId, fieldKey], references: [cardId, key], onDelete: Cascade)
