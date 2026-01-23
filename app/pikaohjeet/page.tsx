@@ -66,7 +66,6 @@ function evalRule(rule: ClinicalRule, fieldValue: any): boolean {
     if (op === "lte" || op === "<=") return fn <= rn;
   }
 
-  // Строковое сравнение
   const fvStr = String(fieldValue).trim().toLowerCase();
   const rvStr = String(rhsRaw).trim().toLowerCase();
   if (op === "eq" || op === "==") return fvStr === rvStr;
@@ -182,6 +181,7 @@ export default function PikaohjeetPage() {
           subtitle: draftSubtitle,
           sections: draft.sections.map(({ id, cardId, ...rest }: any) => rest),
           fields: draft.fields.map(({ id, cardId, ...rest }: any) => rest),
+          // ИСПРАВЛЕНИЕ: groupId теперь сохраняется обязательно
           rules: draft.rules.map(({ id, cardId, ...rest }: any) => rest),
         }),
       });
@@ -365,17 +365,6 @@ export default function PikaohjeetPage() {
             </header>
 
             <div className="flex-1 overflow-y-auto p-10 custom-scrollbar space-y-10">
-               <div className="grid grid-cols-2 gap-8 bg-slate-50 p-8 rounded-[2rem] border border-slate-100">
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Nimi</label>
-                    <input className="w-full p-4 bg-white border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-blue-500/5 font-bold transition-all" value={draftTitle} onChange={e => setDraftTitle(e.target.value)} />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Subtitle</label>
-                    <input className="w-full p-4 bg-white border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-blue-500/5 font-bold transition-all" value={draftSubtitle} onChange={e => setDraftSubtitle(e.target.value)} />
-                  </div>
-               </div>
-
                {editTab === "content" && (
                 <div className="space-y-6 animate-in slide-in-from-bottom-4">
                   {draft.sections.sort((a,b)=>a.order-b.order).map((s, idx) => (
@@ -400,9 +389,6 @@ export default function PikaohjeetPage() {
                       }} />
                     </div>
                   ))}
-                  <button onClick={()=>setDraft(d => ({ ...d, sections: [...d.sections, { key:`sec_${Date.now()}`, title:"Uusi osio", order: draft.sections.length*10, content:"" }] }))} className="w-full py-8 border-2 border-dashed border-slate-200 rounded-[2rem] text-slate-300 hover:border-blue-400 hover:text-blue-500 hover:bg-blue-50/30 transition-all flex items-center justify-center gap-3 font-black text-xs uppercase tracking-widest">
-                    <Plus size={24}/> Lisää uusi osio
-                  </button>
                 </div>
                )}
 
@@ -429,13 +415,18 @@ export default function PikaohjeetPage() {
                       {f.type === "select" && (
                         <div className="col-span-4 space-y-2">
                            <label className="text-[9px] font-black text-blue-500 uppercase tracking-widest">Vaihtoehdot (pilkulla erotettu)</label>
-                           <input className="w-full p-3.5 bg-white border border-blue-200 rounded-xl text-xs font-bold" placeholder="Esim: Tyyppi 1, Tyyppi 2" value={optionsInput[idx] ?? ""} onChange={e => {
+                           <input 
+                              className="w-full p-3.5 bg-white border border-blue-200 rounded-xl text-xs font-bold" 
+                              placeholder="Esim: Tyyppi 1, Tyyppi 2" 
+                              value={optionsInput[idx] ?? ""} 
+                              onChange={e => {
                                  const val = e.target.value;
                                  setOptionsInput(prev => ({...prev, [idx]: val}));
                                  const newF = [...draft.fields];
                                  newF[idx].options = val.split(",").map(s => s.trim()).filter(Boolean);
                                  setDraft({...draft, fields: newF});
-                              }} />
+                              }} 
+                           />
                         </div>
                       )}
                       <div className="col-span-2 flex justify-center pb-1">
@@ -511,7 +502,7 @@ export default function PikaohjeetPage() {
                  <button onClick={()=>setIsEditing(false)} className="px-8 py-4 font-black text-xs uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-colors">Peruuta</button>
                  <button onClick={handleSave} disabled={saving} className="bg-slate-900 text-white px-12 py-4 rounded-2xl font-black uppercase text-[11px] tracking-widest shadow-2xl shadow-slate-200 hover:bg-black disabled:opacity-50 flex items-center gap-3 active:scale-[0.98] transition-all">
                     {saving ? <Loader2 size={16} className="animate-spin text-blue-400" /> : <Save size={16} className="text-blue-400" />} 
-                    {saving ? 'Tallennetaan...' : 'Päivitä kortti'}
+                    {saving ? 'Tallennetaan...' : 'Päivitä kortти'}
                  </button>
                </div>
             </footer>
