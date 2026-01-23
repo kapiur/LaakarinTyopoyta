@@ -181,7 +181,6 @@ export default function PikaohjeetPage() {
           subtitle: draftSubtitle,
           sections: draft.sections.map(({ id, cardId, ...rest }: any) => rest),
           fields: draft.fields.map(({ id, cardId, ...rest }: any) => rest),
-          // ИСПРАВЛЕНИЕ: groupId теперь сохраняется обязательно
           rules: draft.rules.map(({ id, cardId, ...rest }: any) => rest),
         }),
       });
@@ -365,6 +364,17 @@ export default function PikaohjeetPage() {
             </header>
 
             <div className="flex-1 overflow-y-auto p-10 custom-scrollbar space-y-10">
+               <div className="grid grid-cols-2 gap-8 bg-slate-50 p-8 rounded-[2rem] border border-slate-100">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Nimi</label>
+                    <input className="w-full p-4 bg-white border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-blue-500/5 font-bold transition-all" value={draftTitle} onChange={e => setDraftTitle(e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Subtitle</label>
+                    <input className="w-full p-4 bg-white border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-blue-500/5 font-bold transition-all" value={draftSubtitle} onChange={e => setDraftSubtitle(e.target.value)} />
+                  </div>
+               </div>
+
                {editTab === "content" && (
                 <div className="space-y-6 animate-in slide-in-from-bottom-4">
                   {draft.sections.sort((a,b)=>a.order-b.order).map((s, idx) => (
@@ -389,6 +399,10 @@ export default function PikaohjeetPage() {
                       }} />
                     </div>
                   ))}
+                  {/* КНОПКА ВОССТАНОВЛЕНА ТУТ */}
+                  <button onClick={()=>setDraft(d => ({ ...d, sections: [...d.sections, { key:`sec_${Date.now()}`, title:"Uusi osio", order: draft.sections.length*10, content:"" }] }))} className="w-full py-8 border-2 border-dashed border-slate-200 rounded-[2rem] text-slate-300 hover:border-blue-400 hover:text-blue-500 hover:bg-blue-50/30 transition-all flex items-center justify-center gap-3 font-black text-xs uppercase tracking-widest">
+                    <Plus size={24}/> Lisää uusi osio
+                  </button>
                 </div>
                )}
 
@@ -491,7 +505,7 @@ export default function PikaohjeetPage() {
                       </div>
                     </div>
                   ))}
-                  <button onClick={()=>setDraft(d => ({ ...d, rules: [...d.rules, { fieldKey: draft.fields[0]?.key || "", operator:">", value:"0", highlightSectionKey:null, addHint:"", priority:50 }] }))} className="w-full py-6 border-2 border-dashed border-blue-200 rounded-[2rem] text-blue-400 hover:bg-blue-50 transition-all flex items-center justify-center gap-3 font-black text-xs uppercase tracking-widest"><Zap size={20}/> Lisää uusi sääntöryhmä</button>
+                  <button onClick={()=>setDraft(d => ({ ...d, rules: [...d.rules, { fieldKey: draft.fields[0]?.key || "", operator:">", value:"0", highlightSectionKey:null, addHint:"", priority:50 }] }))} className="w-full py-6 border-2 border-dashed border-blue-200 rounded-[2rem] text-blue-400 hover:bg-blue-50 transition-all flex items-center justify-center gap-3 font-black text-xs uppercase tracking-widest"><Zap size={20}/> Lisää uusi sääntöryhmэ</button>
                 </div>
                )}
             </div>
