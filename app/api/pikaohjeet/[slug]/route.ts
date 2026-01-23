@@ -1,11 +1,10 @@
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 import { getServerSession } from "next-auth/next";
-import { authOptions } from "../../../../lib/auth"; // Убедитесь, что путь верный
+import { authOptions } from "../../../../lib/auth";
 
 const prisma = new PrismaClient();
 
-// 1. ПОЛУЧЕНИЕ ПОЛНОЙ КАРТОЧКИ ДЛЯ РЕДАКТОРА
 export async function GET(req: Request, { params }: { params: { slug: string } }) {
   try {
     const session = await getServerSession(authOptions);
@@ -17,7 +16,6 @@ export async function GET(req: Request, { params }: { params: { slug: string } }
         sections: { orderBy: { order: 'asc' } },
         fields: { orderBy: { order: 'asc' } },
         rules: true,
-        revisions: { orderBy: { createdAt: 'desc' }, take: 5 }
       }
     });
 
@@ -28,7 +26,6 @@ export async function GET(req: Request, { params }: { params: { slug: string } }
   }
 }
 
-// 2. СИНХРОНИЗАЦИЯ ВСЕЙ СТРУКТУРЫ (PUT)
 export async function PUT(req: Request, { params }: { params: { slug: string } }) {
   try {
     const session = await getServerSession(authOptions);
@@ -42,7 +39,6 @@ export async function PUT(req: Request, { params }: { params: { slug: string } }
       const card = await tx.clinicalCard.findUnique({ where: { slug } });
       if (!card) throw new Error("Card not found");
 
-      // Обновляем метаданные карточки
       await tx.clinicalCard.update({
         where: { id: card.id },
         data: {
@@ -54,16 +50,17 @@ export async function PUT(req: Request, { params }: { params: { slug: string } }
 
       // --- СИНХРОНИЗАЦИЯ СЕКЦИЙ ---
       const incomingSectionKeys = sections.map((s: any) => s.key);
-      // Удаляем те, что удалили в UI
       await tx.clinicalSection.deleteMany({
         where: { cardId: card.id, key: { notIn: incomingSectionKeys } }
       });
-      // Обновляем или создаем
+
       for (const s of sections) {
+        // ВАЖНО: Удаляем id из объекта перед сохранением
+        const { id, cardId, ...dataToSave } = s; 
         await tx.clinicalSection.upsert({
           where: { cardId_key: { cardId: card.id, key: s.key } },
-          create: { ...s, cardId: card.id },
-          update: { title: s.title, content: s.content, order: s.order, highlightCallout: s.highlightCallout }
+          create: { ...dataToSave, cardId: card.id },
+          update: { title: s.title, content: s.content, order: s.order }
         });
       }
 
@@ -72,16 +69,18 @@ export async function PUT(req: Request, { params }: { params: { slug: string } }
       await tx.clinicalField.deleteMany({
         where: { cardId: card.id, key: { notIn: incomingFieldKeys } }
       });
+
       for (const f of fields) {
+        // ВАЖНО: Удаляем id из объекта перед сохранением
+        const { id, cardId, ...dataToSave } = f;
         await tx.clinicalField.upsert({
           where: { cardId_key: { cardId: card.id, key: f.key } },
-          create: { ...f, cardId: card.id },
-          update: { label: f.label, type: f.type, unit: f.unit, options: f.options, order: f.order, isUniversal: f.isUniversal }
+          create: { ...dataToSave, cardId: card.id },
+          update: { label: f.label, type: f.type, unit: f.unit, options: f.options, order: f.order }
         });
       }
 
       // --- СИНХРОНИЗАЦИЯ ПРАВИЛ ---
-      // Правила проще пересоздать, так как у них нет стабильных ключей
       await tx.clinicalRule.deleteMany({ where: { cardId: card.id } });
       if (rules && rules.length > 0) {
         await tx.clinicalRule.createMany({
@@ -96,17 +95,6 @@ export async function PUT(req: Request, { params }: { params: { slug: string } }
           }))
         });
       }
-
-      // Записываем лог ревизии
-      await tx.clinicalRevision.create({
-        data: {
-          cardId: card.id,
-          action: "full_sync",
-          editorEmail: session.user.email,
-          editorName: (session.user as any).name || "User",
-          summary: `Muokattu: ${sections.length} osiota, ${fields.length} kenttää, ${rules.length} sääntöä`
-        }
-      });
 
       return card;
     });
