@@ -38,7 +38,6 @@ function classNames(...arr: Array<string | false | null | undefined>) {
   return arr.filter(Boolean).join(" ");
 }
 
-// --- Logic Engine ---
 function safeNum(v: any): number | null {
   if (v === null || v === undefined) return null;
   const n = Number(String(v).replace(",", "."));
@@ -118,7 +117,7 @@ export default function PikaohjeetPage() {
     setDraftSubtitle(card.subtitle || "");
     setDraft({
       sections: JSON.parse(JSON.stringify(card.sections || [])),
-      fields: JSON.parse(JSON.stringify(card.fields || [])),
+      fields: JSON.parse(JSON.stringify(card.fields || [])).map((f: any) => ({...f, options: f.options || []})),
       rules: JSON.parse(JSON.stringify(card.rules || []))
     });
     setIsEditing(true);
@@ -128,14 +127,11 @@ export default function PikaohjeetPage() {
     const allRules = card?.rules || [];
     const soloRules = allRules.filter(r => !r.groupId);
     const groupedRules = allRules.filter(r => r.groupId);
-
     const soloHits = soloRules.filter(r => evalRule(r, params[r.fieldKey]));
-
     const groupIds = Array.from(new Set(groupedRules.map(r => r.groupId)));
     const groupHits = groupIds.map(gid => {
       const rulesInGroup = groupedRules.filter(r => r.groupId === gid);
-      const allMatch = rulesInGroup.every(r => evalRule(r, params[r.fieldKey]));
-      return allMatch ? rulesInGroup[0] : null;
+      return rulesInGroup.every(r => evalRule(r, params[r.fieldKey])) ? rulesInGroup[0] : null;
     }).filter((r): r is ClinicalRule => r !== null);
 
     return [...soloHits, ...groupHits].map(r => ({
@@ -168,9 +164,9 @@ export default function PikaohjeetPage() {
         body: JSON.stringify({
           title: draftTitle,
           subtitle: draftSubtitle,
-          sections: draft.sections.map(({ id, cardId, ...rest }) => rest),
-          fields: draft.fields.map(({ id, cardId, ...rest }) => rest),
-          rules: draft.rules.map(({ id, cardId, ...rest }) => rest),
+          sections: draft.sections.map(({ id, cardId, ...rest }: any) => rest),
+          fields: draft.fields.map(({ id, cardId, ...rest }: any) => rest),
+          rules: draft.rules.map(({ id, cardId, ...rest }: any) => rest),
         }),
       });
       if (!res.ok) throw new Error("Tallennus epäonnistui");
@@ -193,7 +189,7 @@ export default function PikaohjeetPage() {
   };
 
   const handleCreateNew = async () => {
-    const title = prompt("Anna uuden kortin nimi (esim. Verenpaine):");
+    const title = prompt("Anna uuden kortин nimi (esim. Verenpaine):");
     if (!title) return;
     try {
       const res = await fetch("/api/pikaohjeet", {
@@ -241,10 +237,7 @@ export default function PikaohjeetPage() {
         <div className="flex items-center gap-3">
           {saveOk && <div className="px-4 py-2 rounded-xl bg-emerald-50 text-emerald-700 text-[10px] font-bold uppercase tracking-wider flex items-center gap-2 border border-emerald-100 animate-in zoom-in-95"><CheckCircle2 size={14} />{saveOk}</div>}
           {card && (
-            <button 
-              onClick={startEditing} 
-              className="bg-white border border-blue-600 text-blue-600 px-5 py-2 rounded-xl font-bold hover:bg-blue-50 transition-all active:scale-95 text-xs flex items-center gap-2"
-            >
+            <button onClick={startEditing} className="bg-white border border-blue-600 text-blue-600 px-5 py-2 rounded-xl font-bold hover:bg-blue-50 transition-all active:scale-95 text-xs flex items-center gap-2">
               <Edit2 size={14} /> Muokkaa
             </button>
           )}
@@ -284,16 +277,28 @@ export default function PikaohjeetPage() {
                     <span className="text-[11px] font-black text-slate-400 uppercase tracking-[0.1em]">Parametrit</span>
                   </div>
                   {card.fields?.sort((a,b)=>a.order-b.order).map(f => (
-                    <div key={f.key} className="space-y-2.5">
+                    <div key={f.key} className="space-y-3">
                       <label className="text-[12px] font-bold text-slate-800 uppercase tracking-tight ml-1">{f.label}</label>
-                      <div className="relative">
-                        <input 
-                          className="w-full p-4 bg-white border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-blue-500/5 font-bold transition-all shadow-sm placeholder:text-slate-200" 
-                          placeholder={f.placeholder || ""} 
-                          value={params[f.key] || ""} 
-                          onChange={e => setParams({...params, [f.key]: e.target.value})} 
-                        />
-                        {f.unit && <span className="absolute right-5 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-300 uppercase">{f.unit}</span>}
+                      <div className="flex flex-wrap gap-2">
+                        {f.type === "boolean" ? (
+                           <div className="flex gap-2 w-full">
+                              <button onClick={() => setParams({...params, [f.key]: true})} className={classNames("flex-1 py-3 rounded-xl font-bold text-sm border transition-all", params[f.key] === true ? "bg-blue-600 border-blue-600 text-white shadow-md" : "bg-white border-slate-200 text-slate-400 hover:bg-slate-50")}>Kyllä</button>
+                              <button onClick={() => setParams({...params, [f.key]: false})} className={classNames("flex-1 py-3 rounded-xl font-bold text-sm border transition-all", params[f.key] === false ? "bg-blue-600 border-blue-600 text-white shadow-md" : "bg-white border-slate-200 text-slate-400 hover:bg-slate-50")}>Ei</button>
+                           </div>
+                        ) : f.type === "select" ? (
+                          <div className="flex flex-wrap gap-2 w-full">
+                            {f.options?.map(opt => (
+                              <button key={opt} onClick={() => setParams({...params, [f.key]: opt})} className={classNames("px-4 py-2 rounded-xl font-bold text-xs border transition-all", params[f.key] === opt ? "bg-blue-600 border-blue-600 text-white" : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50")}>
+                                {opt}
+                              </button>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="relative w-full">
+                            <input className="w-full p-4 bg-white border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-blue-500/5 font-bold transition-all shadow-sm" placeholder={f.placeholder || ""} value={params[f.key] || ""} onChange={e => setParams({...params, [f.key]: e.target.value})} />
+                            {f.unit && <span className="absolute right-5 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-300 uppercase">{f.unit}</span>}
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -323,7 +328,6 @@ export default function PikaohjeetPage() {
         </section>
       </main>
 
-      {/* CMS MODAL (HALLINTA) */}
       {isEditing && card && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-6 animate-in fade-in">
           <div className="bg-white rounded-[3rem] shadow-2xl max-w-6xl w-full h-[90vh] flex flex-col overflow-hidden border border-slate-200">
@@ -401,18 +405,16 @@ export default function PikaohjeetPage() {
                           <option value="select">Select</option>
                         </select>
                       </div>
-                      <div className="col-span-2 space-y-2">
-                        <label className="text-[9px] font-black text-slate-400 uppercase ml-2 tracking-widest">Yksikkö</label>
-                        <input className="w-full p-3.5 bg-white border border-slate-200 rounded-xl text-sm font-bold outline-none focus:ring-4 focus:ring-blue-500/5" value={f.unit || ""} onChange={e => {
-                           const newF = [...draft.fields]; newF[idx].unit = e.target.value; setDraft({...draft, fields: newF});
-                        }} />
-                      </div>
-                      <div className="col-span-3 space-y-2">
-                        <label className="text-[9px] font-black text-slate-400 uppercase ml-2 tracking-widest">Avain (Key)</label>
-                        <input className="w-full p-3.5 bg-white border border-slate-200 rounded-xl text-xs font-mono font-bold outline-none focus:ring-4 focus:ring-blue-500/5" value={f.key} onChange={e => {
-                           const newF = [...draft.fields]; newF[idx].key = e.target.value; setDraft({...draft, fields: newF});
-                        }} />
-                      </div>
+                      {f.type === "select" && (
+                        <div className="col-span-4 space-y-2">
+                           <label className="text-[9px] font-black text-blue-500 uppercase tracking-widest">Vaihtoehdot (pilkulla erotettu)</label>
+                           <input className="w-full p-3.5 bg-white border border-blue-200 rounded-xl text-xs font-bold" placeholder="Esim: Tyyppi 1, Tyyppi 2" value={f.options?.join(", ") || ""} onChange={e => {
+                                 const newF = [...draft.fields];
+                                 newF[idx].options = e.target.value.split(",").map(s => s.trim()).filter(Boolean);
+                                 setDraft({...draft, fields: newF});
+                              }} />
+                        </div>
+                      )}
                       <div className="col-span-2 flex justify-center pb-1">
                         <button onClick={()=>setDraft(d => ({ ...d, fields: d.fields.filter((_,i)=>i!==idx) }))} className="p-3 text-slate-300 hover:text-rose-500 transition-all"><Trash2 size={20}/></button>
                       </div>
@@ -434,7 +436,6 @@ export default function PikaohjeetPage() {
                   }, {})).map((group: any, gIdx: number) => (
                     <div key={gIdx} className="p-8 bg-blue-50/30 rounded-[2.5rem] border border-blue-100 space-y-6 relative shadow-sm">
                       <button onClick={()=>setDraft(d => ({ ...d, rules: d.rules.filter(r => !group.includes(r)) }))} className="absolute right-6 top-6 text-slate-300 hover:text-rose-500"><Trash2 size={20}/></button>
-                      
                       <div className="space-y-4">
                         {group.map((r: ClinicalRule, rIdx: number) => (
                           <div key={rIdx} className="space-y-4">
@@ -452,28 +453,20 @@ export default function PikaohjeetPage() {
                           </div>
                         ))}
                       </div>
-
                       <div className="flex flex-col gap-6 pt-6 border-t border-blue-100">
                         <div className="flex items-center gap-4">
                            <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest">KOROSTA SEURAAVA OSIO</span>
-                           <select 
-                            className="p-3 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-4 focus:ring-blue-500/5 min-w-[250px]" 
-                            value={group[0].highlightSectionKey || ""} 
-                            onChange={e => { group.forEach((rg: any) => rg.highlightSectionKey = e.target.value); setDraft({...draft}); }}
-                           >
+                           <select className="p-3 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-4 focus:ring-blue-500/5 min-w-[250px]" value={group[0].highlightSectionKey || ""} onChange={e => { group.forEach((rg: any) => rg.highlightSectionKey = e.target.value); setDraft({...draft}); }}>
                              <option value="">(Ei mitään / Не выбрано)</option>
                              {draft.sections.map(s => <option key={s.key} value={s.key}>{s.title}</option>)}
                            </select>
                         </div>
-
                         <div className="flex items-center justify-between">
-                          <button onClick={() => addConditionToRule(group[0].groupId || null, group[0])} className="flex items-center gap-2 text-[10px] font-black text-blue-500 uppercase tracking-widest hover:text-blue-700 transition-colors">
-                            <Plus size={14}/> Lisää ehto (Добавить условие "И")
-                          </button>
+                          <button onClick={() => addConditionToRule(group[0].groupId || null, group[0])} className="flex items-center gap-2 text-[10px] font-black text-blue-500 uppercase tracking-widest hover:text-blue-700 transition-colors"><Plus size={14}/> Lisää ehto</button>
                           <div className="w-48 space-y-2">
-                             <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Väри (Priority)</label>
+                             <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Väri</label>
                              <select className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-[10px] font-black outline-none focus:ring-4 focus:ring-blue-500/5 uppercase" value={group[0].priority} onChange={e => { group.forEach((rg: any) => rg.priority = parseInt(e.target.value)); setDraft({...draft}); }}>
-                                <option value="50">Info (Sininen)</option><option value="40">Warning (Keltainen)</option><option value="20">Danger (Punainen)</option>
+                                <option value="50">Info</option><option value="40">Warning</option><option value="20">Danger</option>
                              </select>
                           </div>
                         </div>
@@ -484,9 +477,7 @@ export default function PikaohjeetPage() {
                       </div>
                     </div>
                   ))}
-                  <button onClick={()=>setDraft(d => ({ ...d, rules: [...d.rules, { fieldKey: draft.fields[0]?.key || "", operator:">", value:"0", highlightSectionKey:null, addHint:"", priority:50 }] }))} className="w-full py-6 border-2 border-dashed border-blue-200 rounded-[2rem] text-blue-400 hover:bg-blue-50 transition-all flex items-center justify-center gap-3 font-black text-xs uppercase tracking-widest">
-                    <Zap size={20}/> Lisää uusi sääntöрыбба
-                  </button>
+                  <button onClick={()=>setDraft(d => ({ ...d, rules: [...d.rules, { fieldKey: draft.fields[0]?.key || "", operator:">", value:"0", highlightSectionKey:null, addHint:"", priority:50 }] }))} className="w-full py-6 border-2 border-dashed border-blue-200 rounded-[2rem] text-blue-400 hover:bg-blue-50 transition-all flex items-center justify-center gap-3 font-black text-xs uppercase tracking-widest"><Zap size={20}/> Lisää uusi sääntöryhmä</button>
                 </div>
                )}
             </div>
@@ -497,7 +488,7 @@ export default function PikaohjeetPage() {
                  <button onClick={()=>setIsEditing(false)} className="px-8 py-4 font-black text-xs uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-colors">Peruuta</button>
                  <button onClick={handleSave} disabled={saving} className="bg-slate-900 text-white px-12 py-4 rounded-2xl font-black uppercase text-[11px] tracking-widest shadow-2xl shadow-slate-200 hover:bg-black disabled:opacity-50 flex items-center gap-3 active:scale-[0.98] transition-all">
                     {saving ? <Loader2 size={16} className="animate-spin text-blue-400" /> : <Save size={16} className="text-blue-400" />} 
-                    {saving ? 'Tallennetaan...' : 'Päivitä kortти'}
+                    {saving ? 'Tallennetaan...' : 'Päivitä kortti'}
                  </button>
                </div>
             </footer>
