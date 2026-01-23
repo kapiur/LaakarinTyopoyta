@@ -14,32 +14,24 @@ type ClinicalCard = {
   id: number; slug: string; title: string; subtitle?: string | null;
   environment: string; audience: string; tags: string[];
   isPublished: boolean; updatedAt: string; createdAt: string;
-  updatedByUserId?: string | null; updatedByEmail?: string | null; updatedByName?: string | null;
   sections?: ClinicalSection[]; fields?: ClinicalField[]; rules?: ClinicalRule[];
-  revisions?: ClinicalRevision[];
 };
 
 type ClinicalSection = {
-  id: number; cardId: number; key: string; title: string; order: number;
+  id?: number; cardId?: number; key: string; title: string; order: number;
   content: string; highlightCallout?: string | null;
 };
 
 type ClinicalField = {
-  id: number; cardId: number; key: string; label: string; type: string;
+  id?: number; cardId?: number; key: string; label: string; type: string;
   unit?: string | null; placeholder?: string | null; options: string[];
   order: number; isUniversal: boolean;
 };
 
 type ClinicalRule = {
-  id: number; cardId: number; fieldKey: string; operator: string;
+  id?: number; cardId?: number; fieldKey: string; operator: string;
   value: string; highlightSectionKey?: string | null; addHint?: string | null;
   priority: number;
-};
-
-type ClinicalRevision = {
-  id: number; cardId: number; createdAt: string; editorUserId?: string | null;
-  editorEmail?: string | null; editorName?: string | null; action: string;
-  summary?: string | null; payload?: any;
 };
 
 function classNames(...arr: Array<string | false | null | undefined>) {
@@ -57,8 +49,7 @@ function evalRule(rule: ClinicalRule, fieldValue: any): boolean {
   const op = (rule.operator || "").toLowerCase().trim();
   const rhsRaw = rule.value;
   const fvStr = String(fieldValue ?? "").trim().toLowerCase();
-  const rhsStr = String(rhsRaw ?? "").trim().toLowerCase();
-
+  
   if (op === "truthy" || op === "true") {
     if (typeof fieldValue === "boolean") return fieldValue;
     return ["1", "true", "yes", "kyllä", "on"].includes(fvStr);
@@ -67,7 +58,7 @@ function evalRule(rule: ClinicalRule, fieldValue: any): boolean {
   const fn = safeNum(fieldValue);
   const rn = safeNum(rhsRaw);
 
-  if (op === "eq" || op === "==") return (fn !== null && rn !== null) ? fn === rn : fvStr === rhsStr;
+  if (op === "eq" || op === "==") return (fn !== null && rn !== null) ? fn === rn : fvStr === String(rhsRaw).toLowerCase();
   if (op === "gt" || op === ">") return fn !== null && rn !== null && fn > rn;
   if (op === "lt" || op === "<") return fn !== null && rn !== null && fn < rn;
   if (op === "gte" || op === ">=") return fn !== null && rn !== null && fn >= rn;
@@ -76,7 +67,6 @@ function evalRule(rule: ClinicalRule, fieldValue: any): boolean {
   return false;
 }
 
-// --- UI Component ---
 export default function PikaohjeetPage() {
   const { data: session } = useSession();
 
@@ -89,7 +79,6 @@ export default function PikaohjeetPage() {
   const [card, setCard] = useState<ClinicalCard | null>(null);
   const [params, setParams] = useState<Record<string, any>>({});
 
-  // Editor State
   const [isEditing, setIsEditing] = useState(false);
   const [editTab, setEditTab] = useState<"content" | "fields" | "rules">("content");
   const [draft, setDraft] = useState<{
@@ -97,12 +86,12 @@ export default function PikaohjeetPage() {
     fields: ClinicalField[];
     rules: ClinicalRule[];
   }>({ sections: [], fields: [], rules: [] });
+  
   const [saving, setSaving] = useState(false);
   const [saveOk, setSaveOk] = useState<string | null>(null);
-  const [saveErr, setSaveErr] = useState<string | null>(null);
 
   useEffect(() => { fetchCards(); }, []);
-  useEffect(() => { setParams({}); setSaveOk(null); setSaveErr(null); }, [activeSlug]);
+  useEffect(() => { setParams({}); setSaveOk(null); }, [activeSlug]);
   useEffect(() => { if (activeSlug) fetchCard(activeSlug); }, [activeSlug]);
 
   const fetchCards = async () => {
@@ -110,7 +99,7 @@ export default function PikaohjeetPage() {
     try {
       const res = await fetch("/api/pikaohjeet", { cache: "no-store" });
       const data = await res.json();
-      setCards(Array.isArray(data) ? data.sort((a: any, b: any) => a.title.localeCompare(b.title, "fi")) : []);
+      setCards(Array.isArray(data) ? data : []);
       if (!activeSlug && data.length > 0) setActiveSlug(data[0].slug);
     } catch (e) { console.error(e); } finally { setLoadingList(false); }
   };
@@ -121,18 +110,23 @@ export default function PikaohjeetPage() {
       const res = await fetch(`/api/pikaohjeet/${encodeURIComponent(slug)}`, { cache: "no-store" });
       const data = await res.json();
       setCard(data);
-      setDraft({
-        sections: [...(data.sections || [])],
-        fields: [...(data.fields || [])],
-        rules: [...(data.rules || [])]
-      });
     } catch (e) { setCard(null); } finally { setLoadingCard(false); }
+  };
+
+  // Входим в режим редактирования с глубоким копированием данных именно ТЕКУЩЕЙ карточки
+  const startEditing = () => {
+    if (!card) return;
+    setDraft({
+      sections: JSON.parse(JSON.stringify(card.sections || [])),
+      fields: JSON.parse(JSON.stringify(card.fields || [])),
+      rules: JSON.parse(JSON.stringify(card.rules || []))
+    });
+    setIsEditing(true);
   };
 
   const handleCreateNew = async () => {
     const title = prompt("Anna uuden kortin nimi (esim. Verenpaine):");
     if (!title) return;
-
     try {
       const res = await fetch("/api/pikaohjeet", {
         method: "POST",
@@ -141,19 +135,41 @@ export default function PikaohjeetPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Virhe luomisessa");
-      
       await fetchCards();
       setActiveSlug(data.slug);
-      setIsEditing(true);
-    } catch (e: any) {
-      alert(e.message);
-    }
+    } catch (e: any) { alert(e.message); }
   };
 
-  const filteredCards = useMemo(() => {
-    const q = searchTerm.trim().toLowerCase();
-    return cards.filter(c => `${c.title} ${c.subtitle ?? ""} ${c.tags?.join(" ")}`.toLowerCase().includes(q));
-  }, [cards, searchTerm]);
+  const handleSave = async () => {
+    if (!card) return;
+    setSaving(true);
+    try {
+      // Очищаем данные от старых ID перед отправкой, чтобы Prisma не конфликтовала
+      const cleanDraft = {
+        sections: draft.sections.map(({ id, cardId, ...rest }) => rest),
+        fields: draft.fields.map(({ id, cardId, ...rest }) => rest),
+        rules: draft.rules.map(({ id, cardId, ...rest }) => rest),
+      };
+
+      const res = await fetch(`/api/pikaohjeet/${card.slug}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(cleanDraft),
+      });
+      
+      if (!res.ok) throw new Error("Tallennusvirhe");
+      
+      setSaveOk("Tallennettu onnistuneesti");
+      setIsEditing(false);
+      await fetchCard(card.slug);
+      await fetchCards(); // Обновляем список слева на случай изменения заголовка
+      setTimeout(() => setSaveOk(null), 3000);
+    } catch (e: any) { 
+      alert(e.message); 
+    } finally { 
+      setSaving(false); 
+    }
+  };
 
   const activeRuleHits = useMemo(() => {
     return (card?.rules || [])
@@ -176,28 +192,10 @@ export default function PikaohjeetPage() {
     return map;
   }, [activeRuleHits]);
 
-  const handleSave = async () => {
-    if (!card) return;
-    setSaving(true);
-    try {
-      const res = await fetch(`/api/pikaohjeet/${card.slug}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(draft),
-      });
-      if (!res.ok) throw new Error("Tallennusvirhe");
-      setSaveOk("Tallennettu");
-      setIsEditing(false);
-      await fetchCard(card.slug);
-      setTimeout(() => setSaveOk(null), 2500);
-    } catch (e: any) { setSaveErr(e.message); } finally { setSaving(false); }
-  };
-
   const renderFieldInput = (f: ClinicalField) => {
     const value = params[f.key];
     const inputBase = "w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-blue-500/10 font-medium text-sm transition-all";
-    const btnBase = "px-4 py-2 rounded-lg text-xs font-semibold border transition-all shadow-sm";
-
+    
     if (f.type === "boolean" || f.type === "select") {
       const opts = f.type === "boolean" ? ["kyllä", "ei"] : f.options;
       return (
@@ -208,7 +206,7 @@ export default function PikaohjeetPage() {
               : String(value) === opt;
             return (
               <button key={opt} onClick={() => setParams(p => ({ ...p, [f.key]: f.type === "boolean" ? (opt === "kyllä") : opt }))}
-                className={classNames(btnBase, isActive ? "bg-slate-800 text-white border-slate-800" : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50")}>
+                className={classNames("px-4 py-2 rounded-lg text-xs font-semibold border transition-all shadow-sm", isActive ? "bg-slate-800 text-white border-slate-800" : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50")}>
                 {opt.charAt(0).toUpperCase() + opt.slice(1)}
               </button>
             );
@@ -237,31 +235,25 @@ export default function PikaohjeetPage() {
           </div>
         </div>
         <div className="flex items-center gap-3">
-          {saveOk && <div className="px-4 py-2 rounded-xl bg-emerald-50 text-emerald-700 text-[10px] font-bold uppercase tracking-wider flex items-center gap-2 border border-emerald-100"><CheckCircle2 size={14} />{saveOk}</div>}
-          {card && <button onClick={() => setIsEditing(true)} className="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-bold hover:bg-blue-700 shadow-md transition-all active:scale-95 text-xs flex items-center gap-2"><Edit2 size={14} /> Muokkaa</button>}
+          {saveOk && <div className="px-4 py-2 rounded-xl bg-emerald-50 text-emerald-700 text-[10px] font-bold uppercase tracking-wider flex items-center gap-2 border border-emerald-100 animate-pulse"><CheckCircle2 size={14} />{saveOk}</div>}
+          {card && <button onClick={startEditing} className="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-bold hover:bg-blue-700 shadow-md transition-all active:scale-95 text-xs flex items-center gap-2"><Edit2 size={14} /> Muokkaa</button>}
         </div>
       </header>
 
       <main className="flex-1 grid grid-cols-12 gap-6 min-h-0 overflow-hidden">
-        {/* Left List */}
         <aside className="col-span-3 flex flex-col gap-4 min-h-0">
-          <button 
-            onClick={handleCreateNew}
-            className="w-full py-3 bg-blue-50 text-blue-600 border border-blue-200 border-dashed rounded-2xl font-bold text-xs uppercase tracking-widest hover:bg-blue-100 transition-all flex items-center justify-center gap-2"
-          >
+          <button onClick={handleCreateNew} className="w-full py-3 bg-blue-50 text-blue-600 border border-blue-200 border-dashed rounded-2xl font-bold text-xs uppercase tracking-widest hover:bg-blue-100 transition-all flex items-center justify-center gap-2">
             <Plus size={16} /> Uusi pikaohje
           </button>
-          
           <div className="relative">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
             <input placeholder="Etsi pikaohje..." className="w-full pl-11 pr-4 py-3 bg-white border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500/10 font-medium text-sm transition-all shadow-sm" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
           </div>
           <div className="flex-1 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
             {loadingList ? <div className="flex justify-center py-10"><Loader2 className="animate-spin text-blue-500" /></div> : 
-              filteredCards.map(c => (
+              cards.filter(c => c.title.toLowerCase().includes(searchTerm.toLowerCase())).map(c => (
                 <button key={c.slug} onClick={() => setActiveSlug(c.slug)} className={classNames("w-full text-left p-4 rounded-2xl border transition-all relative group", activeSlug === c.slug ? "bg-blue-600 text-white border-blue-600 shadow-lg" : "bg-white border-slate-100 hover:border-blue-200")}>
-                  <span className="font-semibold text-sm truncate block">{c.title}</span>
-                  {c.subtitle && <span className={classNames("text-[11px] block mt-0.5 truncate", activeSlug === c.slug ? "text-white/80" : "text-slate-400")}>{c.subtitle}</span>}
+                  <span className="font-bold text-sm truncate block">{c.title}</span>
                   <ChevronRight size={14} className={classNames("absolute right-4 top-1/2 -translate-y-1/2 transition-all", activeSlug === c.slug ? "opacity-100" : "opacity-0 translate-x-1 group-hover:opacity-100")} />
                 </button>
               ))
@@ -269,7 +261,6 @@ export default function PikaohjeetPage() {
           </div>
         </aside>
 
-        {/* Right Content */}
         <section className="col-span-9 min-h-0">
           {loadingCard ? (
             <div className="h-full flex items-center justify-center bg-white rounded-[2rem] border"><Loader2 className="animate-spin text-blue-500" /></div>
@@ -279,43 +270,38 @@ export default function PikaohjeetPage() {
               <span className="font-semibold text-xs uppercase tracking-widest opacity-50">Valitse ohje listasta</span>
             </div>
           ) : (
-            <div className="grid grid-cols-12 h-full gap-6">
-              {/* Parameters */}
+            <div className="grid grid-cols-12 h-full gap-6 animate-in fade-in duration-300">
               <div className="col-span-4 bg-white rounded-[2rem] border shadow-sm flex flex-col overflow-hidden">
                 <div className="px-6 py-4 border-b bg-slate-50/50 flex justify-between items-center">
-                  <div className="flex items-center gap-2"><Sparkles size={14} className="text-blue-500" /><span className="font-bold text-slate-500 uppercase text-[10px] tracking-wider">Potilasparametrit</span></div>
-                  <span className="text-[9px] font-bold text-slate-400 uppercase bg-white px-2 py-1 rounded-md border">{card.audience}</span>
+                  <div className="flex items-center gap-2"><Sparkles size={14} className="text-blue-500" /><span className="font-bold text-slate-500 uppercase text-[10px] tracking-wider">Parametrit</span></div>
                 </div>
                 <div className="p-6 flex-1 overflow-y-auto space-y-5 custom-scrollbar">
                   {card.fields?.sort((a,b)=>a.order-b.order).map(f => (
-                    <div key={f.key} className="space-y-2 animate-in fade-in duration-500">
+                    <div key={f.key} className="space-y-2">
                       <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest ml-1">{f.label}</label>
                       {renderFieldInput(f)}
                     </div>
                   ))}
-                  {(!card.fields || card.fields.length === 0) && <p className="text-[10px] text-slate-400 text-center py-10">Ei määritettyjä parametreja</p>}
                 </div>
               </div>
 
-              {/* Guide Content */}
-              <div className="col-span-8 bg-blue-50/20 rounded-[2rem] flex flex-col overflow-hidden border border-blue-100 shadow-sm relative">
+              <div className="col-span-8 bg-blue-50/20 rounded-[2rem] flex flex-col overflow-hidden border border-blue-100 shadow-sm">
                 <div className="p-10 flex-1 overflow-y-auto custom-scrollbar space-y-8">
                   <header>
                     <h2 className="text-2xl font-bold tracking-tight text-slate-800">{card.title}</h2>
                     {card.subtitle && <p className="text-sm text-slate-500 font-medium mt-1">{card.subtitle}</p>}
-                    <div className="flex flex-wrap gap-1.5 mt-4">{card.tags?.map(t => <span key={t} className="px-2.5 py-1 rounded-lg bg-white border text-[10px] font-bold text-slate-500 uppercase tracking-wide shadow-sm">#{t}</span>)}</div>
                   </header>
 
                   <div className="space-y-6">
                     {card.sections?.sort((a,b)=>a.order-b.order).map(s => {
                       const hl = sectionHighlights[s.key];
                       return (
-                        <div key={s.key} className={classNames("rounded-2xl border p-6 transition-all duration-500 shadow-sm", hl?.severity === "danger" ? "bg-rose-50 border-rose-200" : hl?.severity === "warning" ? "bg-amber-50 border-amber-200" : hl?.severity === "info" ? "bg-blue-50 border-blue-200" : "bg-white border-slate-100")}>
+                        <div key={s.key} className={classNames("rounded-2xl border p-6 transition-all duration-500 shadow-sm", hl?.severity === "danger" ? "bg-rose-50 border-rose-200 shadow-rose-100" : hl?.severity === "warning" ? "bg-amber-50 border-amber-200 shadow-amber-100" : hl?.severity === "info" ? "bg-blue-50 border-blue-200" : "bg-white border-slate-100")}>
                           <div className="flex justify-between items-start gap-4 mb-4">
                             <h3 className={classNames("text-xs font-bold uppercase tracking-widest", hl?.severity === "danger" ? "text-rose-800" : hl?.severity === "warning" ? "text-amber-800" : "text-slate-800")}>{s.title}</h3>
-                            <div className="flex gap-1">{hl?.hints.map((h, i) => <div key={i} className="px-3 py-1 bg-white/60 border border-white rounded-lg text-[10px] font-bold flex items-center gap-1.5"><AlertTriangle size={10} /> {h}</div>)}</div>
+                            <div className="flex flex-col gap-1">{hl?.hints.map((h, i) => <div key={i} className="px-3 py-1 bg-white/60 border border-white rounded-lg text-[10px] font-bold flex items-center gap-1.5"><AlertTriangle size={10} /> {h}</div>)}</div>
                           </div>
-                          <div className="text-[15px] font-normal text-slate-700 leading-relaxed prose prose-sm max-w-none">
+                          <div className="text-[15px] text-slate-700 leading-relaxed prose prose-sm max-w-none prose-slate">
                             <ReactMarkdown>{s.content}</ReactMarkdown>
                           </div>
                         </div>
@@ -329,19 +315,17 @@ export default function PikaohjeetPage() {
         </section>
       </main>
 
-      <style jsx global>{`.custom-scrollbar::-webkit-scrollbar { width: 5px; } .custom-scrollbar::-webkit-scrollbar-track { background: transparent; } .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; } .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #cbd5e1; }`}</style>
-
       {/* CMS MODAL */}
       {isEditing && card && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-6 animate-in fade-in">
           <div className="bg-white rounded-[2.5rem] shadow-2xl max-w-5xl w-full h-[90vh] flex flex-col overflow-hidden border">
             <header className="p-6 bg-slate-900 text-white flex justify-between items-center shrink-0">
               <div className="flex items-center gap-6">
-                <span className="font-bold text-sm uppercase tracking-widest flex items-center gap-2"><Settings size={18}/> Muokkaa korttia</span>
+                <span className="font-bold text-sm uppercase tracking-widest flex items-center gap-2"><Settings size={18}/> Muokkaa korttia: {card.title}</span>
                 <nav className="flex bg-slate-800 p-1 rounded-xl">
-                  <button onClick={()=>setEditTab("content")} className={classNames("px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all", editTab === "content" ? "bg-blue-600 text-white shadow-lg" : "text-slate-400 hover:text-white")}>Sisältö</button>
-                  <button onClick={()=>setEditTab("fields")} className={classNames("px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all", editTab === "fields" ? "bg-blue-600 text-white shadow-lg" : "text-slate-400 hover:text-white")}>Kentät</button>
-                  <button onClick={()=>setEditTab("rules")} className={classNames("px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all", editTab === "rules" ? "bg-blue-600 text-white shadow-lg" : "text-slate-400 hover:text-white")}>Säännöt</button>
+                  {["content", "fields", "rules"].map((t) => (
+                    <button key={t} onClick={()=>setEditTab(t as any)} className={classNames("px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all", editTab === t ? "bg-blue-600 text-white shadow-lg" : "text-slate-400 hover:text-white")}>{t === 'content' ? 'Sisältö' : t === 'fields' ? 'Kentät' : 'Säännöt'}</button>
+                  ))}
                 </nav>
               </div>
               <button onClick={() => setIsEditing(false)} className="p-2 hover:bg-white/10 rounded-full transition-all"><X size={24}/></button>
@@ -372,7 +356,7 @@ export default function PikaohjeetPage() {
                       }} />
                     </div>
                   ))}
-                  <button onClick={()=>setDraft(d => ({ ...d, sections: [...d.sections, { id:0, cardId:card.id, key:`sec_${Date.now()}`, title:"Uusi osio", order: d.sections.length*10, content:"" }] }))} className="w-full py-4 border-2 border-dashed border-slate-200 rounded-3xl text-slate-400 hover:border-blue-400 hover:text-blue-500 transition-all flex items-center justify-center gap-2 font-bold text-sm uppercase tracking-widest"><Plus size={18}/> Lisää osio</button>
+                  <button onClick={()=>setDraft(d => ({ ...d, sections: [...d.sections, { key:`sec_${Date.now()}`, title:"Uusi osio", order: draft.sections.length*10, content:"" }] }))} className="w-full py-4 border-2 border-dashed border-slate-200 rounded-3xl text-slate-400 hover:border-blue-400 hover:text-blue-500 transition-all flex items-center justify-center gap-2 font-bold text-sm uppercase tracking-widest"><Plus size={18}/> Lisää osio</button>
                 </div>
               )}
 
@@ -397,7 +381,7 @@ export default function PikaohjeetPage() {
                         </select>
                       </div>
                       <div className="col-span-2 space-y-1">
-                        <label className="text-[9px] font-bold text-slate-400 uppercase">Yksikkö (Unit)</label>
+                        <label className="text-[9px] font-bold text-slate-400 uppercase">Yksikkö</label>
                         <input className="w-full p-2.5 border rounded-xl text-sm" value={f.unit || ""} onChange={e => {
                            const newF = [...draft.fields]; newF[idx].unit = e.target.value; setDraft({...draft, fields: newF});
                         }} />
@@ -413,7 +397,7 @@ export default function PikaohjeetPage() {
                       </div>
                     </div>
                   ))}
-                  <button onClick={()=>setDraft(d => ({ ...d, fields: [...d.fields, { id:0, cardId:card.id, key:`f_${Date.now()}`, label:"Uusi kenttä", type:"number", options:[], order: d.fields.length*10, isUniversal:false }] }))} className="w-full py-3 border-2 border-dashed border-slate-200 rounded-2xl text-slate-400 hover:border-blue-400 hover:text-blue-500 transition-all flex items-center justify-center gap-2 font-bold text-xs uppercase tracking-widest"><Plus size={16}/> Lisää kenttä</button>
+                  <button onClick={()=>setDraft(d => ({ ...d, fields: [...d.fields, { key:`f_${Date.now()}`, label:"Uusi kenttä", type:"number", options:[], order: draft.fields.length*10, isUniversal:false }] }))} className="w-full py-3 border-2 border-dashed border-slate-200 rounded-2xl text-slate-400 hover:border-blue-400 hover:text-blue-500 transition-all flex items-center justify-center gap-2 font-bold text-xs uppercase tracking-widest"><Plus size={16}/> Lisää kenttä</button>
                 </div>
               )}
 
@@ -427,6 +411,7 @@ export default function PikaohjeetPage() {
                         <select className="p-2.5 border rounded-xl text-xs bg-white min-w-[140px]" value={r.fieldKey} onChange={e => {
                           const newR = [...draft.rules]; newR[idx].fieldKey = e.target.value; setDraft({...draft, rules: newR});
                         }}>
+                          <option value="">Valitse kenttä</option>
                           {draft.fields.map(f => <option key={f.key} value={f.key}>{f.label} ({f.key})</option>)}
                         </select>
                         <select className="p-2.5 border rounded-xl text-xs bg-white" value={r.operator} onChange={e => {
@@ -447,33 +432,34 @@ export default function PikaohjeetPage() {
                       </div>
                       <div className="flex items-center gap-4">
                          <div className="flex-1 space-y-1">
-                           <label className="text-[9px] font-bold text-slate-400 uppercase">Huomioteksti (Hint)</label>
+                           <label className="text-[9px] font-bold text-slate-400 uppercase">Huomioteksti</label>
                            <input className="w-full p-2.5 border rounded-xl text-xs" value={r.addHint || ""} onChange={e => {
                              const newR = [...draft.rules]; newR[idx].addHint = e.target.value; setDraft({...draft, rules: newR});
                            }} />
                          </div>
                          <div className="w-32 space-y-1">
-                           <label className="text-[9px] font-bold text-slate-400 uppercase">Väri (Priority)</label>
+                           <label className="text-[9px] font-bold text-slate-400 uppercase">Väri</label>
                            <select className="w-full p-2.5 border rounded-xl text-xs bg-white" value={r.priority} onChange={e => {
                              const newR = [...draft.rules]; newR[idx].priority = parseInt(e.target.value); setDraft({...draft, rules: newR});
                            }}>
-                             <option value="50">Info (Sininen)</option><option value="40">Warning (Keltainen)</option><option value="20">Danger (Punainen)</option>
+                             <option value="50">Info</option><option value="40">Warning</option><option value="20">Danger</option>
                            </select>
                          </div>
                       </div>
                     </div>
                   ))}
-                  <button onClick={()=>setDraft(d => ({ ...d, rules: [...d.rules, { id:0, cardId:card.id, fieldKey:draft.fields[0]?.key || "", operator:">", value:"0", highlightSectionKey:null, addHint:"", priority:50 }] }))} className="w-full py-3 border-2 border-dashed border-blue-200 rounded-2xl text-blue-400 hover:bg-blue-50 transition-all flex items-center justify-center gap-2 font-bold text-xs uppercase tracking-widest"><Zap size={16}/> Lisää sääntö</button>
+                  <button onClick={()=>setDraft(d => ({ ...d, rules: [...d.rules, { fieldKey: draft.fields[0]?.key || "", operator:">", value:"0", highlightSectionKey:null, addHint:"", priority:50 }] }))} className="w-full py-3 border-2 border-dashed border-blue-200 rounded-2xl text-blue-400 hover:bg-blue-50 transition-all flex items-center justify-center gap-2 font-bold text-xs uppercase tracking-widest"><Zap size={16}/> Lisää sääntö</button>
                 </div>
               )}
             </div>
 
             <footer className="p-6 border-t bg-slate-50 flex justify-between items-center shrink-0">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Muutokset tallentuvat globaalisti kaikille käyttäjille.</p>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest italic">Muutokset päivittyvät välittömästi tietokantaan.</p>
               <div className="flex gap-3">
-                <button onClick={() => setIsEditing(false)} className="px-6 py-3 font-bold text-xs uppercase tracking-widest text-slate-500 hover:text-slate-700">Peruuta</button>
-                <button onClick={handleSave} disabled={saving} className="bg-blue-600 text-white px-8 py-3 rounded-xl font-bold uppercase text-[11px] tracking-widest shadow-lg shadow-blue-100 hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2">
-                  {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Tallenna kortti
+                <button onClick={() => setIsEditing(false)} className="px-6 py-3 font-bold text-xs uppercase tracking-widest text-slate-500 hover:text-slate-700 transition-colors">Peruuta</button>
+                <button onClick={handleSave} disabled={saving} className="bg-blue-600 text-white px-8 py-3 rounded-xl font-bold uppercase text-[11px] tracking-widest shadow-lg shadow-blue-100 hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2 transition-all">
+                  {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} 
+                  {saving ? 'Tallennetaan...' : 'Tallenna kortti'}
                 </button>
               </div>
             </footer>
