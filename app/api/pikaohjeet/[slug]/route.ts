@@ -34,7 +34,6 @@ export async function PUT(req: Request, { params }: { params: { slug: string } }
     if (!session || !session.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const body = await req.json();
-    // Извлекаем title и subtitle для возможности переименования
     const { title, subtitle, sections, fields, rules } = body;
     const slug = params.slug;
 
@@ -49,7 +48,7 @@ export async function PUT(req: Request, { params }: { params: { slug: string } }
           title: title || card.title,
           subtitle: subtitle !== undefined ? subtitle : card.subtitle,
           updatedAt: new Date(),
-          updatedByEmail: session.user.email,
+          updatedByEmail: session.user.email || "unknown",
           updatedByName: (session.user as any).name || "User",
         }
       });
@@ -90,6 +89,7 @@ export async function PUT(req: Request, { params }: { params: { slug: string } }
         await tx.clinicalRule.createMany({
           data: rules.map((r: any) => ({
             cardId: card.id,
+            groupId: r.groupId || null, // ИСПРАВЛЕНИЕ: Добавили сохранение groupId
             fieldKey: r.fieldKey,
             operator: r.operator,
             value: r.value,
@@ -117,12 +117,7 @@ export async function DELETE(req: Request, { params }: { params: { slug: string 
     if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const slug = params.slug;
-
-    // Удаление ClinicalCard повлечет за собой удаление всех связанных данных 
-    // (sections, fields, rules) благодаря onDelete: Cascade в схеме Prisma
-    await prisma.clinicalCard.delete({
-      where: { slug }
-    });
+    await prisma.clinicalCard.delete({ where: { slug } });
 
     return NextResponse.json({ success: true });
   } catch (error: any) {
