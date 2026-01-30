@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 import { getServerSession } from "next-auth/next";
-import { authOptions } from "../../../../lib/auth"; // На один уровень глубже
+import { authOptions } from "../../../../lib/auth";
 
 const prisma = new PrismaClient();
 
@@ -11,35 +11,34 @@ export async function DELETE(
 ) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session || !session.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    if (!session || !session.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const linkId = parseInt(params.id);
+    const { searchParams } = new URL(req.url);
+    const type = searchParams.get("type") || "link";
+    const id = parseInt(params.id);
     const currentUserId = (session.user as any).id ? parseInt((session.user as any).id) : null;
 
-    // Сначала найдем ссылку, чтобы проверить права
-    const link = await prisma.quickLink.findUnique({
-      where: { id: linkId }
-    });
+    if (type === "category") {
+      const category = await prisma.linkCategory.findUnique({
+        where: { id },
+        include: { _count: { select: { links: true } } }
+      });
 
-    if (!link) {
-      return NextResponse.json({ error: "Ei löydy" }, { status: 404 });
+      if (!category) return NextResponse.json({ error: "Not found" }, { status: 404 });
+      if (category._count.links > 0) return NextResponse.json({ error: "Kategoria ei ole tyhjä" }, { status: 400 });
+      if (category.userId !== null && category.userId !== currentUserId) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+      await prisma.linkCategory.delete({ where: { id } });
+    } else {
+      const link = await prisma.quickLink.findUnique({ where: { id } });
+      if (!link) return NextResponse.json({ error: "Not found" }, { status: 404 });
+      if (link.userId !== null && link.userId !== currentUserId) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+      await prisma.quickLink.delete({ where: { id } });
     }
-
-    // Проверка: личную ссылку может удалить только владелец
-    // Если userId у ссылки null, она общая (удаление разрешено всем или добавьте проверку роли)
-    if (link.userId !== null && link.userId !== currentUserId) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-
-    await prisma.quickLink.delete({
-      where: { id: linkId }
-    });
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("DELETE link error:", error);
-    return NextResponse.json({ error: "Server error" }, { status: 500 });
+    return NextResponse.json({ error: "Delete failed" }, { status: 500 });
   }
 }
