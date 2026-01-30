@@ -8,25 +8,37 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// --- ВАШИ СУЩЕСТВУЮЩИЕ МОДЕЛИ (БЕЗ ИЗМЕНЕНИЙ) ---
+// ==========================================
+// 1. ПОЛЬЗОВАТЕЛИ И АУТЕНТИФИКАЦИЯ
+// ==========================================
 
 model User {
-  id              Int              @id @default(autoincrement())
-  email           String           @unique
-  password        String
-  name            String?
-  categories      Category[]
-  templates       Template[]
-  pcaDrugs        PcaDrug[]
-  history         AIHistory[]
-  substanceNotes  Substance[]      // Связь для отслеживания авторства Wiki-заметок
-  createdAt       DateTime         @default(now())
+  id             Int            @id @default(autoincrement())
+  email          String         @unique
+  password       String
+  name           String?
+  createdAt      DateTime       @default(now())
+
+  // Обратные связи
+  categories     Category[]
+  templates      Template[]
+  pcaDrugs       PcaDrug[]
+  history        AIHistory[]
+  substanceNotes Substance[]    // Связь для Wiki-заметок
+  
+  // Новые связи для каталога ссылок
+  linkCategories LinkCategory[]
+  quickLinks     QuickLink[]
 }
+
+// ==========================================
+// 2. ШАБЛОНЫ ТЕКСТОВ (MALLIT)
+// ==========================================
 
 model Category {
   id        Int        @id @default(autoincrement())
   name      String
-  userId    Int?
+  userId    Int?       // null для общих категорий
   user      User?      @relation(fields: [userId], references: [id])
   templates Template[]
 }
@@ -42,6 +54,10 @@ model Template {
   user       User?    @relation(fields: [userId], references: [id])
   createdAt  DateTime @default(now())
 }
+
+// ==========================================
+// 3. КАЛЬКУЛЯТОРЫ И ИИ
+// ==========================================
 
 model PcaDrug {
   id        Int      @id @default(autoincrement())
@@ -66,55 +82,57 @@ model AIHistory {
   @@index([userId])
 }
 
-// --- ОБНОВЛЕННЫЙ МОДУЛЬ: СПРАВОЧНИК ЛЕКАРСТВ (FIMEA + Wiki-заметки) ---
+// ==========================================
+// 4. СПРАВОЧНИК ЛЕКАРСТВ (FIMEA + WIKI)
+// ==========================================
 
-// 1. Уровень Вещества: «Клинический мозг» и Wiki-сообщество
 model Substance {
   id              String     @id // Название вещества (напр. "takrolimuusi")
-  communityNotes  String?    @db.Text // Общие Wiki-заметки для всех врачей
-  lastUpdatedById Int?       // ID врача, внесшего последнюю правку
+  communityNotes  String?    @db.Text
+  lastUpdatedById Int?
   lastUpdatedBy   User?      @relation(fields: [lastUpdatedById], references: [id]) 
   
-  laake75Class    String?    // Категория безопасности (A, B, C, D)
-  laake75Comment  String?    @db.Text // Официальный комментарий Lääke75+
-  gfrGuidelines   String?    @db.Text // Специфические заметки по GFR
+  laake75Class    String?    
+  laake75Comment  String?    @db.Text
+  gfrGuidelines   String?    @db.Text
   isBiological    Boolean    @default(false)
   medicines       Medicine[]
 }
 
-// 2. Уровень Препарата: «Рецептурный справочник»
 model Medicine {
-  id               String      @id // XML ID (напр. "REL53213")
-  name             String      // Kauppanimi (напр. "Advagraf")
+  id               String     @id 
+  name             String     
   atcCode          String?
-  prescriptionTerm String?     @db.Text // Maaraamisehto (Условия выписки)
-  isPediatric      Boolean     @default(false) // Флаг детского препарата
-  isBiosimilar     Boolean     @default(false) // Статус биосимиляра
-  status           String?     // Статус лицензии (напр. "Myyntilupa myönnetty")
-  substance        Substance?  @relation(fields: [substanceId], references: [id])
+  prescriptionTerm String?    @db.Text 
+  isPediatric      Boolean    @default(false)
+  isBiosimilar     Boolean    @default(false)
+  status           String?    
+  substance        Substance? @relation(fields: [substanceId], references: [id])
   substanceId      String?
   packages         Package[]
 
   @@index([name])
 }
 
-// 3. Уровень Упаковки: «Физические данные для рецепта и калькулятора»
 model Package {
-  vnr             String    @id // VNR-номер (020566)
-  medicineId      String
-  medicine        Medicine  @relation(fields: [medicineId], references: [id])
-  sizeText        String?   // Текст упаковки (напр. "10 x 20 ml")
-  strength        String?   // Дозировка (1 mg)
-  form            String?   // Форма (depotkapseli)
-  container       String?   // Тара (Injektiopullo)
-  isAvailable     Boolean   @default(true) // В продаже ли сейчас
-  dddValue        Float?    // Среднесуточная доза (5.0)
-  dddUnit         String?   // Единица DDD (mg)
-  updatedAt       DateTime  @updatedAt
+  vnr         String   @id
+  medicineId  String
+  medicine    Medicine @relation(fields: [medicineId], references: [id])
+  sizeText    String?
+  strength    String?
+  form        String?
+  container   String?
+  isAvailable Boolean  @default(true)
+  dddValue    Float?
+  dddUnit     String?
+  updatedAt   DateTime @updatedAt
 
   @@index([medicineId])
 }
-// --- НОВЫЙ МОДУЛЬ: KLIINISET PIKAOHJEET ---
+
+// ==========================================
+// 5. КЛИНИЧЕСКИЕ КАРТОЧКИ (PIKAOHJEET)
+// ==========================================
 
 model ClinicalCard {
   id              Int                @id @default(autoincrement())
@@ -147,10 +165,9 @@ model ClinicalSection {
   content          String         @db.Text
   highlightCallout String?
   
-  // Обратная связь для правил
   rules            ClinicalRule[]
 
-  @@unique([cardId, key]) // Обязательно для связи в ClinicalRule
+  @@unique([cardId, key])
   @@index([cardId, order])
 }
 
@@ -167,10 +184,9 @@ model ClinicalField {
   order       Int            @default(0)
   isUniversal Boolean        @default(false)
   
-  // Обратная связь для правил
   rules       ClinicalRule[]
 
-  @@unique([cardId, key]) // Обязательно для связи в ClinicalRule
+  @@unique([cardId, key])
   @@index([cardId, order])
 }
 
@@ -178,20 +194,13 @@ model ClinicalRule {
   id                  Int              @id @default(autoincrement())
   cardId              Int
   card                ClinicalCard     @relation(fields: [cardId], references: [id], onDelete: Cascade)
-
   groupId             String?
-
-  // Связь с полем
   fieldKey            String
   field               ClinicalField    @relation(fields: [cardId, fieldKey], references: [cardId, key], onDelete: Cascade)
-  
   operator            String
   value               String
-  
-  // Связь с секцией
   highlightSectionKey String?
   section             ClinicalSection? @relation(fields: [cardId, highlightSectionKey], references: [cardId, key], onDelete: Cascade)
-  
   addHint             String?
   priority            Int              @default(50)
 
@@ -212,6 +221,41 @@ model ClinicalRevision {
 
   @@index([cardId, createdAt])
 }
+
+// ==========================================
+// 6. КАТАЛОГ ССЫЛОК (LINKIT JA OHJEET)
+// ==========================================
+
+model LinkCategory {
+  id        Int         @id @default(autoincrement())
+  name      String
+  userId    Int?        // null = общая категория для всех
+  user      User?       @relation(fields: [userId], references: [id])
+  links     QuickLink[]
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@index([userId])
+}
+
+model QuickLink {
+  id          Int          @id @default(autoincrement())
+  title       String       // Описание
+  url         String       // Ссылка
+  categoryId  Int
+  category    LinkCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  userId      Int?         // null = общая ссылка для всех
+  user        User?        @relation(fields: [userId], references: [id])
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([categoryId])
+  @@index([userId])
+}
+
+// ==========================================
+// 7. СИСТЕМНОЕ
+// ==========================================
 
 model AdminPrompt {
   id        String   @id @default(cuid())
