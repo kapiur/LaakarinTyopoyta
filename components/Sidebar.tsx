@@ -10,7 +10,8 @@ import {
   LogOut, 
   Pill,
   Zap,
-  Terminal // Иконка для секретной лаборатории
+  Link as LinkIcon, // Импортируем иконку для ссылок
+  Terminal 
 } from "lucide-react";
 
 export default function Sidebar() {
@@ -23,7 +24,8 @@ export default function Sidebar() {
   const navItems = [
     { href: "/", label: "Pääsivu", icon: LayoutDashboard },
     { href: "/templates", label: "Mallit", icon: FileText },
-    { href: "/pikaohjeet", label: "Pikaohjeet", icon: Zap }, // НОВЫЙ ПУНКТ
+    { href: "/pikaohjeet", label: "Pikaohjeet", icon: Zap },
+    { href: "/links", label: "Linkit", icon: LinkIcon }, // НОВЫЙ ПУНКТ
     { href: "/medicines", label: "Lääkkeet", icon: Pill },
     { href: "/calculators", label: "Laskurit", icon: Calculator },
   ];
