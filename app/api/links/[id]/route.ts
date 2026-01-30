@@ -1,30 +1,45 @@
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "../../../../lib/auth";
-import prisma from "@/lib/prisma";
+import { PrismaClient } from "@prisma/client";
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "../../../../lib/auth"; // На один уровень глубже
+
+const prisma = new PrismaClient();
 
 export async function DELETE(
   req: Request,
   { params }: { params: { id: string } }
 ) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const linkId = parseInt(params.id);
-  const userId = parseInt(session.user.id);
-
   try {
-    // Проверка владельца перед удалением
-    const link = await prisma.quickLink.findUnique({ where: { id: linkId } });
-    
-    if (!link) return NextResponse.json({ error: "Not found" }, { status: 404 });
-    if (link.userId !== null && link.userId !== userId) {
+    const session = await getServerSession(authOptions);
+    if (!session || !session.user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const linkId = parseInt(params.id);
+    const currentUserId = (session.user as any).id ? parseInt((session.user as any).id) : null;
+
+    // Сначала найдем ссылку, чтобы проверить права
+    const link = await prisma.quickLink.findUnique({
+      where: { id: linkId }
+    });
+
+    if (!link) {
+      return NextResponse.json({ error: "Ei löydy" }, { status: 404 });
+    }
+
+    // Проверка: личную ссылку может удалить только владелец
+    // Если userId у ссылки null, она общая (удаление разрешено всем или добавьте проверку роли)
+    if (link.userId !== null && link.userId !== currentUserId) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    await prisma.quickLink.delete({ where: { id: linkId } });
+    await prisma.quickLink.delete({
+      where: { id: linkId }
+    });
+
     return NextResponse.json({ success: true });
   } catch (error) {
-    return NextResponse.json({ error: "Delete failed" }, { status: 500 });
+    console.error("DELETE link error:", error);
+    return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }
