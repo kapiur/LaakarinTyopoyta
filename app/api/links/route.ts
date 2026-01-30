@@ -1,19 +1,28 @@
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
+import { PrismaClient } from "@prisma/client";
+import { getServerSession } from "next-auth/next";
 import { authOptions } from "../../../lib/auth";
-import prisma from "@/lib/prisma";
 
-// GET: Получение всех доступных ссылок и категорий
+const prisma = new PrismaClient();
+
+/**
+ * GET: Список всех категорий и ссылок (общих и персональных)
+ */
 export async function GET() {
-  const session = await getServerSession(authOptions);
-  const currentUserId = session?.user?.id ? parseInt(session.user.id) : null;
-
   try {
+    const session = await getServerSession(authOptions);
+    if (!session || !session.user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // В вашей схеме User.id - это Int. Next-auth обычно хранит id как string в session.user.id
+    const currentUserId = (session.user as any).id ? parseInt((session.user as any).id) : null;
+
     const categories = await prisma.linkCategory.findMany({
       where: {
         OR: [
-          { userId: null },
-          { userId: currentUserId || -1 }
+          { userId: null }, // Общие
+          { userId: currentUserId || -1 } // Свои
         ]
       },
       include: {
@@ -29,46 +38,58 @@ export async function GET() {
       },
       orderBy: { name: 'asc' }
     });
+
     return NextResponse.json(categories);
   } catch (error) {
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    console.error("GET links error:", error);
+    return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }
 
-// POST: Создание ссылки или категории
+/**
+ * POST: Создание категории или ссылки
+ */
 export async function POST(req: Request) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const userId = parseInt(session.user.id);
-  const body = await req.json();
-  const { type, name, title, url, categoryId, isPersonal } = body;
-
   try {
+    const session = await getServerSession(authOptions);
+    if (!session || !session.user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const currentUserId = (session.user as any).id ? parseInt((session.user as any).id) : null;
+    const body = await req.json();
+    const { type, name, title, url, categoryId, isPersonal } = body;
+
     // Создание категории
     if (type === "category") {
+      if (!name) return NextResponse.json({ error: "Nimi puuttuu" }, { status: 400 });
+      
       const category = await prisma.linkCategory.create({
         data: {
           name,
-          userId: isPersonal ? userId : null
+          userId: isPersonal ? currentUserId : null
         }
       });
       return NextResponse.json(category);
     }
 
     // Создание ссылки
+    if (!title || !url || !categoryId) {
+      return NextResponse.json({ error: "Tiedot puuttuvat" }, { status: 400 });
+    }
+
     const link = await prisma.quickLink.create({
       data: {
         title,
         url,
         categoryId: parseInt(categoryId),
-        userId: isPersonal ? userId : null
+        userId: isPersonal ? currentUserId : null
       }
     });
+
     return NextResponse.json(link);
   } catch (error) {
-    return NextResponse.json({ error: "Database error" }, { status: 500 });
+    console.error("POST links error:", error);
+    return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }
