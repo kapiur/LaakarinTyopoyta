@@ -181,7 +181,7 @@ export default function AdminPromptsPage() {
               value={text}
               onChange={(e) => setText(e.target.value)}
               placeholder="Liitä käsiteltävä teksti tähän..."
-              className="w-full h-64 p-8 outline-none text-slate-700 border-b font-medium resize-none text-lg"
+              className="w-full h-64 p-8 outline-none text-slate-700 border-b font-medium resize-none text-sm"
             />
             <div className="flex-1 p-8 bg-slate-50/30 relative">
               {loading && (
