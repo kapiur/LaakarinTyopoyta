@@ -2,7 +2,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { 
   Send, Bot, FileText, Calculator, Scissors, Languages, 
-  ListChecks, Copy, MessageSquareShare, Zap, ShieldCheck, Loader2 
+  ListChecks, Copy, MessageSquareShare, Zap, ShieldCheck, Loader2,
+  RotateCcw 
 } from 'lucide-react';
 import Link from 'next/link';
 import ReactMarkdown from 'react-markdown';
@@ -34,6 +35,12 @@ export default function Dashboard() {
     return text
       .replace(hetuRegex, '[HETU]')
       .replace(phoneRegex, '[PUHELIN]');
+  };
+
+  // Очистка формы инструментария
+  const clearTool = () => {
+    setToolText('');
+    setToolResult('');
   };
 
   // Логика чата
@@ -127,9 +134,18 @@ export default function Dashboard() {
         {/* AI TEKSTITYÖKALU */}
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-5">
           <div className="flex items-center justify-between">
-            <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-              <Bot size={22} className="text-blue-600" /> AI-Tekstityökalu
-            </h3>
+            <div className="flex items-center gap-4">
+              <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                <Bot size={22} className="text-blue-600" /> AI-Tekstityökalu
+              </h3>
+              <button 
+                onClick={clearTool}
+                className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-bold text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all border border-transparent hover:border-red-100 uppercase"
+                title="Tyhjennä lomake"
+              >
+                <RotateCcw size={14} /> Tyhjennä
+              </button>
+            </div>
             <div className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-100">
               <ShieldCheck size={12} /> GDPR SECURED
             </div>
