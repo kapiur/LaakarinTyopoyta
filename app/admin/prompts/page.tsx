@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { 
   Wand2, Plus, Settings2, Loader2, Trash2, Edit2,
-  Zap, Copy, X, Save
+  Zap, Copy, X, Save, RotateCcw
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 
@@ -24,6 +24,12 @@ export default function AdminPromptsPage() {
   };
 
   useEffect(() => { fetchPrompts(); }, []);
+
+  // Очистка всего рабочего пространства
+  const clearAll = () => {
+    setText('');
+    setResult('');
+  };
 
   // Сохранение (Создание или Обновление)
   const handleSave = async () => {
@@ -175,13 +181,21 @@ export default function AdminPromptsPage() {
         </div>
 
         <div className="lg:col-span-8">
-          <div className="bg-white rounded-[2.5rem] border shadow-sm overflow-hidden flex flex-col min-h-[600px]">
-             {/* Остальной код текстового поля и вывода результата (ReactMarkdown) остается прежним */}
-             <textarea
+          <div className="bg-white rounded-[2.5rem] border shadow-sm overflow-hidden flex flex-col min-h-[600px] relative">
+            <div className="absolute top-4 right-4 z-20">
+               <button 
+                onClick={clearAll}
+                className="flex items-center gap-2 px-4 py-2 bg-white/80 backdrop-blur-md border border-slate-200 rounded-xl text-[10px] font-bold text-slate-500 hover:text-red-500 hover:border-red-200 transition-all shadow-sm uppercase tracking-wider"
+              >
+                <RotateCcw size={14} /> Tyhjennä kaikki
+              </button>
+            </div>
+
+            <textarea
               value={text}
               onChange={(e) => setText(e.target.value)}
               placeholder="Liitä käsiteltävä teksti tähän..."
-              className="w-full h-64 p-8 outline-none text-slate-700 border-b font-medium resize-none text-sm"
+              className="w-full h-64 p-8 pt-16 outline-none text-slate-700 border-b font-medium resize-none text-sm"
             />
             <div className="flex-1 p-8 bg-slate-50/30 relative">
               {loading && (
