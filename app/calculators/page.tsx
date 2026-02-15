@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { 
   Calculator, Settings, Plus, Trash2, Copy, Check, Zap, Heart, Activity, Baby, 
-  FlaskConical, ClipboardList, Info, AlertTriangle, Scale
+  FlaskConical, ClipboardList, Info, AlertTriangle, Scale, Stethoscope
 } from 'lucide-react';
 
 export default function CalculatorsPage() {
@@ -24,6 +24,14 @@ export default function CalculatorsPage() {
   });
   const [chads, setChads] = useState({ chf: 0, ht: 0, age: 0, dm: 0, stroke: 0, vasc: 0, sex: 0 });
   const [hasbled, setHasbled] = useState({ sbp: 0, renal: 0, liver: 0, stroke: 0, bleed: 0, inr: 0, age: 0, drugs: 0, alc: 0 });
+  
+  // Состояние для ИБС (CAD)
+  const [cad, setCad] = useState({
+    ageRange: '50-59',
+    sex: 'male',
+    symptoms: 'typical', // typical, atypical, other
+    riskFactors: '0-1' // 0-1, 2-3, 4-5
+  });
 
   // --- ЛОГИКА БД ---
   useEffect(() => { fetchPcaLibrary(); }, []);
@@ -55,7 +63,9 @@ export default function CalculatorsPage() {
   };
 
   const handleCopy = () => {
-    const text = (result?.type === 'text' || result?.type === 'peds_card') ? result.rawText : (typeof result === 'string' ? result : `Score: ${result?.score}\n${result?.desc}`);
+    const text = (result?.type === 'text' || result?.type === 'peds_card' || result?.type === 'cad_result') 
+      ? result.rawText 
+      : (typeof result === 'string' ? result : `Score: ${result?.score}\n${result?.desc}`);
     if (text) {
       navigator.clipboard.writeText(text).then(() => {
         setCopied(true);
@@ -120,6 +130,46 @@ export default function CalculatorsPage() {
       const score = Math.round(((140 - +gfr.age) * +gfr.w * +gfr.sex) / +gfr.creat);
       setResult({ type: 'single', score, desc: "ml/min (Cockcroft-Gault)" });
     }
+
+    if (activeTab === 'cad') {
+      // Матрица вероятностей на основе загруженного изображения (финские рекомендации)
+      const cadMatrix: any = {
+        'male': {
+          'typical': { '30-39': {'0-1': 9, '2-3': 14, '4-5': 22}, '40-49': {'0-1': 14, '2-3': 20, '4-5': 27}, '50-59': {'0-1': 21, '2-3': 27, '4-5': 33}, '60-69': {'0-1': 32, '2-3': 35, '4-5': 39}, '70-80': {'0-1': 44, '2-3': 44, '4-5': 45} },
+          'atypical': { '30-39': {'0-1': 2, '2-3': 4, '4-5': 8}, '40-49': {'0-1': 3, '2-3': 6, '4-5': 12}, '50-59': {'0-1': 6, '2-3': 11, '4-5': 17}, '60-69': {'0-1': 12, '2-3': 17, '4-5': 25}, '70-80': {'0-1': 22, '2-3': 27, '4-5': 34} },
+          'other': { '30-39': {'0-1': 1, '2-3': 2, '4-5': 5}, '40-49': {'0-1': 2, '2-3': 4, '4-5': 8}, '50-59': {'0-1': 4, '2-3': 7, '4-5': 12}, '60-69': {'0-1': 8, '2-3': 12, '4-5': 17}, '70-80': {'0-1': 15, '2-3': 19, '4-5': 24} }
+        },
+        'female': {
+          'typical': { '30-39': {'0-1': 2, '2-3': 5, '4-5': 10}, '40-49': {'0-1': 4, '2-3': 7, '4-5': 12}, '50-59': {'0-1': 6, '2-3': 10, '4-5': 15}, '60-69': {'0-1': 10, '2-3': 14, '4-5': 19}, '70-80': {'0-1': 16, '2-3': 19, '4-5': 23} },
+          'atypical': { '30-39': {'0-1': 0, '2-3': 1, '4-5': 3}, '40-49': {'0-1': 1, '2-3': 2, '4-5': 5}, '50-59': {'0-1': 2, '2-3': 3, '4-5': 7}, '60-69': {'0-1': 3, '2-3': 6, '4-5': 11}, '70-80': {'0-1': 6, '2-3': 10, '4-5': 16} },
+          'other': { '30-39': {'0-1': 0, '2-3': 1, '4-5': 2}, '40-49': {'0-1': 1, '2-3': 1, '4-5': 3}, '50-59': {'0-1': 1, '2-3': 2, '4-5': 5}, '60-69': {'0-1': 2, '2-3': 4, '4-5': 7}, '70-80': {'0-1': 2, '2-3': 7, '4-5': 11} }
+        }
+      };
+
+      const prob = cadMatrix[cad.sex][cad.symptoms][cad.ageRange][cad.riskFactors];
+      
+      let recommendation = "";
+      let color = "blue";
+      
+      if (prob <= 5) {
+        recommendation = "Erittäin pieni ennakkotodennäköisyys. Etsi muuta syytä kuin sepelvaltimotauti.";
+        color = "blue";
+      } else if (prob <= 15) {
+        recommendation = "Pieni ennakkotodennäköisyys. Ensisijainen tutkimus: Sepelvaltimoiden TT (jos ikä ≤ 65 ja saatavuus hyvä).";
+        color = "cyan";
+      } else {
+        recommendation = "Suurentunut ennakkotodennäköisyys. Suositus: Iskemian osoitus rasitustestillä (Rasitus-ECHO, perfuusiokuvaus tai rasitus-EKG).";
+        color = "amber";
+      }
+
+      setResult({ 
+        type: 'cad_result', 
+        prob, 
+        recommendation, 
+        color,
+        rawText: `CAD Pre-test Probability: ${prob}%\nRecommendation: ${recommendation}` 
+      });
+    }
   };
 
   return (
@@ -128,6 +178,7 @@ export default function CalculatorsPage() {
       <div className="flex bg-white p-1 rounded-2xl border shadow-sm overflow-x-auto no-scrollbar gap-1">
         {[
           { id: 'pca', label: 'PCA', icon: <Zap size={14}/> },
+          { id: 'cad', label: 'CAD Risk', icon: <Stethoscope size={14}/> },
           { id: 'chads', label: 'CHADS', icon: <Heart size={14}/> },
           { id: 'peds', label: 'PEDS', icon: <Baby size={14}/> },
           { id: 'bmi', label: 'BMI', icon: <Activity size={14}/> },
@@ -146,6 +197,52 @@ export default function CalculatorsPage() {
           <h2 className="text-xl font-black uppercase text-blue-600 tracking-tight mb-6">{activeTab}-Laskuri</h2>
           <div className="flex-1 overflow-y-auto no-scrollbar space-y-6 pr-1">
             
+            {activeTab === 'cad' && (
+              <div className="space-y-6 animate-in fade-in">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 ml-2 uppercase">Sukupuoli (Seks)</label>
+                  <div className="flex gap-2 p-1 bg-slate-100 rounded-2xl">
+                    <button onClick={() => setCad({...cad, sex: 'male'})} className={`flex-1 py-3 rounded-xl text-xs font-bold transition-all ${cad.sex === 'male' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500'}`}>Mies</button>
+                    <button onClick={() => setCad({...cad, sex: 'female'})} className={`flex-1 py-3 rounded-xl text-xs font-bold transition-all ${cad.sex === 'female' ? 'bg-white shadow-sm text-pink-600' : 'text-slate-500'}`}>Nainen</button>
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 ml-2 uppercase">Ikä (Age)</label>
+                  <select className="w-full p-4 bg-slate-50 border rounded-2xl font-bold focus:bg-white outline-none" value={cad.ageRange} onChange={e => setCad({...cad, ageRange: e.target.value})}>
+                    {['30-39', '40-49', '50-59', '60-69', '70-80'].map(range => <option key={range} value={range}>{range} vuotta</option>)}
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 ml-2 uppercase">Oireet (Symptoms)</label>
+                  <div className="grid grid-cols-1 gap-2">
+                    {[
+                      {id: 'typical', l: 'Tyypillinen rintakipu'},
+                      {id: 'atypical', l: 'Epätyypillinen / Hengenahdistus'},
+                      {id: 'other', l: 'Muu kipu'}
+                    ].map(s => (
+                      <button key={s.id} onClick={() => setCad({...cad, symptoms: s.id})} className={`p-4 text-left rounded-2xl border text-xs font-bold transition-all ${cad.symptoms === s.id ? 'bg-blue-600 text-white' : 'bg-slate-50'}`}>
+                        {s.l}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 ml-2 uppercase">Riskitekijöiden lukumäärä</label>
+                  <p className="text-[8px] text-slate-400 ml-2 mb-1 uppercase tracking-tighter">Sukurasiate, tupakointi, dyslipidemia, diabetes, verenpainetauti</p>
+                  <div className="flex gap-2">
+                    {['0-1', '2-3', '4-5'].map(rf => (
+                      <button key={rf} onClick={() => setCad({...cad, riskFactors: rf})} className={`flex-1 py-3 rounded-xl text-xs font-bold border transition-all ${cad.riskFactors === rf ? 'bg-blue-600 text-white' : 'bg-slate-50'}`}>
+                        {rf}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {activeTab === 'peds' && (
               <div className="space-y-4 animate-in fade-in">
                 <div className="grid grid-cols-2 gap-3">
@@ -314,6 +411,42 @@ export default function CalculatorsPage() {
           <div className="flex-1 overflow-y-auto no-scrollbar">
             {result ? (
               <div className="animate-in fade-in zoom-in-95 duration-200">
+                {result.type === 'cad_result' && (
+                  <div className="space-y-6">
+                    <div className={`p-8 rounded-[3rem] text-white shadow-xl relative overflow-hidden transition-all duration-500 ${
+                      result.color === 'blue' ? 'bg-blue-500 shadow-blue-100' : 
+                      result.color === 'cyan' ? 'bg-cyan-500 shadow-cyan-100' : 'bg-amber-500 shadow-amber-100'
+                    }`}>
+                      <p className="text-[10px] font-bold uppercase opacity-80 mb-2 tracking-widest text-center">Ennakkotodennäköisyys (PTP)</p>
+                      <div className="text-8xl font-black text-center mb-2">{result.prob}<span className="text-3xl">%</span></div>
+                      <div className="absolute -bottom-6 -right-6 opacity-10">
+                         <Stethoscope size={160} />
+                      </div>
+                    </div>
+
+                    <div className="bg-slate-50 p-8 rounded-[2.5rem] border border-slate-100 shadow-inner">
+                      <div className="flex items-center gap-3 mb-4 text-slate-400">
+                        <ClipboardList size={20} />
+                        <p className="text-[10px] font-black uppercase tracking-widest">Suositus (Suositus)</p>
+                      </div>
+                      <p className="text-slate-800 font-bold leading-relaxed text-lg italic">
+                        "{result.recommendation}"
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                        <div className="p-4 bg-slate-50 rounded-2xl border text-center">
+                           <p className="text-[8px] font-black text-slate-400 uppercase">Ikäryhmä</p>
+                           <p className="font-bold text-sm">{cad.ageRange}</p>
+                        </div>
+                        <div className="p-4 bg-slate-50 rounded-2xl border text-center">
+                           <p className="text-[8px] font-black text-slate-400 uppercase">Suku</p>
+                           <p className="font-bold text-sm uppercase">{cad.sex === 'male' ? 'Mies' : 'Nainen'}</p>
+                        </div>
+                    </div>
+                  </div>
+                )}
+
                 {result.type === 'text' && (
                   <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100 shadow-inner">
                     <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-slate-800 font-medium">
