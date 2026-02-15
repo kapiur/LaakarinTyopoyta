@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import { 
   Send, Bot, FileText, Calculator, Scissors, Languages, 
   ListChecks, Copy, MessageSquareShare, Zap, ShieldCheck, Loader2,
-  RotateCcw 
+  RotateCcw, FlaskConical 
 } from 'lucide-react';
 import Link from 'next/link';
 import ReactMarkdown from 'react-markdown';
@@ -76,13 +76,33 @@ export default function Dashboard() {
     if (!toolText.trim() || isToolLoading) return;
     setIsToolLoading(true);
 
+    // Определяем системный промпт для Labrat
+    let customPrompt = null;
+    if (toolMode === 'labrat') {
+      customPrompt = `Ты — врач akuutti-/vuodeosasto в Финляндии.
+Твоя задача — на основании исключительно предоставленных лабораторных данных оформить tiivistetty laboratoriomuotoilu для использования в potilaskertomus.
+
+Критически важные правила:
+- Использовать только те лабораторные показатели, которые даны после запроса.
+- Ничего не додумывать, не интерпретировать и не комментировать.
+- Результат выводить в одну строку.
+- Показатели перечислять через запятую.
+- Сохранять сокращённые названия анализов (PVKT, CRP, Hb, Krea и т.д.).
+- Не указывать единицы измерения.
+- Не указывать референсные значения.
+- Не использовать символ * даже если он был в исходных данных.
+- Если показатель pyydetty / puuttuu, его не включать в итоговую строку.
+- Сохранять порядок показателей, как в исходных данных.`;
+    }
+
     try {
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           text: anonymize(toolText), 
-          mode: toolMode 
+          mode: toolMode,
+          customPrompt: customPrompt // Передаем промпт на бэкенд
         }),
       });
       const data = await response.json();
@@ -151,11 +171,12 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <div className="flex gap-2 p-1 bg-slate-100 rounded-xl w-fit">
+          <div className="flex flex-wrap gap-2 p-1 bg-slate-100 rounded-xl w-fit">
             {[
               { id: 'fix', label: 'Korjaa', icon: <ListChecks size={14} /> },
               { id: 'translate', label: 'Käännä', icon: <Languages size={14} /> },
               { id: 'summarize', label: 'Tiivistä', icon: <Scissors size={14} /> },
+              { id: 'labrat', label: 'Labrat', icon: <FlaskConical size={14} /> },
             ].map((btn) => (
               <button
                 key={btn.id}
