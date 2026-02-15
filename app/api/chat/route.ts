@@ -22,7 +22,22 @@ Vastaa suomeksi, selkeästi ja ammattimaisesti. Mainitse lähde vastauksen lopus
 const PROMPTS_TOOLS: Record<string, string> = {
   fix: `Ты — эксперт по финской медицинской документации. Исправляй ошибки, анонимизируй данные [HETU]. Формат: Исправленный текст + раздел "Korjaukset:".`,
   translate: `Ты — медицинский переводчик. Переводи на профессиональный финский. Понимай транслитерацию. Анонимизируй всё через [X].`,
-  summarize: `Ты — врач-эксперт. Сделай краткое медицинское резюме (Tiivistelmä) на финском. Структура: Esitiedot, Löydökset, Diagnoosi, Suunnitelma.`
+  summarize: `Ты — врач-эксперт. Сделай краткое медицинское резюме (Tiivistelmä) на финском. Структура: Esitiedot, Löydökset, Diagnoosi, Suunnitelma.`,
+  // Добавляем логику Labrat здесь для надежности
+  labrat: `Ты — врач akuutti-/vuodeosasto в Финляндии.
+Твоя задача — на основании исключительно предоставленных лабораторных данных оформить tiivistetty laboratoriomuotoilu для использования в potilaskertomus.
+
+Критически важные правила:
+- Использовать только те лабораторные показатели, которые даны после запроса.
+- Ничего не додумывать, не интерпретировать и не комментировать.
+- Результат выводить в одну строку.
+- Показатели перечислять через запятую.
+- Сохранять сокращённые названия анализов (PVKT, CRP, Hb, Krea и т.д.).
+- Не указывать единицы измерения.
+- Не указывать референсные значения.
+- Не использовать символ * даже если он был в исходных данных.
+- Если показатель pyydetty / puuttuu, его не включать в итоговую строку.
+- Сохранять порядок показателей, как в исходных данных.`
 };
 
 export async function POST(req: Request) {
@@ -33,14 +48,14 @@ export async function POST(req: Request) {
 
     let finalMessages: any[] = [];
 
-    // 1. ПРИОРИТЕТ: Кастомный промпт из Admin Prompt Lab
+    // 1. ПРИОРИТЕТ: Кастомный промпт (переданный с фронтенда для Labrat или из Admin Panel)
     if (customPrompt && text) {
       finalMessages = [
         { role: 'system', content: customPrompt },
         { role: 'user', content: text }
       ];
     } 
-    // 2. ВТОРОЙ ПРИОРИТЕТ: Текстовый инструментарий (Fix/Translate/Summarize)
+    // 2. ВТОРОЙ ПРИОРИТЕТ: Текстовый инструментарий по ключу (Fix/Translate/Summarize/Labrat)
     else if (text && mode && PROMPTS_TOOLS[mode]) {
       finalMessages = [
         { role: 'system', content: PROMPTS_TOOLS[mode] },
@@ -61,9 +76,9 @@ export async function POST(req: Request) {
     }
 
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o', // Оставляем 4o для высокой точности
+      model: 'gpt-4o', 
       messages: finalMessages,
-      temperature: 0.2, // Низкая температура для минимизации галлюцинаций
+      temperature: 0.1, // Для лаб. данных снизил до 0.1 для максимальной точности
     });
 
     return NextResponse.json({ content: response.choices[0].message.content });
