@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { 
   Calculator, Settings, Plus, Trash2, Copy, Check, Zap, Heart, Activity, Baby, 
-  FlaskConical, ClipboardList, Info, AlertTriangle, Scale, Stethoscope
+  FlaskConical, ClipboardList, Info, AlertTriangle, Scale, Stethoscope, Wind, ShieldAlert
 } from 'lucide-react';
 
 export default function CalculatorsPage() {
@@ -25,7 +25,10 @@ export default function CalculatorsPage() {
   const [chads, setChads] = useState({ chf: 0, ht: 0, age: 0, dm: 0, stroke: 0, vasc: 0, sex: 0 });
   const [hasbled, setHasbled] = useState({ sbp: 0, renal: 0, liver: 0, stroke: 0, bleed: 0, inr: 0, age: 0, drugs: 0, alc: 0 });
   
-  // Состояние для CAD (ИБС) с чекбоксами факторов риска
+  // Состояния для ТГВ и ТЭЛА
+  const [vte, setVte] = useState<Record<string, number>>({});
+  const [pe, setPe] = useState<Record<string, number>>({ age: 65 });
+
   const [cad, setCad] = useState({
     ageRange: '50-59',
     sex: 'male',
@@ -69,7 +72,7 @@ export default function CalculatorsPage() {
   };
 
   const handleCopy = () => {
-    const text = (result?.type === 'text' || result?.type === 'peds_card' || result?.type === 'cad_result') 
+    const text = (result?.type === 'text' || result?.type === 'peds_card' || result?.type === 'cad_result' || result?.type === 'vte_pe_result') 
       ? result.rawText 
       : (typeof result === 'string' ? result : `Score: ${result?.score}\n${result?.desc}`);
     if (text) {
@@ -100,6 +103,43 @@ export default function CalculatorsPage() {
       const bolus = (spdNum * 2).toFixed(1);
       const outputText = `PCA-ohje:\n\nPCA ${dNum} vrk, ${kas} ml kasetti.\n${out}Lääkkeet yhteensä: ${totMl.toFixed(1)} ml\nNaCl 0,9 % ad ${adNum} ml (${(adNum - totMl).toFixed(1)} ml)\n\nPitoisuudet:\n${conc}\nNopeus: ${spdNum} ml/h\nBolus: ${bolus} ml (2x tuntiannos), 20 min lukitus.\n\nJos boluksia menee yli 6/8–24 h, nosta nopeutta +0.1 ml/h ad ${(spdNum + 0.2).toFixed(1)} ml/h ja bolusta +0.2 ml ad ${(parseFloat(bolus) + 0.4).toFixed(1)} ml.\nJos potilas sedatoituu liikaa, vähennä nopeutта –0.1 ml/h.`;
       setResult({ type: 'text', rawText: outputText });
+    }
+
+    if (activeTab === 'vte') {
+        const score = Object.values(vte).reduce((a, b) => a + b, 0);
+        let risk = "Pieni", prob = "~3%", rec = "Tutki D-dimeeri. Jos < 0.5 mg/l (tai ikäkorjattu), ТГВ epätodennäköinen.";
+        if (score >= 3) { risk = "Suuri"; prob = "~75%"; rec = "Suoraan ultraäänitutkimukseen (UÄ)."; }
+        else if (score >= 1) { risk = "Kohtalainen"; prob = "~17%"; rec = "Tutki D-dimeeri. Jos koholla, etene UÄ-tutkimukseen."; }
+        
+        setResult({
+            type: 'vte_pe_result', score, risk, prob, rec, title: "ТГВ (VTE) Riski",
+            rawText: `VTE Score: ${score}\nRiski: ${risk} (${prob})\nSuositus: ${rec}`
+        });
+    }
+
+    if (activeTab === 'pe') {
+        const score = Object.values(pe).reduce((a, b) => (typeof b === 'number' ? a + b : a), 0) - (pe.age ? 0 : 0); 
+        // В пе баллы считаем без поля age
+        const currentScore = Object.entries(pe).filter(([k]) => k !== 'age').reduce((a, [_,v]) => a + (v as number), 0);
+        
+        let risk = "Pieni", prob = "~2%", rec = "";
+        const age = pe.age || 50;
+        const dThreshold = age > 50 ? (age / 100).toFixed(1) : "0.5";
+
+        if (currentScore > 6) { 
+            risk = "Suuri"; prob = "~50%"; 
+            rec = `Harkitse LMWH aloitusta heti. Suoraan TT-angiografiaan.`; 
+        } else if (currentScore >= 2) { 
+            risk = "Kohtalainen"; prob = "~20%"; 
+            rec = `LMWH aloitus. Tutki D-dimeeri. Raja-arvo: ${dThreshold} mg/l. Jos yli -> TT-angiografia.`; 
+        } else {
+            rec = `Tutki D-dimeeri. Jos < 1.0 mg/l, PE on poissuljettu.`;
+        }
+
+        setResult({
+            type: 'vte_pe_result', score: currentScore, risk, prob, rec, title: "ТЭЛА (PE) Riski",
+            rawText: `PE Score: ${currentScore}\nRiski: ${risk} (${prob})\nSuositus: ${rec}`
+        });
     }
 
     if (activeTab === 'peds') {
@@ -138,13 +178,11 @@ export default function CalculatorsPage() {
     }
 
     if (activeTab === 'cad') {
-      // 1. Считаем количество факторов
       const factorCount = Object.values(cad.factors).filter(v => v === true).length;
       let factorKey = '0-1';
       if (factorCount >= 2 && factorCount <= 3) factorKey = '2-3';
       if (factorCount >= 4) factorKey = '4-5';
 
-      // 2. Матрица (финские рекомендации)
       const cadMatrix: any = {
         'male': {
           'typical': { '30-39': {'0-1': 9, '2-3': 14, '4-5': 22}, '40-49': {'0-1': 14, '2-3': 20, '4-5': 27}, '50-59': {'0-1': 21, '2-3': 27, '4-5': 33}, '60-69': {'0-1': 32, '2-3': 35, '4-5': 39}, '70-80': {'0-1': 44, '2-3': 44, '4-5': 45} },
@@ -198,6 +236,8 @@ export default function CalculatorsPage() {
       <div className="flex bg-white p-1 rounded-2xl border shadow-sm overflow-x-auto no-scrollbar gap-1">
         {[
           { id: 'pca', label: 'PCA', icon: <Zap size={14}/> },
+          { id: 'vte', label: 'VTE (ТГВ)', icon: <ShieldAlert size={14}/> },
+          { id: 'pe', label: 'PE (ТЭЛА)', icon: <Wind size={14}/> },
           { id: 'cad', label: 'CAD Risk', icon: <Stethoscope size={14}/> },
           { id: 'chads', label: 'CHADS', icon: <Heart size={14}/> },
           { id: 'peds', label: 'PEDS', icon: <Baby size={14}/> },
@@ -217,6 +257,51 @@ export default function CalculatorsPage() {
           <h2 className="text-xl font-black uppercase text-blue-600 tracking-tight mb-6">{activeTab}-Laskuri</h2>
           <div className="flex-1 overflow-y-auto no-scrollbar space-y-6 pr-1">
             
+            {activeTab === 'vte' && (
+              <div className="space-y-2 animate-in fade-in">
+                {[
+                  {l: "Aktiivinen syöpä", k: "cancer", v: 1},
+                  {l: "Paralyysi / kipsaus", k: "immob", v: 1},
+                  {l: "Vuodelepo >3pv / leikkaus <4vk", k: "bed", v: 1},
+                  {l: "Paikallinen palpaatioarkuus", k: "tend", v: 1},
+                  {l: "Koko alaraajan turvotus", k: "whole", v: 1},
+                  {l: "Säären ympärismitta >3cm ero", k: "calf", v: 1},
+                  {l: "Pitting-turvotus (oireinen jalka)", k: "pitt", v: 1},
+                  {l: "Näkyvät pinnalliset laskimot", k: "veins", v: 1},
+                  {l: "Aiempi diagnosoitu ТГВ", k: "prev", v: 1},
+                  {l: "Vaihtoehtoinen dg todennäköisempi", k: "alt", v: -2},
+                ].map(item => (
+                    <button key={item.k} onClick={() => setVte({...vte, [item.k]: vte[item.k] ? 0 : item.v})} className={`w-full p-3 text-left rounded-xl border text-[11px] font-bold flex justify-between items-center transition-all ${vte[item.k] ? 'bg-blue-600 text-white' : 'bg-slate-50'}`}>
+                        {item.l} {vte[item.k] && <Check size={14}/>}
+                    </button>
+                ))}
+              </div>
+            )}
+
+            {activeTab === 'pe' && (
+              <div className="space-y-4 animate-in fade-in">
+                <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-400 ml-2 uppercase">Potilaan ikä (D-dimeeri rajaa varten)</label>
+                    <input type="number" value={pe.age} onChange={e => setPe({...pe, age: parseInt(e.target.value)})} className="w-full p-3 bg-slate-50 border rounded-2xl font-bold" />
+                </div>
+                <div className="space-y-2">
+                {[
+                  {l: "ТГВ oireet ja löydökset", k: "vtesigns", v: 3.0},
+                  {l: "Muu dg epätodennäköisempi kuin PE", k: "altpe", v: 3.0},
+                  {l: "Syketaajuus > 100/min", k: "hr", v: 1.5},
+                  {l: "Immobilisaatio / leikkaus < 4vk", k: "immobpe", v: 1.5},
+                  {l: "Aiempi ТГВ tai ТЭЛА", k: "prevpe", v: 1.5},
+                  {l: "Veriyskä", k: "hemopt", v: 1.0},
+                  {l: "Syöpä (aktiivinen / hoito < 6kk)", k: "cancerpe", v: 1.0},
+                ].map(item => (
+                    <button key={item.k} onClick={() => setPe({...pe, [item.k]: pe[item.k] ? 0 : item.v})} className={`w-full p-3 text-left rounded-xl border text-[11px] font-bold flex justify-between items-center transition-all ${pe[item.k] ? 'bg-blue-600 text-white' : 'bg-slate-50'}`}>
+                        {item.l} <span className="opacity-60">+{item.v}</span>
+                    </button>
+                ))}
+                </div>
+              </div>
+            )}
+
             {activeTab === 'cad' && (
               <div className="space-y-6 animate-in fade-in">
                 <div className="space-y-1">
@@ -264,10 +349,6 @@ export default function CalculatorsPage() {
                         {cad.factors[f.id as keyof typeof cad.factors] && <Check size={14}/>}
                       </button>
                     ))}
-                  </div>
-                  <div className="mt-2 px-2 flex justify-between items-center">
-                     <span className="text-[9px] font-bold text-slate-400 uppercase">Valittu:</span>
-                     <span className="text-xs font-black text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md">{Object.values(cad.factors).filter(v => v).length} / 5</span>
                   </div>
                 </div>
               </div>
@@ -438,6 +519,27 @@ export default function CalculatorsPage() {
           <div className="flex-1 overflow-y-auto no-scrollbar">
             {result ? (
               <div className="animate-in fade-in zoom-in-95 duration-200">
+                {result.type === 'vte_pe_result' && (
+                  <div className="space-y-6">
+                     <div className={`p-8 rounded-[3rem] text-white shadow-xl relative overflow-hidden transition-all duration-500 ${
+                       result.risk === 'Pieni' ? 'bg-emerald-500' : result.risk === 'Suuri' ? 'bg-red-500' : 'bg-amber-500'
+                     }`}>
+                       <p className="text-[10px] font-bold uppercase opacity-80 mb-2 tracking-widest text-center">{result.title}</p>
+                       <div className="text-8xl font-black text-center mb-2">{result.score}</div>
+                       <p className="text-center text-[10px] font-bold uppercase tracking-wider bg-black/10 py-2 rounded-full">
+                         {result.risk} TODENNÄKÖISYYS ({result.prob})
+                       </p>
+                       <div className="absolute -bottom-6 -right-6 opacity-10">
+                          <ShieldAlert size={160} />
+                       </div>
+                     </div>
+                     <div className="bg-slate-50 p-8 rounded-[2.5rem] border border-slate-100">
+                       <p className="text-[10px] font-black uppercase text-slate-400 mb-2">Suositus</p>
+                       <p className="text-slate-800 font-bold leading-relaxed text-lg">"{result.rec}"</p>
+                     </div>
+                  </div>
+                )}
+
                 {result.type === 'cad_result' && (
                   <div className="space-y-6">
                     <div className={`p-8 rounded-[3rem] text-white shadow-xl relative overflow-hidden transition-all duration-500 ${
@@ -466,12 +568,12 @@ export default function CalculatorsPage() {
 
                     <div className="grid grid-cols-2 gap-3">
                         <div className="p-4 bg-slate-50 rounded-2xl border text-center">
-                           <p className="text-[8px] font-black text-slate-400 uppercase">Ikäryhmä</p>
-                           <p className="font-bold text-sm">{cad.ageRange}</p>
+                            <p className="text-[8px] font-black text-slate-400 uppercase">Ikäryhmä</p>
+                            <p className="font-bold text-sm">{cad.ageRange}</p>
                         </div>
                         <div className="p-4 bg-slate-50 rounded-2xl border text-center">
-                           <p className="text-[8px] font-black text-slate-400 uppercase">Sukupuoli</p>
-                           <p className="font-bold text-sm uppercase">{cad.sex === 'male' ? 'Mies' : 'Nainen'}</p>
+                            <p className="text-[8px] font-black text-slate-400 uppercase">Sukupuoli</p>
+                            <p className="font-bold text-sm uppercase">{cad.sex === 'male' ? 'Mies' : 'Nainen'}</p>
                         </div>
                     </div>
                   </div>
