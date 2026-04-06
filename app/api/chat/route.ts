@@ -5,8 +5,7 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// Настройка самой свежей модели из вашего списка
-// gpt-5.4-pro — самая мощная и интеллектуальная модель на текущий момент
+// Используем стандартную версию 5.4, так как она наиболее универсальна
 const CURRENT_MODEL = 'gpt-5.4'; 
 
 // --- СТАНДАРТНЫЕ ПРОМПТЫ ---
@@ -27,20 +26,27 @@ const PROMPTS_TOOLS: Record<string, string> = {
   fix: `Ты — эксперт по финской медицинской документации. Исправляй ошибки, анонимизируй данные [HETU]. Формат: Исправленный текст + раздел "Korjaukset:".`,
   translate: `Ты — медицинский переводчик. Переводи на профессиональный финский. Понимай транслитерацию. Анонимизируй всё через [X].`,
   summarize: `Ты — врач-эксперт. Сделай краткое медицинское резюме (Tiivistelmä) на финском. Структура: Esitiedot, Löydökset, Diagnoosi, Suunnitelma.`,
+  
+  // ОБНОВЛЕННЫЙ ПРОМПТ ДЛЯ LABRAT С ЛОГИЧЕСКОЙ ГРУППИРОВКОЙ
   labrat: `Ты — врач akuutti-/vuodeosasto в Финляндии.
-Твоя задача — на основании исключительно предоставленных лабораторных данных оформить tiivistetty laboratoriomuotoilu для использования в potilaskertomus.
+Твоя задача — оформить лабораторные данные в строку для potilaskertomus, строго соблюдая логический порядок групп.
+
+ПОРЯДОК ГРУППИРОВКИ (строго соблюдать):
+1. Инфекция и ОАК: CRP, PVKT (Hb, Leik, Trom, Neut, и т.д.).
+2. Сахар: Gluc.
+3. Почки и электролиты: Krea, Na, K, Ca-albe.
+4. Печень: AFOS, ALAT, ASAT, Bil, GT.
+5. Сердце/Тромбозы: TNT, ProBNP, D-Dimer.
+6. Остальное: всё, что не вошло в списки выше.
 
 Критически важные правила:
-- Использовать только те лабораторные показатели, которые даны после запроса.
-- Ничего не додумывать, не интерпретировать и не комментировать.
-- Результат выводить в одну строку.
-- Показатели перечислять через запятую.
-- Сохранять сокращённые названия анализов (PVKT, CRP, Hb, Krea и т.д.).
-- Не указывать единицы измерения.
-- Не указывать референсные значения.
-- Не использовать символ * даже если он был в исходных данных.
-- Если показатель pyydetty / puuttuu, его не включать в итоговую строку.
-- Сохранять порядок показателей, как в исходных данных.`
+- Выводи результат В ОДНУ СТРОКУ, показатели через запятую.
+- Округляй значения до разумных (напр. CRP 12, а не 12.0).
+- Сохраняй только сокращенные названия (CRP, Hb, Krea).
+- НЕ указывай единицы измерения и референсные значения.
+- НЕ используй символы * или спецсимволы.
+- Если показатель пустой или pyydetty, полностью ИГНОРИРУЙ его.
+- Никаких комментариев от себя, только итоговая строка.`
 };
 
 export async function POST(req: Request) {
@@ -50,14 +56,14 @@ export async function POST(req: Request) {
 
     let finalMessages: any[] = [];
 
-    // 1. ПРИОРИТЕТ: Кастомный промпт (для Labrat или Admin Panel)
+    // 1. ПРИОРИТЕТ: Кастомный промпт
     if (customPrompt && text) {
       finalMessages = [
         { role: 'system', content: customPrompt },
         { role: 'user', content: text }
       ];
     } 
-    // 2. ВТОРОЙ ПРИОРИТЕТ: Текстовый инструментарий (Fix/Translate/Summarize/Labrat)
+    // 2. ВТОРОЙ ПРИОРИТЕТ: Текстовый инструментарий
     else if (text && mode && PROMPTS_TOOLS[mode]) {
       finalMessages = [
         { role: 'system', content: PROMPTS_TOOLS[mode] },
@@ -80,12 +86,15 @@ export async function POST(req: Request) {
     const response = await openai.chat.completions.create({
       model: CURRENT_MODEL,
       messages: finalMessages,
-      temperature: 0.1, 
+      temperature: 0, // Установил 0 для максимальной точности в лабах
     });
 
     return NextResponse.json({ content: response.choices[0].message.content });
   } catch (error: any) {
-    console.error("AI Error:", error);
-    return NextResponse.json({ error: 'AI-palvelinvirhe' }, { status: 500 });
+    console.error("AI Error:", error.message || error);
+    return NextResponse.json({ 
+      error: 'AI-palvelinvirhe', 
+      details: error.message 
+    }, { status: 500 });
   }
 }
