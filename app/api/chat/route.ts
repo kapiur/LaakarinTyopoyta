@@ -7,7 +7,7 @@ const openai = new OpenAI({
 
 // Настройка самой свежей модели из вашего списка
 // gpt-5.4-pro — самая мощная и интеллектуальная модель на текущий момент
-const CURRENT_MODEL = 'gpt-5.4-pro'; 
+const CURRENT_MODEL = 'gpt-5.4'; 
 
 // --- СТАНДАРТНЫЕ ПРОМПТЫ ---
 const SYSTEM_PROMPT_MALLI = `
