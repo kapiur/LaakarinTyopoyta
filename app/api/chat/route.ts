@@ -5,6 +5,10 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+// Настройка самой свежей модели из вашего списка
+// gpt-5.4-pro — самая мощная и интеллектуальная модель на текущий момент
+const CURRENT_MODEL = 'gpt-5.4-pro'; 
+
 // --- СТАНДАРТНЫЕ ПРОМПТЫ ---
 const SYSTEM_PROMPT_MALLI = `
 Ты — эксперт по медицинской документации. Твоя задача — превратить текст реальной записи врача в интерактивный шаблон для системы «Lääkärin Työpöytä», максимально сохраняя индивидуальный стиль автора.
@@ -23,7 +27,6 @@ const PROMPTS_TOOLS: Record<string, string> = {
   fix: `Ты — эксперт по финской медицинской документации. Исправляй ошибки, анонимизируй данные [HETU]. Формат: Исправленный текст + раздел "Korjaukset:".`,
   translate: `Ты — медицинский переводчик. Переводи на профессиональный финский. Понимай транслитерацию. Анонимизируй всё через [X].`,
   summarize: `Ты — врач-эксперт. Сделай краткое медицинское резюме (Tiivistelmä) на финском. Структура: Esitiedot, Löydökset, Diagnoosi, Suunnitelma.`,
-  // Добавляем логику Labrat здесь для надежности
   labrat: `Ты — врач akuutti-/vuodeosasto в Финляндии.
 Твоя задача — на основании исключительно предоставленных лабораторных данных оформить tiivistetty laboratoriomuotoilu для использования в potilaskertomus.
 
@@ -43,19 +46,18 @@ const PROMPTS_TOOLS: Record<string, string> = {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    // Извлекаем сообщения для чата ИЛИ текст/режим/кастомный промпт для инструментов
     const { messages, text, mode, customPrompt } = body;
 
     let finalMessages: any[] = [];
 
-    // 1. ПРИОРИТЕТ: Кастомный промпт (переданный с фронтенда для Labrat или из Admin Panel)
+    // 1. ПРИОРИТЕТ: Кастомный промпт (для Labrat или Admin Panel)
     if (customPrompt && text) {
       finalMessages = [
         { role: 'system', content: customPrompt },
         { role: 'user', content: text }
       ];
     } 
-    // 2. ВТОРОЙ ПРИОРИТЕТ: Текстовый инструментарий по ключу (Fix/Translate/Summarize/Labrat)
+    // 2. ВТОРОЙ ПРИОРИТЕТ: Текстовый инструментарий (Fix/Translate/Summarize/Labrat)
     else if (text && mode && PROMPTS_TOOLS[mode]) {
       finalMessages = [
         { role: 'system', content: PROMPTS_TOOLS[mode] },
@@ -76,9 +78,9 @@ export async function POST(req: Request) {
     }
 
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o', 
+      model: CURRENT_MODEL,
       messages: finalMessages,
-      temperature: 0.1, // Для лаб. данных снизил до 0.1 для максимальной точности
+      temperature: 0.1, 
     });
 
     return NextResponse.json({ content: response.choices[0].message.content });
