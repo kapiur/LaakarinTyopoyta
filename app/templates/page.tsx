@@ -4,7 +4,7 @@ import { useSession } from "next-auth/react";
 import { 
   Plus, Search, Trash2, ChevronRight, 
   Copy, Loader2, X, Edit2, Bot, Sparkles, Wand2, HelpCircle, 
-  FileText, Layout, MessageSquare, Share2
+  FileText, Layout, MessageSquare, Share2, AlertCircle
 } from 'lucide-react';
 
 export default function TemplatesPage() {
@@ -30,6 +30,7 @@ export default function TemplatesPage() {
   const [aiFixedText, setAiFixedText] = useState<string | null>(null);
   const [isGeneratingMalli, setIsGeneratingMalli] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null); // Для вывода ошибок API
 
   const [formData, setFormData] = useState({
     id: null as number | null,
@@ -43,6 +44,7 @@ export default function TemplatesPage() {
   useEffect(() => { 
     setTemplateValues({}); 
     setAiFixedText(null); 
+    setErrorMsg(null);
   }, [selectedTemplate?.id]);
 
   const fetchTemplates = async () => {
@@ -58,9 +60,6 @@ export default function TemplatesPage() {
     if (!shareEmail.trim()) return;
     setShareLoading(true);
     try {
-      // Если делимся категорией, отправляем запрос для каждого шаблона в ней
-      // В идеале лучше сделать отдельный API роут для категорий, 
-      // но для восстановления используем существующий роут share
       const templatesToShare = sharingType === 'category' 
         ? categories.find(c => c.id === activeCategoryId)?.templates || []
         : [selectedTemplate];
@@ -111,20 +110,30 @@ export default function TemplatesPage() {
     return text.replace(hetuRegex, '[HETU]');
   };
 
+  // УЛУЧШЕНО: Промпт для генерации структуры
   const handleGenerateMalli = async () => {
     if (!formData.content.trim() || isGeneratingMalli) return;
     setIsGeneratingMalli(true);
+    setErrorMsg(null);
     try {
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          messages: [{ role: 'user', content: `malli: ${anonymize(formData.content)}` }] 
+          // Добавлен контекст для GPT-5.4, чтобы лучше выделяла переменные
+          messages: [{ role: 'user', content: `malli: Luo dynaaminen lääketieteellinen pohja tästä tekstistä: ${anonymize(formData.content)}` }] 
         }),
       });
       const data = await response.json();
-      if (data.content) setFormData(prev => ({ ...prev, content: data.content }));
-    } catch (err) { console.error(err); } finally { setIsGeneratingMalli(false); }
+      if (data.content) {
+        setFormData(prev => ({ ...prev, content: data.content }));
+      } else if (data.error) {
+        setErrorMsg(data.details || data.error);
+      }
+    } catch (err) { 
+      setErrorMsg("Yhteysvirhe tekoälyyn"); 
+      console.error(err); 
+    } finally { setIsGeneratingMalli(false); }
   };
 
   const parseTemplate = (content: string) => {
@@ -176,9 +185,11 @@ export default function TemplatesPage() {
     return result.replace(/[ ]{2,}/g, ' ').replace(/\s+\./g, '.').trim();
   }, [selectedTemplate, templateValues, aiFixedText]);
 
+  // УЛУЧШЕНО: Обработка результатов шлифовки текста
   const handleAICheck = async () => {
     if (!generateFinalText || isChecking) return;
     setIsChecking(true);
+    setErrorMsg(null);
     try {
       const response = await fetch('/api/chat', {
         method: 'POST',
@@ -187,10 +198,16 @@ export default function TemplatesPage() {
       });
       const data = await response.json();
       if (data.content) {
-        const cleanContent = data.content.split(/Korjaukset:/i)[0].trim();
+        // Улучшенная логика отсечения примечаний AI
+        const cleanContent = data.content.split(/Korjaukset:|Huomautukset:|Selitykset:/i)[0].trim();
         setAiFixedText(cleanContent);
+      } else if (data.error) {
+        setErrorMsg(data.details || data.error);
       }
-    } catch (err) { console.error(err); } finally { setIsChecking(false); }
+    } catch (err) { 
+      setErrorMsg("Virhe AI-hionnassa");
+      console.error(err); 
+    } finally { setIsChecking(false); }
   };
 
   const handleCopy = () => {
@@ -224,11 +241,22 @@ export default function TemplatesPage() {
   };
 
   const activeCategory = categories.find(c => c.id === activeCategoryId);
-  const displayedTemplates = activeCategory?.templates || [];
+  const displayedTemplates = activeCategory?.templates?.filter((t: any) => 
+    t.title.toLowerCase().includes(searchTerm.toLowerCase())
+  ) || [];
 
   return (
     <div className="max-w-[1600px] mx-auto h-[calc(100vh-100px)] flex flex-col gap-4 p-4 text-slate-900 font-sans relative animate-in fade-in duration-500">
       
+      {/* ERROR NOTIFICATION */}
+      {errorMsg && (
+        <div className="absolute top-24 left-1/2 -translate-x-1/2 z-[100] bg-red-50 border border-red-100 p-4 rounded-2xl shadow-xl flex items-center gap-3 animate-in slide-in-from-top-4">
+          <AlertCircle className="text-red-500" size={20} />
+          <span className="text-xs font-bold text-red-800">{errorMsg}</span>
+          <button onClick={() => setErrorMsg(null)} className="ml-2 text-red-300 hover:text-red-500"><X size={16} /></button>
+        </div>
+      )}
+
       {/* HEADER */}
       <div className="flex items-center justify-between bg-white p-6 rounded-[2.5rem] border shadow-sm flex-shrink-0">
         <div className="flex items-center gap-4">
@@ -401,7 +429,6 @@ export default function TemplatesPage() {
                     <span className="text-slate-400 text-[9px] font-black uppercase tracking-[0.2em]">Tulos</span>
                   </div>
                   <div className="flex gap-2">
-                    {/* Кнопка Share для шаблона */}
                     <button onClick={() => { setSharingType('template'); setIsSharing(true); }}
                       className="px-5 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 text-[9px] font-black tracking-widest uppercase transition-all hover:bg-slate-50 flex items-center gap-2 shadow-sm">
                       <Share2 size={12} /> Jaa
@@ -429,7 +456,10 @@ export default function TemplatesPage() {
                 {aiFixedText && (
                   <div className="absolute bottom-10 left-10 right-10 p-5 bg-white border border-blue-100 rounded-[2rem] shadow-2xl flex items-center gap-4 animate-in slide-in-from-bottom-6">
                     <div className="w-10 h-10 bg-blue-600 rounded-2xl flex items-center justify-center text-white shrink-0"><Bot size={18} /></div>
-                    <span className="text-[10px] font-bold text-blue-800 uppercase tracking-tight">AI on optimoinut tekstin kliiniseen muotoon.</span>
+                    <div className="flex flex-col">
+                      <span className="text-[10px] font-bold text-blue-800 uppercase tracking-tight">AI on optimoinut tekstin.</span>
+                      <button onClick={() => setAiFixedText(null)} className="text-[8px] text-blue-400 uppercase font-black text-left hover:text-blue-600">Palauta alkuperäinen</button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -493,11 +523,11 @@ export default function TemplatesPage() {
               <button onClick={() => setShowHelp(false)} className="p-2 hover:bg-white/20 rounded-full transition-colors"><X size={20} /></button>
             </div>
             <div className="p-10 space-y-6 text-xs text-slate-500 leading-relaxed font-medium">
-              <p>AI osaa rakentaa dynaamisia tekstimalleja sekunneissa vapaasta tekstistä.</p>
+              <p>AI osaa rakentaa dynaamisia lääketieteellisiä pohjia sekunneissa vapaasta tekstistä.</p>
               <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100 font-mono text-[10px] space-y-3 shadow-inner">
                  <div className="text-blue-600 font-black uppercase text-[8px]">Esimerkki:</div>
                  <div className="text-slate-700 italic">"Potilas tajuissaan, vatsa pehmeä."</div>
-                 <div className="text-slate-800 pt-2 font-bold">AI luo automaattisesti valinnat:</div>
+                 <div className="text-slate-800 pt-2 font-bold">GPT-5.4 luo automaattisesti valinnat:</div>
                  <div className="text-blue-800">"Potilas {"{{taju:select:tajuissaan,unelias}}"}. Vatsa {"{{vatsa:select:pehmeä,arka}}"}. "</div>
               </div>
             </div>
