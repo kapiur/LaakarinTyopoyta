@@ -92,7 +92,7 @@ PVKT: Leuk 5.1, Eryt 4.05, Hb 132, HKR 38, MCV 93, RDW 13, MCH 33, MCHC 350, Tro
 ПОРЯДОК ВЫВОДА:
 1. PVKT:
    Leuk, Eryt, Hb, HKR, MCV, RDW, MCH, MCHC, Trom, Neut, Lymf, Monos, Eos, Basos.
-   Если есть компоненты PVKT, выводи их после заголовка `PVKT:`.
+   Если есть компоненты PVKT, выводи их после заголовка PVKT:.
    Не выводи отдельно B-PVKT, если компоненты PVKT уже есть.
 
 2. Tulehdus:
