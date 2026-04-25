@@ -76,33 +76,13 @@ export default function Dashboard() {
     if (!toolText.trim() || isToolLoading) return;
     setIsToolLoading(true);
 
-    // Определяем системный промпт для Labrat
-    let customPrompt = null;
-    if (toolMode === 'labrat') {
-      customPrompt = `Ты — врач akuutti-/vuodeosasto в Финляндии.
-Твоя задача — на основании исключительно предоставленных лабораторных данных оформить tiivistetty laboratoriomuotoilu для использования в potilaskertomus.
-
-Критически важные правила:
-- Использовать только те лабораторные показатели, которые даны после запроса.
-- Ничего не додумывать, не интерпретировать и не комментировать.
-- Результат выводить в одну строку.
-- Показатели перечислять через запятую.
-- Сохранять сокращённые названия анализов (PVKT, CRP, Hb, Krea и т.д.).
-- Не указывать единицы измерения.
-- Не указывать референсные значения.
-- Не использовать символ * даже если он был в исходных данных.
-- Если показатель pyydetty / puuttuu, его не включать в итоговую строку.
-- Сохранять порядок показателей, как в исходных данных.`;
-    }
-
     try {
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          text: anonymize(toolText), 
-          mode: toolMode,
-          customPrompt: customPrompt // Передаем промпт на бэкенд
+        body: JSON.stringify({
+          text: anonymize(toolText),
+          mode: toolMode
         }),
       });
       const data = await response.json();
