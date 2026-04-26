@@ -17,6 +17,9 @@ Käyttäjän kuvaus voi olla millä tahansa kielellä, esimerkiksi venäjäksi, 
 Käyttäjän konteksti:
 - käyttäjä on lääkäri Suomen terveydenhuollossa;
 - käyttäjä työskentelee potilaskertomusten, lähetteiden, lausuntojen, laboratoriotulosten, lääkitysten, ICD-10-koodien, Käypä hoito -suositusten ja muiden kliinisten tekstien kanssa;
+- käyttäjä haluaa, että AI-työkalut säilyttävät mahdollisimman hyvin hänen oman kirjoitustyylinsä ja kliinisen ilmaisutapansa;
+- käyttäjän teksteissä tulee mahdollisuuksien mukaan säilyttää sama lauserakenne, sanasto, terminologia, tekstin tiiviys, kappalejärjestys, otsikointi, kliininen rytmi ja niin sanottu kirjoittajan oma jälki;
+- jos käyttäjä antaa lähtötekstin, AI:n tulee muokata sitä ensisijaisesti käyttäjän tyyliä säilyttäen, eikä korvata sitä geneerisellä tai toisenlaisella kirjoitustyylillä;
 - käyttäjä voi käsitellä todellisia potilastietoja, joten promptin tulee aina vaatia potilastietojen anonymisointia;
 - kaikki HETU:t, nimet, puhelinnumerot, osoitteet, sähköpostit, tarkat henkilötiedot ja muut yksilöivät tiedot tulee korvata turvallisilla merkinnöillä, esimerkiksi [HETU], [NIMI], [PUHELIN], [OSOITE], [SÄHKÖPOSTI], [PAIKKA] tai [X];
 - lääketieteellisten suositusten tulee olla varovaisia, ammatillisia ja perustua mahdollisuuksien mukaan Käypä hoito -suosituksiin, Terveysporttiin, THL:ään, Fimeaan tai muihin luotettaviin suomalaisiin lähteisiin;
@@ -35,8 +38,10 @@ Vastaussäännöt:
 - Promptin tulee olla selkeästi jäsennelty ja käytännöllinen.
 - Promptissa tulee olla pakollinen vaatimus potilastietojen anonymisoinnista.
 - Promptissa tulee olla kielto keksiä puuttuvia kliinisiä tietoja.
+- Promptissa tulee olla vaatimus säilyttää käyttäjän oma kirjoitustyyli mahdollisimman hyvin: lauserakenteet, sanavalinnat, kliininen sanasto, tekstin tiiviys, otsikointi, asioiden esittämisjärjestys ja käyttäjän tyypillinen potilaskertomustyyli.
+- Promptissa tulee ohjeistaa, että AI korjaa ja jäsentää tekstiä vain siinä määrin kuin tehtävä vaatii, mutta ei saa tehdä tekstistä tarpeettoman geneeristä tai muuttaa kirjoittajan ääntä.
 - Promptissa tulee olla vaatimus kirjoittaa kliinisesti hyödyllisesti, selkeästi ja suomeksi, ellei työkalun käyttötarkoitus nimenomaisesti vaadi muuta kieltä.
-- Jos käyttäjä pyytää parantamaan olemassa olevaa promptia, säilytä sen ydintarkoitus mutta lisää puuttuvat turvallisuus-, anonymisointi- ja kliiniset säännöt.
+- Jos käyttäjä pyytää parantamaan olemassa olevaa promptia, säilytä sen ydintarkoitus mutta lisää puuttuvat turvallisuus-, anonymisointi-, kirjoitustyylin säilyttämis- ja kliiniset säännöt.
 `;
 
 export async function POST(req: Request) {
@@ -56,8 +61,8 @@ export async function POST(req: Request) {
     }
 
     const userContent = [
-      description ? `Käyttäjän kuvaus uudesta tai muutettavasta työkalusta. Kuvaus voi olla millä tahansa kielellä, mutta lopullinen system prompt pitää kirjoittaa suomeksi:\n${description}` : '',
-      currentPrompt ? `Nykyinen prompt, jota pitää parantaa. Palauta parannettu versio suomeksi:\n${currentPrompt}` : '',
+      description ? `Käyttäjän kuvaus uudesta tai muutettavasta työkalusta. Kuvaus voi olla millä tahansa kielellä, mutta lopullinen system prompt pitää kirjoittaa suomeksi. Huomioi erityisesti käyttäjän oman kirjoitustyylin säilyttäminen, jos tehtävä liittyy tekstin muokkaamiseen tai kliinisen tekstin kirjoittamiseen:\n${description}` : '',
+      currentPrompt ? `Nykyinen prompt, jota pitää parantaa. Palauta parannettu versio suomeksi ja lisää tarvittaessa ohjeet käyttäjän kirjoitustyylin, lauserakenteiden ja sanaston säilyttämisestä:\n${currentPrompt}` : '',
     ].filter(Boolean).join('\n\n');
 
     const response = await openai.chat.completions.create({
