@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import {
   Send, Bot, FileText, Calculator, Scissors, Languages,
   ListChecks, Copy, MessageSquareShare, Zap, ShieldCheck, Loader2,
-  RotateCcw, FlaskConical
+  RotateCcw, FlaskConical, Settings
 } from 'lucide-react';
 import Link from 'next/link';
 import ReactMarkdown from 'react-markdown';
@@ -163,7 +163,7 @@ export default function Dashboard() {
 
         {/* AI TEKSTITYÖKALU */}
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-5">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-4">
               <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
                 <Bot size={22} className="text-blue-600" /> AI-Tekstityökalu
@@ -176,8 +176,17 @@ export default function Dashboard() {
                 <RotateCcw size={14} /> Tyhjennä
               </button>
             </div>
-            <div className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-100">
-              <ShieldCheck size={12} /> GDPR SECURED
+            <div className="flex items-center gap-2">
+              <Link
+                href="/ai-tools"
+                className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-full border border-blue-100 uppercase transition-all"
+                title="Muokkaa omia AI-työkaluja"
+              >
+                <Settings size={12} /> Muokkaa AI-työkaluja
+              </Link>
+              <div className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-100">
+                <ShieldCheck size={12} /> GDPR SECURED
+              </div>
             </div>
           </div>
 
