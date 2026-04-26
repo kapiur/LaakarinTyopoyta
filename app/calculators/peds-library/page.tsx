@@ -570,14 +570,22 @@ export default function PedsLibraryPage() {
                     {drug.form === 'LIQUID' ? 'Neste' : 'Tabletti'} · {drug.unit.toLowerCase()}
                   </div>
                 </div>
-                <button
-                  onClick={() => deleteDrug(drug.id)}
-                  disabled={isLoading}
-                  className="p-2 text-slate-300 hover:text-red-500 transition-colors"
-                  title="Poista lääke"
-                >
-                  <Trash2 size={15} />
-                </button>
+                <div className="flex items-center gap-1">
+                  <Link
+                    href={`/calculators/peds-library/${drug.id}`}
+                    className="px-3 py-2 bg-white border border-slate-100 rounded-xl text-[10px] font-black uppercase text-blue-600 hover:bg-blue-50 transition-all"
+                  >
+                    Muokkaa
+                  </Link>
+                  <button
+                    onClick={() => deleteDrug(drug.id)}
+                    disabled={isLoading}
+                    className="p-2 text-slate-300 hover:text-red-500 transition-colors"
+                    title="Poista lääke"
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-2 text-[11px] font-bold text-slate-500">
