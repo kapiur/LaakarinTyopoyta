@@ -72,8 +72,9 @@ export default function Dashboard() {
   };
 
   // Логика Инструментария
-  const processToolText = async () => {
+  const processToolText = async (selectedMode: string) => {
     if (!toolText.trim() || isToolLoading) return;
+    setToolMode(selectedMode);
     setIsToolLoading(true);
 
     try {
@@ -82,7 +83,7 @@ export default function Dashboard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           text: anonymize(toolText),
-          mode: toolMode
+          mode: selectedMode
         }),
       });
       const data = await response.json();
@@ -151,25 +152,6 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-2 p-1 bg-slate-100 rounded-xl w-fit">
-            {[
-              { id: 'fix', label: 'Korjaa', icon: <ListChecks size={14} /> },
-              { id: 'translate', label: 'Käännä', icon: <Languages size={14} /> },
-              { id: 'summarize', label: 'Tiivistä', icon: <Scissors size={14} /> },
-              { id: 'labrat', label: 'Labrat', icon: <FlaskConical size={14} /> },
-            ].map((btn) => (
-              <button
-                key={btn.id}
-                onClick={() => setToolMode(btn.id)}
-                className={`flex items-center gap-2 px-5 py-2 rounded-lg text-xs font-bold transition-all ${
-                  toolMode === btn.id ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-                }`}
-              >
-                {btn.icon} {btn.label.toUpperCase()}
-              </button>
-            ))}
-          </div>
-
           <div className="space-y-4">
             <textarea
               value={toolText}
@@ -177,14 +159,27 @@ export default function Dashboard() {
               placeholder="Liitä potilasteksti tai tutkimustulokset tähän (HETU анонимизируется автоматически)..."
               className="w-full h-40 p-4 text-sm border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500/20 outline-none bg-slate-50/30 transition-all resize-none font-medium"
             />
-            
-            <button
-              onClick={() => processToolText()}
-              disabled={isToolLoading || !toolText}
-              className="w-full py-3.5 bg-slate-900 text-white rounded-2xl font-bold hover:bg-black disabled:bg-slate-200 transition-all flex items-center justify-center gap-2 uppercase text-xs tracking-widest shadow-lg shadow-slate-200"
-            >
-              {isToolLoading ? <Loader2 size={18} className="animate-spin" /> : 'Suorita älykäs analyysi'}
-            </button>
+
+            <div className="flex flex-wrap gap-2 p-1 bg-slate-100 rounded-xl w-fit">
+              {[
+                { id: 'fix', label: 'Korjaa', icon: <ListChecks size={14} /> },
+                { id: 'translate', label: 'Käännä', icon: <Languages size={14} /> },
+                { id: 'summarize', label: 'Tiivistä', icon: <Scissors size={14} /> },
+                { id: 'labrat', label: 'Labrat', icon: <FlaskConical size={14} /> },
+              ].map((btn) => (
+                <button
+                  key={btn.id}
+                  onClick={() => processToolText(btn.id)}
+                  disabled={isToolLoading || !toolText.trim()}
+                  className={`flex items-center gap-2 px-5 py-2 rounded-lg text-xs font-bold transition-all disabled:cursor-not-allowed disabled:opacity-50 ${
+                    toolMode === btn.id ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  {isToolLoading && toolMode === btn.id ? <Loader2 size={14} className="animate-spin" /> : btn.icon}
+                  {btn.label.toUpperCase()}
+                </button>
+              ))}
+            </div>
 
             {toolResult && (
               <div className="mt-4 p-6 bg-blue-50/50 border border-blue-100 rounded-2xl relative animate-in zoom-in-95 duration-300">
