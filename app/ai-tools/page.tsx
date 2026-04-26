@@ -1,7 +1,20 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Bot, Copy, FileText, FlaskConical, Languages, ListChecks, Loader2, Plus, Save, Scissors, Sparkles, Trash2 } from "lucide-react";
+import {
+  Bot,
+  Copy,
+  FileText,
+  FlaskConical,
+  Languages,
+  ListChecks,
+  Loader2,
+  Plus,
+  Save,
+  Scissors,
+  Sparkles,
+  Trash2,
+} from "lucide-react";
 
 type AiTool = {
   id: string;
@@ -44,11 +57,7 @@ export default function AiToolsPage() {
   const [status, setStatus] = useState("");
 
   const isEditing = Boolean(form.id);
-
-  const selectedTool = useMemo(
-    () => tools.find((tool) => tool.id === form.id) ?? null,
-    [tools, form.id]
-  );
+  const selectedTool = useMemo(() => tools.find((tool) => tool.id === form.id) ?? null, [tools, form.id]);
 
   const loadTools = async () => {
     setIsLoading(true);
@@ -305,12 +314,39 @@ export default function AiToolsPage() {
               />
             </label>
 
+            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl border border-blue-100 shadow-sm p-5 space-y-4">
+              <div>
+                <h2 className="font-bold text-slate-800 flex items-center gap-2">
+                  <Sparkles size={18} className="text-blue-600" /> Prompt-apuri
+                </h2>
+                <p className="text-sm text-slate-600 mt-1">
+                  Kirjoita kuvaus millä tahansa kielellä. Apuri ymmärtää esimerkiksi venäjää, suomea ja englantia, mutta palauttaa valmiin tallennettavan system promptin suomeksi.
+                </p>
+              </div>
+
+              <textarea
+                value={idea}
+                onChange={(e) => setIdea(e.target.value)}
+                placeholder="Esim. Хочу инструмент, который делает направление в erikoissairaanhoito по данным пациента. Он должен писать на финском в HUS-tyyli, анонимизировать данные и не придумывать отсутствующую информацию."
+                className="w-full h-32 rounded-xl border border-blue-100 bg-white/80 px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300"
+              />
+
+              <button
+                onClick={generatePrompt}
+                disabled={isAssistantLoading}
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-black disabled:opacity-50 shadow-sm"
+              >
+                {isAssistantLoading ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+                Luo tai paranna prompt
+              </button>
+            </div>
+
             <label className="space-y-1 block">
               <span className="text-xs font-bold text-slate-500 uppercase">Prompt</span>
               <textarea
                 value={form.prompt}
                 onChange={(e) => setForm((prev) => ({ ...prev, prompt: e.target.value }))}
-                placeholder="Kirjoita tai generoi prompt apurin avulla..."
+                placeholder="Kirjoita prompt tai luo se Prompt-apurin avulla..."
                 className="w-full h-72 rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300 font-mono leading-relaxed"
               />
             </label>
@@ -344,33 +380,6 @@ export default function AiToolsPage() {
                 </button>
               </div>
             </div>
-          </div>
-
-          <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl border border-blue-100 shadow-sm p-5 space-y-4">
-            <div>
-              <h2 className="font-bold text-slate-800 flex items-center gap-2">
-                <Sparkles size={18} className="text-blue-600" /> Prompt-apuri
-              </h2>
-              <p className="text-sm text-slate-600 mt-1">
-                Kuvaa omin sanoin, mitä haluat työkalun tekevän. Apuri rakentaa siitä turvallisen lääkärin AI-promptin, jossa huomioidaan anonymisointi, potilastietojen käsittely, suomalainen terveydenhuolto ja Käypä hoito -lähtöisyys.
-              </p>
-            </div>
-
-            <textarea
-              value={idea}
-              onChange={(e) => setIdea(e.target.value)}
-              placeholder="Esim. Haluan työkalun, joka tekee akuuttiosaston loppuarvion minun tyyliini. Sen pitää käyttää otsikoita Esitiedot, Hoidon tarve, Hoidon tulokset ja Suunnitelma, huomioida lääkitysmuutokset ja ICD-10-koodit."
-              className="w-full h-32 rounded-xl border border-blue-100 bg-white/80 px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300"
-            />
-
-            <button
-              onClick={generatePrompt}
-              disabled={isAssistantLoading}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-black disabled:opacity-50 shadow-sm"
-            >
-              {isAssistantLoading ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
-              Luo tai paranna prompt
-            </button>
           </div>
         </div>
       </div>
