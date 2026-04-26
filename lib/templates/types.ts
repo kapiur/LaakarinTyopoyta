@@ -1,4 +1,4 @@
-export type TemplateFieldType = 'input' | 'select';
+export type TemplateFieldType = 'input' | 'textarea' | 'select';
 
 export type TemplateCondition = {
   parentId: string;
