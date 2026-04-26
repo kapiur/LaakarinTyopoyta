@@ -58,6 +58,33 @@ function fmt(value: number, digits = 1) {
   return value.toFixed(digits).replace('.', ',');
 }
 
+function deriveIndicationsFromDrugs(drugs: PedsDrug[]): PedsIndication[] {
+  const map = new Map<number, PedsIndication>();
+
+  drugs.forEach((drug) => {
+    drug.indications.forEach((indication) => {
+      map.set(indication.id, { id: indication.id, name: indication.name });
+    });
+  });
+
+  return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name, 'fi'));
+}
+
+async function fetchPedsIndications(): Promise<PedsIndication[]> {
+  const response = await fetch('/api/peds/indications');
+  if (!response.ok) throw new Error('Indikaatioiden lataus epäonnistui');
+  const data = await response.json();
+  return data.indications ?? [];
+}
+
+async function fetchPedsDrugs(indicationId = 'all'): Promise<PedsDrug[]> {
+  const query = indicationId !== 'all' ? `?indicationId=${encodeURIComponent(indicationId)}` : '';
+  const response = await fetch(`/api/peds/drugs${query}`);
+  if (!response.ok) throw new Error('Lääkkeiden lataus epäonnistui');
+  const data = await response.json();
+  return data.drugs ?? [];
+}
+
 export default function PedsCalculatorPage() {
   const [peds, setPeds] = useState<PedsState>(emptyPeds);
   const [indications, setIndications] = useState<PedsIndication[]>([]);
@@ -66,26 +93,23 @@ export default function PedsCalculatorPage() {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
-  const loadIndications = async () => {
-    const response = await fetch('/api/peds/indications');
-    if (!response.ok) throw new Error('Indikaatioiden lataus epäonnistui');
-    const data = await response.json();
-    setIndications(data.indications ?? []);
-  };
-
-  const loadDrugs = async (indicationId = peds.selectedIndicationId) => {
-    const query = indicationId !== 'all' ? `?indicationId=${encodeURIComponent(indicationId)}` : '';
-    const response = await fetch(`/api/peds/drugs${query}`);
-    if (!response.ok) throw new Error('Lääkkeiden lataus epäonnistui');
-    const data = await response.json();
-    setDrugs(data.drugs ?? []);
-  };
-
   const refreshLibrary = async () => {
     setIsLoading(true);
     setError(null);
     try {
-      await Promise.all([loadIndications(), loadDrugs()]);
+      const [loadedIndications, loadedDrugs] = await Promise.all([
+        fetchPedsIndications(),
+        fetchPedsDrugs(peds.selectedIndicationId),
+      ]);
+
+      setDrugs(loadedDrugs);
+
+      if (loadedIndications.length > 0) {
+        setIndications(loadedIndications);
+      } else {
+        const allDrugs = peds.selectedIndicationId === 'all' ? loadedDrugs : await fetchPedsDrugs('all');
+        setIndications(deriveIndicationsFromDrugs(allDrugs));
+      }
     } catch (err: any) {
       setError(err?.message ?? 'Lataus epäonnistui');
     } finally {
@@ -167,7 +191,13 @@ export default function PedsCalculatorPage() {
     setIsLoading(true);
     setError(null);
     try {
-      await loadDrugs(value);
+      const loadedDrugs = await fetchPedsDrugs(value);
+      setDrugs(loadedDrugs);
+
+      if (indications.length === 0) {
+        const allDrugs = value === 'all' ? loadedDrugs : await fetchPedsDrugs('all');
+        setIndications(deriveIndicationsFromDrugs(allDrugs));
+      }
     } catch (err: any) {
       setError(err?.message ?? 'Lääkkeiden lataus epäonnistui');
     } finally {
