@@ -1,0 +1,7 @@
+-- Baseline migration for the existing production database schema.
+--
+-- This migration is intentionally empty and must be marked as applied with:
+-- npx prisma migrate resolve --applied 20260426053000_baseline_existing_schema
+--
+-- Do not run migrate reset. Do not use db push --force-reset.
+-- Existing production tables and data must remain untouched.
