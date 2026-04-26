@@ -24,6 +24,7 @@ model User {
   templates      Template[]
   pcaDrugs       PcaDrug[]
   history        AIHistory[]
+  aiTools        AiTool[]
   substanceNotes Substance[]    // Связь для Wiki-заметок
   
   // Новые связи для каталога ссылок
@@ -80,6 +81,31 @@ model AIHistory {
   resultText   String   @db.Text
 
   @@index([userId])
+}
+
+enum AiToolScope {
+  SYSTEM
+  USER
+}
+
+model AiTool {
+  id          String      @id @default(cuid())
+  key         String
+  label       String
+  description String?
+  icon        String?
+  prompt      String      @db.Text
+  scope       AiToolScope
+  userId      Int?
+  user        User?       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  isActive    Boolean     @default(true)
+  order       Int         @default(100)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@index([key])
+  @@index([userId])
+  @@index([scope, isActive, order])
 }
 
 // ==========================================
