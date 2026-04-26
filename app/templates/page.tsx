@@ -41,6 +41,13 @@ export default function TemplatesPage() {
   const [showHelp, setShowHelp] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  // Category management
+  const [isManagingCategories, setIsManagingCategories] = useState(false);
+  const [categoryDraftName, setCategoryDraftName] = useState('');
+  const [editingCategoryId, setEditingCategoryId] = useState<number | null>(null);
+  const [editingCategoryName, setEditingCategoryName] = useState('');
+  const [categoryActionLoading, setCategoryActionLoading] = useState(false);
+
   const emptyFormData: TemplateFormData = {
     id: null,
     title: '',
@@ -65,6 +72,84 @@ export default function TemplatesPage() {
       setCategories(Array.isArray(data) ? data : []);
       if (data.length > 0 && !activeCategoryId) setActiveCategoryId(data[0].id);
     } catch (err) { console.error(err); } finally { setLoading(false); }
+  };
+
+  const handleCreateCategory = async () => {
+    if (!categoryDraftName.trim() || categoryActionLoading) return;
+    setCategoryActionLoading(true);
+    setErrorMsg(null);
+    try {
+      const res = await fetch('/api/templates/categories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: categoryDraftName }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Kategorian luonti epäonnistui');
+      setCategoryDraftName('');
+      setActiveCategoryId(data.id);
+      await fetchTemplates();
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Kategorian luonti epäonnistui');
+    } finally {
+      setCategoryActionLoading(false);
+    }
+  };
+
+  const startRenameCategory = (category: TemplateCategory) => {
+    setEditingCategoryId(category.id);
+    setEditingCategoryName(category.name);
+  };
+
+  const cancelRenameCategory = () => {
+    setEditingCategoryId(null);
+    setEditingCategoryName('');
+  };
+
+  const handleRenameCategory = async () => {
+    if (!editingCategoryId || !editingCategoryName.trim() || categoryActionLoading) return;
+    setCategoryActionLoading(true);
+    setErrorMsg(null);
+    try {
+      const res = await fetch('/api/templates/categories', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: editingCategoryId, name: editingCategoryName }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Kategorian päivitys epäonnistui');
+      cancelRenameCategory();
+      await fetchTemplates();
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Kategorian päivitys epäonnistui');
+    } finally {
+      setCategoryActionLoading(false);
+    }
+  };
+
+  const handleDeleteCategory = async (id: number) => {
+    const category = categories.find(c => c.id === id);
+    const templateCount = category?.templates?.length || 0;
+    const message = templateCount > 0
+      ? `Haluatko varmasti poistaa kategorian "${category?.name}" ja sen ${templateCount} mallia? Tätä ei voi perua.`
+      : `Haluatko varmasti poistaa kategorian "${category?.name}"?`;
+
+    if (!confirm(message)) return;
+    setCategoryActionLoading(true);
+    setErrorMsg(null);
+    try {
+      const res = await fetch(`/api/templates/categories?id=${id}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Kategorian poisto epäonnistui');
+
+      if (activeCategoryId === id) setActiveCategoryId(null);
+      if (selectedTemplate?.categoryId === id) setSelectedTemplate(null);
+      await fetchTemplates();
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Kategorian poisto epäonnistui');
+    } finally {
+      setCategoryActionLoading(false);
+    }
   };
 
   const handleShare = async () => {
@@ -100,17 +185,6 @@ export default function TemplatesPage() {
       const res = await fetch(`/api/templates?id=${id}`, { method: 'DELETE' });
       if (res.ok) {
         if (selectedTemplate?.id === id) setSelectedTemplate(null);
-        fetchTemplates();
-      }
-    } catch (err) { console.error(err); }
-  };
-
-  const handleDeleteCategory = async (id: number) => {
-    if (!confirm("Haluatko poistaa koko kategorian ja kaikki sen mallit?")) return;
-    try {
-      const res = await fetch(`/api/templates?id=${id}&type=category`, { method: 'DELETE' });
-      if (res.ok) {
-        setActiveCategoryId(null);
         fetchTemplates();
       }
     } catch (err) { console.error(err); }
@@ -236,12 +310,20 @@ export default function TemplatesPage() {
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Hallinta ja generointi</p>
           </div>
         </div>
-        <button
-          onClick={() => { setIsAdding(true); setIsEditing(false); setSelectedTemplate(null); setFormData(emptyFormData); }}
-          className="bg-blue-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-blue-700 shadow-lg shadow-blue-100 transition-all active:scale-95 flex items-center gap-2 text-sm"
-        >
-          <Plus size={18} /> Uusi malli
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setIsManagingCategories(true)}
+            className="bg-white text-slate-500 border border-slate-100 px-6 py-3 rounded-xl font-bold hover:bg-slate-50 shadow-sm transition-all active:scale-95 flex items-center gap-2 text-sm"
+          >
+            <Layout size={16} /> Hallinnoi osioita
+          </button>
+          <button
+            onClick={() => { setIsAdding(true); setIsEditing(false); setSelectedTemplate(null); setFormData(emptyFormData); }}
+            className="bg-blue-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-blue-700 shadow-lg shadow-blue-100 transition-all active:scale-95 flex items-center gap-2 text-sm"
+          >
+            <Plus size={18} /> Uusi malli
+          </button>
+        </div>
       </div>
 
       {/* CATEGORIES */}
@@ -260,10 +342,10 @@ export default function TemplatesPage() {
                 <Share2 size={12} />
               </button>
               <button
-                onClick={(e) => { e.stopPropagation(); handleDeleteCategory(cat.id); }}
-                className={`p-1 rounded-md ${activeCategoryId === cat.id ? 'text-white/50 hover:text-white' : 'text-slate-300 hover:text-red-500'}`}
+                onClick={(e) => { e.stopPropagation(); setIsManagingCategories(true); startRenameCategory(cat); }}
+                className={`p-1 rounded-md ${activeCategoryId === cat.id ? 'text-white/50 hover:text-white' : 'text-slate-300 hover:text-blue-500'}`}
               >
-                <Trash2 size={12} />
+                <Edit2 size={12} />
               </button>
             </div>
           </div>
@@ -435,6 +517,101 @@ export default function TemplatesPage() {
           )}
         </div>
       </div>
+
+      {/* CATEGORY MANAGEMENT MODAL */}
+      {isManagingCategories && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/40 backdrop-blur-md p-4 animate-in fade-in duration-300">
+          <div className="bg-white rounded-[3rem] shadow-2xl max-w-2xl w-full overflow-hidden border max-h-[85vh] flex flex-col">
+            <div className="p-8 border-b bg-slate-900 flex justify-between items-center text-white">
+              <div className="flex items-center gap-3 font-black uppercase text-xs tracking-widest">
+                <Layout size={18} /> Osioiden hallinta
+              </div>
+              <button
+                onClick={() => { setIsManagingCategories(false); cancelRenameCategory(); }}
+                className="p-2 hover:bg-white/20 rounded-full transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-8 border-b bg-slate-50/60">
+              <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-4">Uusi osio</label>
+              <div className="flex gap-3 mt-2">
+                <input
+                  className="flex-1 p-4 bg-white border border-slate-100 rounded-2xl outline-none focus:ring-4 focus:ring-blue-500/5 font-bold transition-all shadow-inner"
+                  placeholder="Esim. Status"
+                  value={categoryDraftName}
+                  onChange={(e) => setCategoryDraftName(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleCreateCategory(); }}
+                />
+                <button
+                  onClick={handleCreateCategory}
+                  disabled={categoryActionLoading || !categoryDraftName.trim()}
+                  className="px-6 py-4 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+                >
+                  {categoryActionLoading ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+                  Luo
+                </button>
+              </div>
+            </div>
+
+            <div className="p-8 flex-1 overflow-y-auto no-scrollbar space-y-3">
+              {categories.length === 0 ? (
+                <div className="text-center py-10 text-slate-300 font-black uppercase tracking-widest text-[10px]">Ei osioita</div>
+              ) : categories.map((category) => (
+                <div key={category.id} className="p-4 rounded-2xl border border-slate-100 bg-white shadow-sm flex items-center gap-3">
+                  {editingCategoryId === category.id ? (
+                    <>
+                      <input
+                        className="flex-1 p-3 bg-slate-50 border-none rounded-xl outline-none focus:ring-4 focus:ring-blue-500/5 font-bold text-sm"
+                        value={editingCategoryName}
+                        onChange={(e) => setEditingCategoryName(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') handleRenameCategory(); }}
+                        autoFocus
+                      />
+                      <button
+                        onClick={handleRenameCategory}
+                        disabled={categoryActionLoading || !editingCategoryName.trim()}
+                        className="px-4 py-3 bg-slate-900 text-white rounded-xl text-[9px] font-black uppercase tracking-widest disabled:opacity-50"
+                      >
+                        Tallenna
+                      </button>
+                      <button onClick={cancelRenameCategory} className="p-3 text-slate-300 hover:text-slate-600 rounded-xl hover:bg-slate-50">
+                        <X size={16} />
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => { setActiveCategoryId(category.id); setSelectedTemplate(null); setIsManagingCategories(false); }}
+                        className="flex-1 text-left"
+                      >
+                        <div className="font-black text-sm text-slate-800">{category.name}</div>
+                        <div className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{category.templates?.length || 0} mallia</div>
+                      </button>
+                      <button
+                        onClick={() => startRenameCategory(category)}
+                        className="p-3 text-slate-300 hover:text-blue-600 rounded-xl hover:bg-blue-50 transition-colors"
+                        title="Nimeä uudelleen"
+                      >
+                        <Edit2 size={16} />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteCategory(category.id)}
+                        disabled={categoryActionLoading}
+                        className="p-3 text-slate-300 hover:text-red-600 rounded-xl hover:bg-red-50 transition-colors disabled:opacity-50"
+                        title="Poista"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* SHARE MODAL */}
       {isSharing && (
