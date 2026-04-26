@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import ReactMarkdown from 'react-markdown';
-import { DEFAULT_AI_TOOL_METADATA } from '../lib/ai/toolMetadata';
+import { DEFAULT_AI_TOOL_METADATA, type DefaultAiToolMetadata } from '../lib/ai/toolMetadata';
 
 const aiToolIcons = {
   ListChecks: <ListChecks size={14} />,
@@ -30,11 +30,31 @@ export default function Dashboard() {
   const [toolResult, setToolResult] = useState('');
   const [toolMode, setToolMode] = useState('fix');
   const [isToolLoading, setIsToolLoading] = useState(false);
+  const [aiTools, setAiTools] = useState<DefaultAiToolMetadata[]>(DEFAULT_AI_TOOL_METADATA);
 
   // Авто-скролл чата при новых сообщениях
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // Загрузка списка AI-инструментов через API. Fallback оставлен, чтобы страница не ломалась при ошибке API.
+  useEffect(() => {
+    const loadAiTools = async () => {
+      try {
+        const response = await fetch('/api/ai-tools');
+        if (!response.ok) return;
+
+        const data = await response.json();
+        if (Array.isArray(data.tools) && data.tools.length > 0) {
+          setAiTools(data.tools);
+        }
+      } catch (error) {
+        console.error('AI-työkalujen lataus epäonnistui:', error);
+      }
+    };
+
+    loadAiTools();
+  }, []);
 
   // Улучшенная анонимизация (HETU + Телефоны)
   const anonymize = (text: string) => {
@@ -169,7 +189,7 @@ export default function Dashboard() {
             />
 
             <div className="flex flex-wrap gap-2 p-1 bg-slate-100 rounded-xl w-fit">
-              {DEFAULT_AI_TOOL_METADATA.map((btn) => (
+              {aiTools.map((btn) => (
                 <button
                   key={btn.key}
                   onClick={() => processToolText(btn.key)}
