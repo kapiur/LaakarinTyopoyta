@@ -1,10 +1,12 @@
 export type DefaultAiToolKey = 'fix' | 'translate' | 'summarize' | 'labrat';
 
+export type AiToolIcon = 'ListChecks' | 'Languages' | 'Scissors' | 'FlaskConical' | 'FileText';
+
 export type DefaultAiToolMetadata = {
-  key: DefaultAiToolKey;
+  key: string;
   label: string;
   description: string;
-  icon: 'ListChecks' | 'Languages' | 'Scissors' | 'FlaskConical';
+  icon: AiToolIcon;
 };
 
 export const DEFAULT_AI_TOOL_METADATA: DefaultAiToolMetadata[] = [
