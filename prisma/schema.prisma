@@ -13,23 +13,25 @@ datasource db {
 // ==========================================
 
 model User {
-  id             Int            @id @default(autoincrement())
-  email          String         @unique
-  password       String
-  name           String?
-  createdAt      DateTime       @default(now())
+  id              Int              @id @default(autoincrement())
+  email           String           @unique
+  password        String
+  name            String?
+  createdAt       DateTime         @default(now())
 
   // Обратные связи
-  categories     Category[]
-  templates      Template[]
-  pcaDrugs       PcaDrug[]
-  history        AIHistory[]
-  aiTools        AiTool[]
-  substanceNotes Substance[]    // Связь для Wiki-заметок
+  categories      Category[]
+  templates       Template[]
+  pcaDrugs        PcaDrug[]
+  pedsDrugs       PedsDrug[]
+  pedsIndications PedsIndication[]
+  history         AIHistory[]
+  aiTools         AiTool[]
+  substanceNotes  Substance[]      // Связь для Wiki-заметок
   
   // Новые связи для каталога ссылок
-  linkCategories LinkCategory[]
-  quickLinks     QuickLink[]
+  linkCategories  LinkCategory[]
+  quickLinks      QuickLink[]
 }
 
 // ==========================================
@@ -69,6 +71,60 @@ model PcaDrug {
   createdAt DateTime @default(now())
 
   @@index([userId])
+}
+
+enum PedsDrugForm {
+  LIQUID
+  TABLET
+}
+
+enum PedsDoseUnit {
+  MG
+  IU
+}
+
+model PedsIndication {
+  id        Int                  @id @default(autoincrement())
+  name      String
+  userId    Int
+  user      User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  drugs     PedsDrugIndication[]
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+
+  @@unique([userId, name])
+  @@index([userId])
+}
+
+model PedsDrug {
+  id           Int                  @id @default(autoincrement())
+  name         String
+  form         PedsDrugForm
+  unit         PedsDoseUnit
+  strength     Float                // mg/ml, IU/ml, mg/tabletti tai IU/tabletti
+  dosePerKgDay Float                // mg/kg/vrk tai IU/kg/vrk
+  timesPerDay  Int
+  defaultDays  Int?
+  packageSize  Float?               // ml tai kpl
+  note         String?              @db.Text
+  userId       Int
+  user         User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  indications  PedsDrugIndication[]
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+
+  @@unique([userId, name, form, strength])
+  @@index([userId])
+}
+
+model PedsDrugIndication {
+  drugId       Int
+  indicationId Int
+  drug         PedsDrug       @relation(fields: [drugId], references: [id], onDelete: Cascade)
+  indication   PedsIndication @relation(fields: [indicationId], references: [id], onDelete: Cascade)
+
+  @@id([drugId, indicationId])
+  @@index([indicationId])
 }
 
 model AIHistory {
