@@ -1,4 +1,4 @@
-import type { TemplateCondition, TemplatePart } from './types';
+import type { TemplateCondition, TemplateFieldPart, TemplatePart } from './types';
 
 function parseShowIfCondition(config: string[]): TemplateCondition | null {
   const showIfCond = config.find((item) => item.toLowerCase().startsWith('showif:'));
@@ -13,6 +13,10 @@ function parseShowIfCondition(config: string[]): TemplateCondition | null {
     parentId: parentId.trim().toLowerCase(),
     value: value.trim().toLowerCase(),
   };
+}
+
+function isTemplateFieldPart(part: TemplatePart): part is TemplateFieldPart {
+  return part.type !== 'text';
 }
 
 export function parseTemplate(content: string): TemplatePart[] {
@@ -49,6 +53,6 @@ export function parseTemplate(content: string): TemplatePart[] {
   return parts;
 }
 
-export function getTemplateFields(content: string) {
-  return parseTemplate(content).filter((part) => part.type !== 'text');
+export function getTemplateFields(content: string): TemplateFieldPart[] {
+  return parseTemplate(content).filter(isTemplateFieldPart);
 }
