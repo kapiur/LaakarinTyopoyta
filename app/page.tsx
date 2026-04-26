@@ -1,12 +1,20 @@
 "use client";
 import { useState, useEffect, useRef } from 'react';
-import { 
-  Send, Bot, FileText, Calculator, Scissors, Languages, 
+import {
+  Send, Bot, FileText, Calculator, Scissors, Languages,
   ListChecks, Copy, MessageSquareShare, Zap, ShieldCheck, Loader2,
-  RotateCcw, FlaskConical 
+  RotateCcw, FlaskConical
 } from 'lucide-react';
 import Link from 'next/link';
 import ReactMarkdown from 'react-markdown';
+import { DEFAULT_AI_TOOL_METADATA } from '../lib/ai/toolMetadata';
+
+const aiToolIcons = {
+  ListChecks: <ListChecks size={14} />,
+  Languages: <Languages size={14} />,
+  Scissors: <Scissors size={14} />,
+  FlaskConical: <FlaskConical size={14} />,
+};
 
 export default function Dashboard() {
   // Состояния для чата (справа)
@@ -161,21 +169,17 @@ export default function Dashboard() {
             />
 
             <div className="flex flex-wrap gap-2 p-1 bg-slate-100 rounded-xl w-fit">
-              {[
-                { id: 'fix', label: 'Korjaa', icon: <ListChecks size={14} /> },
-                { id: 'translate', label: 'Käännä', icon: <Languages size={14} /> },
-                { id: 'summarize', label: 'Tiivistä', icon: <Scissors size={14} /> },
-                { id: 'labrat', label: 'Labrat', icon: <FlaskConical size={14} /> },
-              ].map((btn) => (
+              {DEFAULT_AI_TOOL_METADATA.map((btn) => (
                 <button
-                  key={btn.id}
-                  onClick={() => processToolText(btn.id)}
+                  key={btn.key}
+                  onClick={() => processToolText(btn.key)}
                   disabled={isToolLoading || !toolText.trim()}
+                  title={btn.description}
                   className={`flex items-center gap-2 px-5 py-2 rounded-lg text-xs font-bold transition-all disabled:cursor-not-allowed disabled:opacity-50 ${
-                    toolMode === btn.id ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                    toolMode === btn.key ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
                   }`}
                 >
-                  {isToolLoading && toolMode === btn.id ? <Loader2 size={14} className="animate-spin" /> : btn.icon}
+                  {isToolLoading && toolMode === btn.key ? <Loader2 size={14} className="animate-spin" /> : aiToolIcons[btn.icon]}
                   {btn.label.toUpperCase()}
                 </button>
               ))}
