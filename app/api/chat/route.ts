@@ -4,7 +4,7 @@ import {
   DEFAULT_AI_TOOL_PROMPTS,
   SYSTEM_PROMPT_MALLI,
   SYSTEM_PROMPT_MEDICAL,
-} from '@/lib/ai/defaultTools';
+} from '../../../lib/ai/defaultTools';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
