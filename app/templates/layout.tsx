@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Braces, MoveRight } from 'lucide-react';
+import { Braces, MoveRight, Wand2 } from 'lucide-react';
 
 export default function TemplatesLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -12,6 +12,13 @@ export default function TemplatesLayout({ children }: { children: React.ReactNod
     <div className="relative">
       {showQuickLinks && (
         <div className="fixed right-6 bottom-6 z-50 flex flex-col gap-3">
+          <Link
+            href="/templates/builder"
+            className="flex items-center gap-2 rounded-2xl bg-blue-600 px-5 py-4 text-[10px] font-black uppercase tracking-widest text-white shadow-2xl shadow-blue-200 transition-all hover:bg-blue-700 active:scale-95"
+          >
+            <Wand2 size={14} />
+            Rakenna kenttiä
+          </Link>
           <Link
             href="/templates/syntax"
             className="flex items-center gap-2 rounded-2xl bg-white px-5 py-4 text-[10px] font-black uppercase tracking-widest text-slate-600 shadow-2xl shadow-slate-200 ring-1 ring-slate-100 transition-all hover:bg-blue-50 hover:text-blue-700 active:scale-95"
