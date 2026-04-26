@@ -31,7 +31,6 @@ function NewTemplateForm() {
         const data = await res.json();
         const nextCategories: TemplateCategory[] = Array.isArray(data) ? data : [];
         setCategories(nextCategories);
-        if (nextCategories[0]?.name) setCategoryName(nextCategories[0].name);
       } catch (err: any) {
         setErrorMsg(err.message || 'Osioiden lataus epäonnistui');
       } finally {
@@ -44,7 +43,7 @@ function NewTemplateForm() {
 
   const handleSave = async () => {
     if (!title.trim() || !categoryName.trim() || !content.trim() || saving) {
-      setErrorMsg('Täytä otsikko, osio ja sisältö.');
+      setErrorMsg('Заполни название, раздел и содержимое шаблона.');
       return;
     }
 
@@ -109,18 +108,17 @@ function NewTemplateForm() {
 
           <div className="space-y-2">
             <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-3">Раздел</label>
-            <input
-              list="template-categories"
+            <select
               value={categoryName}
               onChange={(event) => setCategoryName(event.target.value)}
-              placeholder="Например: STATUS"
-              className="w-full p-4 bg-slate-50 border-none rounded-2xl outline-none focus:ring-4 focus:ring-blue-500/5 font-bold"
-            />
-            <datalist id="template-categories">
+              disabled={loadingCategories}
+              className="w-full p-4 bg-slate-50 border-none rounded-2xl outline-none focus:ring-4 focus:ring-blue-500/5 font-bold disabled:opacity-50"
+            >
+              <option value="">Выбери раздел</option>
               {categories.map((category) => (
-                <option key={category.id} value={category.name} />
+                <option key={category.id} value={category.name}>{category.name}</option>
               ))}
-            </datalist>
+            </select>
             {loadingCategories && <div className="text-xs text-slate-400 font-semibold ml-3">Загружаю разделы...</div>}
           </div>
         </div>
