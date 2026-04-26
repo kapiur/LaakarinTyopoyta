@@ -16,6 +16,7 @@ export default function CalculatorsTabEnhancer() {
     const buttons = Array.from(nav.querySelectorAll('button'));
     const pedsButton = buttons.find((button) => button.textContent?.toLowerCase().includes('peds'));
     const pcaButton = buttons.find((button) => button.textContent?.toLowerCase().includes('pca'));
+    const vteButton = buttons.find((button) => button.textContent?.toLowerCase().includes('vte'));
 
     if (pedsButton instanceof HTMLButtonElement) {
       pedsButton.style.order = '-20';
@@ -47,6 +48,15 @@ export default function CalculatorsTabEnhancer() {
 
     pedsButton?.addEventListener('click', handlePedsClick, true);
     pcaButton?.addEventListener('click', handlePcaClick, true);
+
+    const oldPcaIsActive = pcaButton instanceof HTMLButtonElement && pcaButton.className.includes('bg-blue-600');
+    const fallbackButton = vteButton instanceof HTMLButtonElement ? vteButton : undefined;
+
+    if (oldPcaIsActive && fallbackButton) {
+      window.setTimeout(() => {
+        fallbackButton.click();
+      }, 0);
+    }
 
     return () => {
       pedsButton?.removeEventListener('click', handlePedsClick, true);
