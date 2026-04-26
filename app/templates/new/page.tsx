@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, FilePlus2, Loader2, Save } from 'lucide-react';
 import type { TemplateCategory } from '../../../lib/templates';
 
-export default function NewTemplatePage() {
+function NewTemplateForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialContent = useMemo(() => searchParams.get('content') || '', [searchParams]);
@@ -149,5 +149,13 @@ export default function NewTemplatePage() {
         </button>
       </div>
     </div>
+  );
+}
+
+export default function NewTemplatePage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-sm font-bold text-slate-400">Загружаю форму...</div>}>
+      <NewTemplateForm />
+    </Suspense>
   );
 }
