@@ -106,13 +106,17 @@ export default function TemplateBuilderPage() {
             <ArrowLeft size={18} />
           </Link>
           <div>
-            <h1 className="text-2xl font-black tracking-tight">Tekstimallin kenttärakennin</h1>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Luo input-, select- ja showIf-kenttiä ilman käsin kirjoitettua syntaksia</p>
+            <h1 className="text-2xl font-black tracking-tight">Конструктор полей шаблона</h1>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Input, select и showIf без ручного написания синтаксиса</p>
           </div>
         </div>
         <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-blue-100">
           <Wand2 size={22} />
         </div>
+      </div>
+
+      <div className="bg-amber-50 border border-amber-100 rounded-[2rem] p-6 text-sm leading-relaxed text-amber-900 font-semibold">
+        Важно: имя поля — это технический идентификатор. Пиши его латиницей, без кириллицы и без пробелов. Например: <code className="font-mono bg-white px-2 py-1 rounded-lg">kipu</code>, <code className="font-mono bg-white px-2 py-1 rounded-lg">kipukuvaus</code>, <code className="font-mono bg-white px-2 py-1 rounded-lg">infektion_lahde</code>. Значения выбора и сам медицинский текст должны быть на финском.
       </div>
 
       <div className="grid lg:grid-cols-12 gap-6 items-start">
@@ -121,14 +125,14 @@ export default function TemplateBuilderPage() {
             <div key={field.id} className="bg-white border shadow-sm rounded-[2rem] p-6 space-y-5">
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Kenttä {index + 1}</div>
-                  <div className="font-black text-slate-800">{field.name || 'Nimetön kenttä'}</div>
+                  <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Поле {index + 1}</div>
+                  <div className="font-black text-slate-800">{field.name || 'Поле без имени'}</div>
                 </div>
                 <button
                   onClick={() => removeField(field.id)}
                   disabled={fields.length === 1}
                   className="p-3 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors disabled:opacity-30"
-                  title="Poista kenttä"
+                  title="Удалить поле"
                 >
                   <Trash2 size={16} />
                 </button>
@@ -136,61 +140,63 @@ export default function TemplateBuilderPage() {
 
               <div className="grid md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-3">Kentän nimi</label>
+                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-3">Техническое имя поля</label>
                   <input
                     value={field.name}
                     onChange={(event) => updateField(field.id, { name: event.target.value })}
-                    placeholder="esim. kipu"
+                    placeholder="например kipu"
                     className="w-full p-4 bg-slate-50 border-none rounded-2xl outline-none focus:ring-4 focus:ring-blue-500/5 font-bold"
                   />
+                  <p className="text-xs text-slate-400 font-semibold ml-3">Латиница. Например: kipu, oire, yleistila.</p>
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-3">Tyyppi</label>
+                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-3">Тип поля</label>
                   <select
                     value={field.type}
                     onChange={(event) => updateField(field.id, { type: event.target.value as FieldType })}
                     className="w-full p-4 bg-slate-50 border-none rounded-2xl outline-none focus:ring-4 focus:ring-blue-500/5 font-bold"
                   >
-                    <option value="input">Vapaa tekstikenttä</option>
-                    <option value="select">Valintakenttä</option>
+                    <option value="input">Свободное текстовое поле</option>
+                    <option value="select">Поле выбора</option>
                   </select>
                 </div>
               </div>
 
               {field.type === 'select' && (
                 <div className="space-y-2">
-                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-3">Valinnat pilkulla erotettuna</label>
+                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-3">Варианты выбора через запятую</label>
                   <input
                     value={field.options}
                     onChange={(event) => updateField(field.id, { options: event.target.value })}
                     placeholder="ei,kyllä"
                     className="w-full p-4 bg-slate-50 border-none rounded-2xl outline-none focus:ring-4 focus:ring-blue-500/5 font-bold"
                   />
+                  <p className="text-xs text-slate-400 font-semibold ml-3">Например: ei,kyllä или lievä,kohtalainen,voimakas.</p>
                 </div>
               )}
 
               <div className="bg-slate-50 rounded-[1.5rem] p-5 space-y-4">
                 <div>
-                  <div className="font-black text-slate-700 text-sm">Ehdollinen näyttäminen</div>
-                  <div className="text-xs text-slate-400 font-semibold">Täytä nämä vain, jos kentän pitää näkyä toisen kentän arvon perusteella.</div>
+                  <div className="font-black text-slate-700 text-sm">Условное отображение</div>
+                  <div className="text-xs text-slate-400 font-semibold">Заполняй только если это поле должно появляться при определённом значении другого поля.</div>
                 </div>
                 <div className="grid md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-3">Näkyy kun kenttä</label>
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-3">Показывать, когда поле</label>
                     <input
                       value={field.showIfParent}
                       onChange={(event) => updateField(field.id, { showIfParent: event.target.value })}
-                      placeholder="esim. kipu"
+                      placeholder="например kipu"
                       className="w-full p-4 bg-white border border-slate-100 rounded-2xl outline-none focus:ring-4 focus:ring-blue-500/5 font-bold"
                     />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-3">on arvoltaan</label>
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-3">имеет значение</label>
                     <input
                       value={field.showIfValue}
                       onChange={(event) => updateField(field.id, { showIfValue: event.target.value })}
-                      placeholder="esim. kyllä"
+                      placeholder="например kyllä"
                       className="w-full p-4 bg-white border border-slate-100 rounded-2xl outline-none focus:ring-4 focus:ring-blue-500/5 font-bold"
                     />
                   </div>
@@ -198,7 +204,7 @@ export default function TemplateBuilderPage() {
               </div>
 
               <div className="text-xs font-mono bg-slate-950 text-slate-50 rounded-2xl p-4 overflow-x-auto">
-                {buildFieldSyntax(field) || 'Täytä kentän nimi'}
+                {buildFieldSyntax(field) || 'Заполни техническое имя поля латиницей'}
               </div>
             </div>
           ))}
@@ -207,7 +213,7 @@ export default function TemplateBuilderPage() {
             onClick={addField}
             className="w-full p-5 bg-white border border-dashed border-blue-200 text-blue-600 rounded-[2rem] font-black uppercase tracking-widest text-[10px] hover:bg-blue-50 transition-colors flex items-center justify-center gap-2"
           >
-            <Plus size={16} /> Lisää kenttä
+            <Plus size={16} /> Добавить поле
           </button>
         </div>
 
@@ -215,13 +221,13 @@ export default function TemplateBuilderPage() {
           <div className="bg-white border shadow-sm rounded-[2rem] p-6 space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Valmis syntaksi</div>
-                <div className="font-black text-slate-800">Kopioi tämä mallin sisältöön</div>
+                <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Готовый синтаксис</div>
+                <div className="font-black text-slate-800">Скопируй это в содержимое шаблона</div>
               </div>
               <Clipboard size={18} className="text-slate-300" />
             </div>
             <pre className="min-h-[220px] bg-slate-950 text-slate-50 rounded-2xl p-4 text-xs leading-relaxed overflow-x-auto whitespace-pre-wrap">
-              <code>{generatedSyntax || 'Lisää vähintään yksi kentän nimi.'}</code>
+              <code>{generatedSyntax || 'Добавь хотя бы одно поле с латинским техническим именем.'}</code>
             </pre>
             <button
               onClick={copySyntax}
@@ -229,14 +235,15 @@ export default function TemplateBuilderPage() {
               className="w-full px-6 py-4 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-blue-100"
             >
               <Copy size={14} />
-              {copied ? 'Kopioitu' : 'Kopioi syntaksi'}
+              {copied ? 'Скопировано' : 'Скопировать синтаксис'}
             </button>
           </div>
 
           <div className="bg-blue-50 border border-blue-100 rounded-[2rem] p-6 text-sm text-blue-900 font-semibold leading-relaxed space-y-2">
-            <div className="font-black">Käyttöohje</div>
-            <p>Rakenna kentät tässä näkymässä, kopioi valmis syntaksi ja liitä se tekstimallin sisältöön kohdassa <span className="font-black">Uusi malli</span> tai <span className="font-black">Muokkaa mallia</span>.</p>
-            <p>Varsinainen lääketieteellinen teksti kirjoitetaan edelleen mallin sisältöön. Kentät lisätään tekstin sekaan haluttuihin kohtiin.</p>
+            <div className="font-black">Как пользоваться</div>
+            <p>Собери поля в этом окне, скопируй готовый синтаксис и вставь его в содержимое шаблона в разделе <span className="font-black">Uusi malli</span> или <span className="font-black">Muokkaa mallia</span>.</p>
+            <p>Финский медицинский текст пишется в самом шаблоне. Поля вставляются внутрь текста в нужных местах.</p>
+            <p>Пример: <code className="font-mono bg-white px-2 py-1 rounded-lg">Kipu: {'{{kipu:select:ei,kyllä}}'}.</code></p>
           </div>
         </div>
       </div>
