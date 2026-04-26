@@ -14,6 +14,7 @@ const aiToolIcons = {
   Languages: <Languages size={14} />,
   Scissors: <Scissors size={14} />,
   FlaskConical: <FlaskConical size={14} />,
+  FileText: <FileText size={14} />,
 };
 
 export default function Dashboard() {
