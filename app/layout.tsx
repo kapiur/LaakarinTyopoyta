@@ -4,6 +4,7 @@ import "./globals.css";
 import { Providers } from "../components/Providers";
 import Sidebar from "../components/Sidebar";
 import CalculatorsTabEnhancer from "../components/CalculatorsTabEnhancer";
+import PcaLibraryEditLinksEnhancer from "../components/PcaLibraryEditLinksEnhancer";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -22,6 +23,7 @@ export default function RootLayout({
       <body className={`${inter.className} bg-slate-50 text-slate-900 min-h-screen`}>
         <Providers>
           <CalculatorsTabEnhancer />
+          <PcaLibraryEditLinksEnhancer />
           <div className="flex h-screen overflow-hidden">
             {/* Боковая панель навигации */}
             <Sidebar />
