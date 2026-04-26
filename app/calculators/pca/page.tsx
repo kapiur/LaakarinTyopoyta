@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { AlertTriangle, Copy, FlaskConical, RefreshCw, Zap } from 'lucide-react';
+import { AlertTriangle, Copy, FlaskConical, Plus, RefreshCw, Trash2, Zap } from 'lucide-react';
 
 type PcaLibraryDrug = { id: number; name: string; strength: number };
 type SelectedDrug = { drugId: string; dailyDose: string };
@@ -89,6 +89,17 @@ export default function PcaCalculatorPage() {
     setSelectedDrugs((prev) => prev.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item));
   };
 
+  const addSelectedDrugRow = () => {
+    setSelectedDrugs((prev) => [...prev, { drugId: '', dailyDose: '' }]);
+  };
+
+  const removeSelectedDrugRow = (index: number) => {
+    setSelectedDrugs((prev) => {
+      if (prev.length <= emptySelectedDrugs.length) return prev;
+      return prev.filter((_, itemIndex) => itemIndex !== index);
+    });
+  };
+
   const resetForm = () => {
     setSelectedDrugs(emptySelectedDrugs);
     setSettings({ cassetteMl: '50', adMl: '25', speedMlH: '0.4', days: '3' });
@@ -144,7 +155,18 @@ export default function PcaCalculatorPage() {
           <div className="space-y-4">
             {selectedDrugs.map((item, index) => (
               <div key={index} className="space-y-1">
-                <label className="text-[10px] font-black text-blue-600 uppercase ml-1">Lääke {index + 1} ja mg/vrk</label>
+                <div className="flex items-center justify-between gap-2">
+                  <label className="text-[10px] font-black text-blue-600 uppercase ml-1">Lääke {index + 1} ja mg/vrk</label>
+                  {selectedDrugs.length > emptySelectedDrugs.length && index >= emptySelectedDrugs.length && (
+                    <button
+                      onClick={() => removeSelectedDrugRow(index)}
+                      className="text-[10px] font-black uppercase text-slate-300 hover:text-red-500 flex items-center gap-1"
+                      title="Poista lääkerivi"
+                    >
+                      <Trash2 size={12} /> Poista
+                    </button>
+                  )}
+                </div>
                 <div className="flex gap-2">
                   <select value={item.drugId} onChange={(event) => updateSelectedDrug(index, { drugId: event.target.value })} className="flex-1 p-4 bg-slate-50 border-2 border-transparent focus:border-blue-500 focus:bg-white rounded-2xl text-sm font-bold outline-none">
                     <option value="">-- Valitse lääke --</option>
@@ -155,6 +177,13 @@ export default function PcaCalculatorPage() {
               </div>
             ))}
           </div>
+
+          <button
+            onClick={addSelectedDrugRow}
+            className="w-full py-3 bg-blue-50 text-blue-700 rounded-2xl text-xs font-black uppercase hover:bg-blue-100 transition-all flex items-center justify-center gap-2"
+          >
+            <Plus size={15} /> Lisää lääke
+          </button>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 bg-slate-50 rounded-3xl border border-slate-100">
             <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-1">Kasetti ml</label><input value={settings.cassetteMl} onChange={(event) => setSettings({ ...settings, cassetteMl: event.target.value })} className="w-full p-3 bg-white border-2 border-transparent focus:border-blue-500 rounded-2xl text-sm font-bold outline-none" /></div>
