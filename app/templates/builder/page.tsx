@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Clipboard, Copy, FilePlus2, Plus, Trash2, Wand2 } from 'lucide-react';
 
-type FieldType = 'input' | 'select';
+type FieldType = 'input' | 'textarea' | 'select';
 
 type FieldDraft = {
   id: number;
@@ -53,6 +53,8 @@ function buildFieldSyntax(field: FieldDraft) {
     const options = normalizeOptions(field.options);
     parts.push('select');
     if (options) parts.push(options);
+  } else if (field.type === 'textarea') {
+    parts.push('textarea');
   } else {
     parts.push('input');
   }
@@ -115,7 +117,7 @@ export default function TemplateBuilderPage() {
           </Link>
           <div>
             <h1 className="text-2xl font-black tracking-tight">Конструктор полей шаблона</h1>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Input, select и showIf без ручного написания синтаксиса</p>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Input, textarea, select и showIf без ручного написания синтаксиса</p>
           </div>
         </div>
         <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-blue-100">
@@ -165,7 +167,8 @@ export default function TemplateBuilderPage() {
                     onChange={(event) => updateField(field.id, { type: event.target.value as FieldType })}
                     className="w-full p-4 bg-slate-50 border-none rounded-2xl outline-none focus:ring-4 focus:ring-blue-500/5 font-bold"
                   >
-                    <option value="input">Свободное текстовое поле</option>
+                    <option value="input">Короткое текстовое поле</option>
+                    <option value="textarea">Длинное текстовое поле</option>
                     <option value="select">Поле выбора</option>
                   </select>
                 </div>
@@ -181,6 +184,12 @@ export default function TemplateBuilderPage() {
                     className="w-full p-4 bg-slate-50 border-none rounded-2xl outline-none focus:ring-4 focus:ring-blue-500/5 font-bold"
                   />
                   <p className="text-xs text-slate-400 font-semibold ml-3">Например: ei,kyllä или lievä,kohtalainen,voimakas.</p>
+                </div>
+              )}
+
+              {field.type === 'textarea' && (
+                <div className="bg-blue-50 border border-blue-100 rounded-[1.5rem] p-4 text-xs text-blue-900 font-semibold leading-relaxed">
+                  Длинное текстовое поле удобно для описаний: oirekuvaus, statuskuvaus, suunnitelma, lisatiedot.
                 </div>
               )}
 
