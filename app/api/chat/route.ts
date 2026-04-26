@@ -1,10 +1,13 @@
 import { OpenAI } from 'openai';
 import { NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
 import {
   DEFAULT_AI_TOOL_PROMPTS,
   SYSTEM_PROMPT_MALLI,
   SYSTEM_PROMPT_MEDICAL,
 } from '../../../lib/ai/defaultTools';
+import { authOptions } from '../../../lib/auth';
+import { prisma } from '../../../lib/prisma';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -12,6 +15,29 @@ const openai = new OpenAI({
 
 // Используем стандартную версию 5.4, так как она наиболее универсальна
 const CURRENT_MODEL = 'gpt-5.4';
+
+async function getUserToolPrompt(mode: string) {
+  const session = await getServerSession(authOptions);
+  const userId = Number((session?.user as any)?.id);
+
+  if (!Number.isFinite(userId)) {
+    return null;
+  }
+
+  const tool = await prisma.aiTool.findFirst({
+    where: {
+      key: mode,
+      userId,
+      scope: 'USER',
+      isActive: true,
+    },
+    select: {
+      prompt: true,
+    },
+  });
+
+  return tool?.prompt ?? null;
+}
 
 export async function POST(req: Request) {
   try {
@@ -27,14 +53,27 @@ export async function POST(req: Request) {
         { role: 'user', content: text }
       ];
     }
-    // 2. ВТОРОЙ ПРИОРИТЕТ: Текстовый инструментарий
+    // 2. ВТОРОЙ ПРИОРИТЕТ: Стандартный текстовый инструментарий
     else if (text && mode && DEFAULT_AI_TOOL_PROMPTS[mode as keyof typeof DEFAULT_AI_TOOL_PROMPTS]) {
       finalMessages = [
         { role: 'system', content: DEFAULT_AI_TOOL_PROMPTS[mode as keyof typeof DEFAULT_AI_TOOL_PROMPTS] },
         { role: 'user', content: text }
       ];
     }
-    // 3. ТРЕТИЙ ПРИОРИТЕТ: Стандартный чат
+    // 3. ТРЕТИЙ ПРИОРИТЕТ: Пользовательский AI-инструмент из базы
+    else if (text && mode) {
+      const userToolPrompt = await getUserToolPrompt(mode);
+
+      if (!userToolPrompt) {
+        return NextResponse.json({ error: 'AI-työkalua ei löytynyt' }, { status: 404 });
+      }
+
+      finalMessages = [
+        { role: 'system', content: userToolPrompt },
+        { role: 'user', content: text }
+      ];
+    }
+    // 4. ЧЕТВЕРТЫЙ ПРИОРИТЕТ: Стандартный чат
     else if (messages && messages.length > 0) {
       const lastMessage = messages[messages.length - 1].content;
 
