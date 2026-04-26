@@ -2,7 +2,13 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Baby, CheckCircle2, Plus, RefreshCw, Trash2 } from 'lucide-react';
+import { Baby, CheckCircle2, FlaskConical, Plus, RefreshCw, Trash2 } from 'lucide-react';
+
+type PcaDrug = {
+  id: number;
+  name: string;
+  strength: number;
+};
 
 type PedsIndication = {
   id: number;
@@ -51,6 +57,8 @@ const emptyDrugForm: DrugFormState = {
 };
 
 export default function PedsLibraryPage() {
+  const [pcaDrugs, setPcaDrugs] = useState<PcaDrug[]>([]);
+  const [newPcaDrug, setNewPcaDrug] = useState({ name: '', strength: '' });
   const [indications, setIndications] = useState<PedsIndication[]>([]);
   const [drugs, setDrugs] = useState<PedsDrug[]>([]);
   const [selectedIndicationId, setSelectedIndicationId] = useState<string>('all');
@@ -64,6 +72,13 @@ export default function PedsLibraryPage() {
     if (selectedIndicationId === 'all') return 'Kaikki indikaatiot';
     return indications.find((item) => item.id === Number(selectedIndicationId))?.name ?? 'Valittu indikaatio';
   }, [indications, selectedIndicationId]);
+
+  const loadPcaDrugs = async () => {
+    const response = await fetch('/api/pca-library');
+    if (!response.ok) throw new Error('PCA-lääkkeiden lataus epäonnistui');
+    const data = await response.json();
+    setPcaDrugs(Array.isArray(data) ? data : []);
+  };
 
   const loadIndications = async () => {
     const response = await fetch('/api/peds/indications');
@@ -84,8 +99,11 @@ export default function PedsLibraryPage() {
     setIsLoading(true);
     setError(null);
     try {
-      await loadIndications();
-      await loadDrugs();
+      await Promise.all([
+        loadPcaDrugs(),
+        loadIndications(),
+        loadDrugs(),
+      ]);
     } catch (err: any) {
       setError(err?.message ?? 'Lataus epäonnistui');
     } finally {
@@ -101,6 +119,50 @@ export default function PedsLibraryPage() {
   const showMessage = (text: string) => {
     setMessage(text);
     setTimeout(() => setMessage(null), 2200);
+  };
+
+  const createPcaDrug = async () => {
+    const name = newPcaDrug.name.trim();
+    const strength = Number(newPcaDrug.strength);
+
+    if (!name || !Number.isFinite(strength) || strength <= 0) {
+      setError('Täytä PCA-lääkkeen nimi ja vahvuus mg/ml');
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+    try {
+      const response = await fetch('/api/pca-library', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, strength }),
+      });
+
+      if (!response.ok) throw new Error('PCA-lääkkeen tallennus epäonnistui');
+      setNewPcaDrug({ name: '', strength: '' });
+      await loadPcaDrugs();
+      showMessage('PCA-lääke tallennettu');
+    } catch (err: any) {
+      setError(err?.message ?? 'PCA-lääkkeen tallennus epäonnistui');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const deletePcaDrug = async (id: number) => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/pca-library?id=${id}`, { method: 'DELETE' });
+      if (!response.ok) throw new Error('PCA-lääkkeen poisto epäonnistui');
+      await loadPcaDrugs();
+      showMessage('PCA-lääke poistettu');
+    } catch (err: any) {
+      setError(err?.message ?? 'PCA-lääkkeen poisto epäonnistui');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const createIndication = async () => {
@@ -237,10 +299,10 @@ export default function PedsLibraryPage() {
             ← Takaisin laskureihin
           </Link>
           <h1 className="mt-2 text-2xl font-black text-slate-800 flex items-center gap-2">
-            <Baby className="text-blue-600" size={26} /> PEDS-lääkekirjasto
+            <FlaskConical className="text-blue-600" size={26} /> Lääkekirjastot
           </h1>
           <p className="text-sm text-slate-500 mt-1">
-            Testisivu indikaatioiden ja lasten lääkeannosten tallentamiseen. Laskurin logiikkaa ei ole vielä muutettu.
+            Hallitse PCA- ja PEDS-laskureiden omia lääkekirjastoja. Laskureiden laskentalogiikkaa ei muuteta tällä sivulla.
           </p>
         </div>
         <button
@@ -263,10 +325,71 @@ export default function PedsLibraryPage() {
         </div>
       )}
 
+      <section className="bg-white rounded-[2rem] border border-slate-200 shadow-sm p-6 space-y-5">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-600 shrink-0">
+            <FlaskConical size={20} />
+          </div>
+          <div>
+            <h2 className="text-lg font-black text-slate-800">PCA-lääkekirjasto</h2>
+            <p className="text-xs text-slate-500 mt-1">Nämä lääkkeet näkyvät PCA-laskurin lääkevalikossa.</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-[1fr_140px_auto] gap-2">
+          <input
+            value={newPcaDrug.name}
+            onChange={(event) => setNewPcaDrug({ ...newPcaDrug, name: event.target.value })}
+            onKeyDown={(event) => event.key === 'Enter' && createPcaDrug()}
+            placeholder="Lääkkeen nimi, esim. Morfiini"
+            className="p-3 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold outline-none focus:border-blue-500 focus:bg-white"
+          />
+          <input
+            type="number"
+            value={newPcaDrug.strength}
+            onChange={(event) => setNewPcaDrug({ ...newPcaDrug, strength: event.target.value })}
+            onKeyDown={(event) => event.key === 'Enter' && createPcaDrug()}
+            placeholder="mg/ml"
+            className="p-3 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold outline-none focus:border-blue-500 focus:bg-white"
+          />
+          <button
+            onClick={createPcaDrug}
+            disabled={isLoading || !newPcaDrug.name.trim() || !newPcaDrug.strength}
+            className="px-4 py-3 bg-blue-600 text-white rounded-2xl disabled:bg-slate-200 transition-all flex items-center justify-center"
+            title="Lisää PCA-lääke"
+          >
+            <Plus size={18} />
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+          {pcaDrugs.length === 0 ? (
+            <div className="md:col-span-2 xl:col-span-3 p-5 bg-slate-50 rounded-2xl text-sm text-slate-400 font-bold text-center">
+              Ei vielä PCA-lääkkeitä.
+            </div>
+          ) : pcaDrugs.map((drug) => (
+            <div key={drug.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-black text-slate-800">{drug.name}</div>
+                <div className="text-[11px] font-bold text-slate-500">{drug.strength} mg/ml</div>
+              </div>
+              <button
+                onClick={() => deletePcaDrug(drug.id)}
+                disabled={isLoading}
+                className="p-2 text-slate-300 hover:text-red-500 transition-colors"
+                title="Poista PCA-lääke"
+              >
+                <Trash2 size={15} />
+              </button>
+            </div>
+          ))}
+        </div>
+      </section>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <section className="bg-white rounded-[2rem] border border-slate-200 shadow-sm p-6 space-y-5">
           <div>
-            <h2 className="text-lg font-black text-slate-800">Indikaatiot / sairaudet</h2>
+            <h2 className="text-lg font-black text-slate-800 flex items-center gap-2"><Baby size={20} className="text-blue-600" /> PEDS-indikaatiot / sairaudet</h2>
             <p className="text-xs text-slate-500 mt-1">Luo oma ryhmä, esimerkiksi Korvatulehdus, Tonsilliitti tai Ihoinfektio.</p>
           </div>
 
@@ -314,7 +437,7 @@ export default function PedsLibraryPage() {
 
         <section className="bg-white rounded-[2rem] border border-slate-200 shadow-sm p-6 space-y-5">
           <div>
-            <h2 className="text-lg font-black text-slate-800">Lisää lääke</h2>
+            <h2 className="text-lg font-black text-slate-800">Lisää PEDS-lääke</h2>
             <p className="text-xs text-slate-500 mt-1">Tallenna oletusannos. Kaikki arvot ovat myöhemmin muokattavissa laskurissa.</p>
           </div>
 
@@ -410,7 +533,7 @@ export default function PedsLibraryPage() {
             disabled={isLoading}
             className="w-full py-4 bg-blue-600 text-white rounded-2xl text-xs font-black uppercase hover:bg-blue-700 disabled:bg-slate-200 transition-all flex items-center justify-center gap-2"
           >
-            <Plus size={16} /> Tallenna lääke
+            <Plus size={16} /> Tallenna PEDS-lääke
           </button>
         </section>
       </div>
@@ -418,7 +541,7 @@ export default function PedsLibraryPage() {
       <section className="bg-white rounded-[2rem] border border-slate-200 shadow-sm p-6 space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
-            <h2 className="text-lg font-black text-slate-800">Tallennetut lääkkeet</h2>
+            <h2 className="text-lg font-black text-slate-800">Tallennetut PEDS-lääkkeet</h2>
             <p className="text-xs text-slate-500 mt-1">Näytetään: {selectedIndicationName}</p>
           </div>
           <select
