@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { Providers } from "../components/Providers";
 import Sidebar from "../components/Sidebar";
+import CalculatorsTabEnhancer from "../components/CalculatorsTabEnhancer";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -20,6 +21,7 @@ export default function RootLayout({
     <html lang="fi" className="antialiased">
       <body className={`${inter.className} bg-slate-50 text-slate-900 min-h-screen`}>
         <Providers>
+          <CalculatorsTabEnhancer />
           <div className="flex h-screen overflow-hidden">
             {/* Боковая панель навигации */}
             <Sidebar />
