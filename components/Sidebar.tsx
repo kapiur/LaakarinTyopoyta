@@ -11,7 +11,8 @@ import {
   Pill,
   Zap,
   Link as LinkIcon, // Импортируем иконку для ссылок
-  Terminal 
+  Terminal,
+  Bot
 } from "lucide-react";
 
 export default function Sidebar() {
@@ -24,6 +25,7 @@ export default function Sidebar() {
   const navItems = [
     { href: "/", label: "Pääsivu", icon: LayoutDashboard },
     { href: "/templates", label: "Mallit", icon: FileText },
+    { href: "/ai-tools", label: "AI-työkalut", icon: Bot },
     { href: "/pikaohjeet", label: "Pikaohjeet", icon: Zap },
     { href: "/links", label: "Linkit", icon: LinkIcon }, // НОВЫЙ ПУНКТ
     { href: "/medicines", label: "Lääkkeet", icon: Pill },

@@ -20,12 +20,51 @@ function makeUserToolKey(userId: number, rawKey: string) {
   return `user-${userId}-${key}`;
 }
 
-export async function GET() {
+function getUserId(session: unknown) {
+  const userId = Number((session as any)?.user?.id);
+  return Number.isFinite(userId) ? userId : null;
+}
+
+export async function GET(req: Request) {
   try {
     const session = await getServerSession(authOptions);
-    const userId = Number((session?.user as any)?.id);
+    const userId = getUserId(session);
+    const { searchParams } = new URL(req.url);
+    const view = searchParams.get('view');
 
-    const userTools = Number.isFinite(userId)
+    if (view === 'manage') {
+      if (!userId) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
+
+      const tools = await prisma.aiTool.findMany({
+        where: {
+          scope: 'USER',
+          userId,
+        },
+        orderBy: [
+          { isActive: 'desc' },
+          { order: 'asc' },
+          { createdAt: 'asc' },
+        ],
+        select: {
+          id: true,
+          key: true,
+          label: true,
+          description: true,
+          icon: true,
+          prompt: true,
+          isActive: true,
+          order: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+
+      return NextResponse.json({ tools });
+    }
+
+    const userTools = userId
       ? await prisma.aiTool.findMany({
           where: {
             scope: 'USER',
@@ -68,9 +107,9 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     const session = await getServerSession(authOptions);
-    const userId = Number((session?.user as any)?.id);
+    const userId = getUserId(session);
 
-    if (!Number.isFinite(userId)) {
+    if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -112,10 +151,16 @@ export async function POST(req: Request) {
         order,
       },
       select: {
+        id: true,
         key: true,
         label: true,
         description: true,
         icon: true,
+        prompt: true,
+        isActive: true,
+        order: true,
+        createdAt: true,
+        updatedAt: true,
       },
     });
 
