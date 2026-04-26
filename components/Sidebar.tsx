@@ -12,7 +12,8 @@ import {
   Zap,
   Link as LinkIcon, // Импортируем иконку для ссылок
   Terminal,
-  Bot
+  Bot,
+  FlaskConical
 } from "lucide-react";
 
 export default function Sidebar() {
@@ -30,6 +31,7 @@ export default function Sidebar() {
     { href: "/links", label: "Linkit", icon: LinkIcon }, // НОВЫЙ ПУНКТ
     { href: "/medicines", label: "Lääkkeet", icon: Pill },
     { href: "/calculators", label: "Laskurit", icon: Calculator },
+    { href: "/calculators/peds-library", label: "Lääkekirjastot", icon: FlaskConical },
   ];
 
   return (
@@ -44,7 +46,7 @@ export default function Sidebar() {
       <nav className="flex-1 p-4 space-y-2">
         {navItems.map((item) => {
           const Icon = item.icon;
-          const isActive = pathname === item.href;
+          const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(`${item.href}/`));
           return (
             <Link 
               key={item.href} 
