@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Clipboard, Copy, Plus, Trash2, Wand2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { ArrowLeft, Clipboard, Copy, FilePlus2, Plus, Trash2, Wand2 } from 'lucide-react';
 
 type FieldType = 'input' | 'select';
 
@@ -68,6 +69,7 @@ function buildFieldSyntax(field: FieldDraft) {
 }
 
 export default function TemplateBuilderPage() {
+  const router = useRouter();
   const [fields, setFields] = useState<FieldDraft[]>([emptyField(1)]);
   const [copied, setCopied] = useState(false);
 
@@ -96,6 +98,12 @@ export default function TemplateBuilderPage() {
     await navigator.clipboard.writeText(generatedSyntax);
     setCopied(true);
     setTimeout(() => setCopied(false), 1800);
+  };
+
+  const createTemplateFromSyntax = () => {
+    if (!generatedSyntax) return;
+    const encodedContent = encodeURIComponent(generatedSyntax);
+    router.push(`/templates/new?content=${encodedContent}`);
   };
 
   return (
@@ -229,19 +237,29 @@ export default function TemplateBuilderPage() {
             <pre className="min-h-[220px] bg-slate-950 text-slate-50 rounded-2xl p-4 text-xs leading-relaxed overflow-x-auto whitespace-pre-wrap">
               <code>{generatedSyntax || 'Добавь хотя бы одно поле с латинским техническим именем.'}</code>
             </pre>
-            <button
-              onClick={copySyntax}
-              disabled={!generatedSyntax}
-              className="w-full px-6 py-4 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-blue-100"
-            >
-              <Copy size={14} />
-              {copied ? 'Скопировано' : 'Скопировать синтаксис'}
-            </button>
+            <div className="grid gap-3">
+              <button
+                onClick={copySyntax}
+                disabled={!generatedSyntax}
+                className="w-full px-6 py-4 bg-white text-blue-600 ring-1 ring-blue-100 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-blue-50 disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm"
+              >
+                <Copy size={14} />
+                {copied ? 'Скопировано' : 'Скопировать синтаксис'}
+              </button>
+              <button
+                onClick={createTemplateFromSyntax}
+                disabled={!generatedSyntax}
+                className="w-full px-6 py-4 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-blue-100"
+              >
+                <FilePlus2 size={14} />
+                Создать шаблон из этого
+              </button>
+            </div>
           </div>
 
           <div className="bg-blue-50 border border-blue-100 rounded-[2rem] p-6 text-sm text-blue-900 font-semibold leading-relaxed space-y-2">
             <div className="font-black">Как пользоваться</div>
-            <p>Собери поля в этом окне, скопируй готовый синтаксис и вставь его в содержимое шаблона в разделе <span className="font-black">Uusi malli</span> или <span className="font-black">Muokkaa mallia</span>.</p>
+            <p>Собери поля в этом окне, затем скопируй готовый синтаксис или сразу открой создание нового шаблона с этим содержимым.</p>
             <p>Финский медицинский текст пишется в самом шаблоне. Поля вставляются внутрь текста в нужных местах.</p>
             <p>Пример: <code className="font-mono bg-white px-2 py-1 rounded-lg">Kipu: {'{{kipu:select:ei,kyllä}}'}.</code></p>
           </div>
