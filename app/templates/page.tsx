@@ -108,7 +108,7 @@ export default function TemplatesPage() {
   const handleDeleteCategory = async (id: number) => {
     if (!confirm("Haluatko poistaa koko kategorian ja kaikki sen mallit?")) return;
     try {
-      const res = await fetch(`/api/templates/category?id=${id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/templates?id=${id}&type=category`, { method: 'DELETE' });
       if (res.ok) {
         setActiveCategoryId(null);
         fetchTemplates();

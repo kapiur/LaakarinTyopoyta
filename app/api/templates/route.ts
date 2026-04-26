@@ -5,6 +5,11 @@ import { authOptions } from "../../../lib/auth";
 
 const prisma = new PrismaClient();
 
+function normalizeCategoryName(name: unknown) {
+  if (typeof name !== 'string') return '';
+  return name.trim().replace(/\s+/g, ' ');
+}
+
 // 1. ПОЛУЧЕНИЕ ВСЕХ КАТЕГОРИЙ И ШАБЛОНОВ ПОЛЬЗОВАТЕЛЯ
 export async function GET() {
   try {
@@ -45,20 +50,31 @@ export async function POST(req: Request) {
     const body = await req.json();
     const userId = parseInt((session.user as any).id);
     const { id, title, content, categoryName, author } = body;
+    const cleanCategoryName = normalizeCategoryName(categoryName);
 
-    // ШАГ 1: Находим или создаем категорию для пользователя
+    if (!cleanCategoryName) {
+      return NextResponse.json({ error: "Kategorian nimi puuttuu" }, { status: 400 });
+    }
+
+    // ШАГ 1: Находим или создаем категорию для пользователя.
+    // Сравнение без учета регистра и с предварительной нормализацией пробелов
+    // предотвращает новые дубли вида "OHJEET", "Ohjeet" и "OHJEET ".
     let category = await prisma.category.findFirst({
-      where: { 
-        name: categoryName,
-        userId: userId 
-      }
+      where: {
+        name: {
+          equals: cleanCategoryName,
+          mode: 'insensitive'
+        },
+        userId: userId
+      },
+      orderBy: { id: 'asc' }
     });
 
     if (!category) {
       category = await prisma.category.create({
-        data: { 
-          name: categoryName,
-          userId: userId 
+        data: {
+          name: cleanCategoryName,
+          userId: userId
         }
       });
     }
