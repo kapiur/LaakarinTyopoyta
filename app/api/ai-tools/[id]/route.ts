@@ -11,8 +11,8 @@ type RouteContext = {
   };
 };
 
-function getUserId(session: Awaited<ReturnType<typeof getServerSession>>) {
-  const userId = Number((session?.user as any)?.id);
+function getUserId(session: unknown) {
+  const userId = Number((session as any)?.user?.id);
   return Number.isFinite(userId) ? userId : null;
 }
 
