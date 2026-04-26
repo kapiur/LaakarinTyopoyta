@@ -1,11 +1,18 @@
 import type { TemplateCondition, TemplateFieldPart, TemplatePart } from './types';
 
 function parseShowIfCondition(config: string[]): TemplateCondition | null {
-  const showIfCond = config.find((item) => item.toLowerCase().startsWith('showif:'));
-  if (!showIfCond) return null;
+  const showIfIndex = config.findIndex((item) => item.toLowerCase() === 'showif');
+  const inlineShowIfCond = config.find((item) => item.toLowerCase().startsWith('showif:'));
 
-  const cleanCond = showIfCond.replace(/showif:/i, '').trim();
-  const [parentId, value] = cleanCond.split('=');
+  const conditionSource = inlineShowIfCond
+    ? inlineShowIfCond.replace(/showif:/i, '').trim()
+    : showIfIndex >= 0
+      ? config[showIfIndex + 1]?.trim()
+      : '';
+
+  if (!conditionSource) return null;
+
+  const [parentId, value] = conditionSource.split('=');
 
   if (!parentId || !value) return null;
 
@@ -13,6 +20,15 @@ function parseShowIfCondition(config: string[]): TemplateCondition | null {
     parentId: parentId.trim().toLowerCase(),
     value: value.trim().toLowerCase(),
   };
+}
+
+function getTemplateFieldType(config: string[]): TemplateFieldPart['type'] {
+  return config.some((part) => part.toLowerCase() === 'select') ? 'select' : 'input';
+}
+
+function getTemplateFieldOptions(config: string[]): string[] {
+  const optionsSource = config.find((part) => part.includes(',') && !part.toLowerCase().startsWith('showif'));
+  return optionsSource?.split(',').map((option) => option.trim()).filter(Boolean) || [];
 }
 
 function isTemplateFieldPart(part: TemplatePart): part is TemplateFieldPart {
@@ -31,14 +47,14 @@ export function parseTemplate(content: string): TemplatePart[] {
     }
 
     const rawConfig = match[1];
-    const config = rawConfig.split(':').map((part) => part.trim());
+    const config = rawConfig.split(':').map((part) => part.trim()).filter(Boolean);
     const id = config[0];
 
     parts.push({
       id: id.toLowerCase(),
       displayName: id,
-      type: config.includes('select') ? 'select' : 'input',
-      options: config.find((part) => part.includes(','))?.split(',').map((option) => option.trim()) || [],
+      type: getTemplateFieldType(config),
+      options: getTemplateFieldOptions(config),
       condition: parseShowIfCondition(config),
       raw: rawConfig,
     });

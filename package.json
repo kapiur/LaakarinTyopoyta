@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "db:sync": "ts-node scripts/sync-medicines.ts",
-    "seed:pikaohjeet": "node scripts/seed_pikaohjeet.cjs"
+    "seed:pikaohjeet": "node scripts/seed_pikaohjeet.cjs",
+    "test:templates": "ts-node scripts/test-template-parser.ts"
   },
   "dependencies": {
     "react": "^18",
