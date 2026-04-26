@@ -3,9 +3,14 @@ import { ArrowLeft, Braces, CheckCircle2 } from 'lucide-react';
 
 const examples = [
   {
-    title: 'Обычное текстовое поле',
+    title: 'Короткое текстовое поле',
     code: 'Potilas kertoo: {{oire}}',
-    description: 'Создаёт свободное текстовое поле с техническим именем oire.',
+    description: 'Создаёт короткое свободное текстовое поле с техническим именем oire.',
+  },
+  {
+    title: 'Длинное текстовое поле',
+    code: 'Status: {{statuskuvaus:textarea}}',
+    description: 'Создаёт длинное многострочное поле. Подходит для описаний: statuskuvaus, oirekuvaus, suunnitelma.',
   },
   {
     title: 'Поле выбора',
@@ -14,7 +19,7 @@ const examples = [
   },
   {
     title: 'Условное текстовое поле',
-    code: 'Kipu: {{kipu:select:ei,kyllä}}.\n{{kipukuvaus:input:showIf:kipu=kyllä}}',
+    code: 'Kipu: {{kipu:select:ei,kyllä}}.\n{{kipukuvaus:textarea:showIf:kipu=kyllä}}',
     description: 'Поле kipukuvaus появляется только если в поле kipu выбрано kyllä.',
   },
   {
@@ -69,6 +74,7 @@ export default function TemplateSyntaxPage() {
         <h2 className="font-black text-slate-800">Рекомендации</h2>
         <ul className="space-y-2 text-sm text-slate-500 font-semibold leading-relaxed">
           <li>• Используй короткие технические имена полей латиницей: <code className="font-mono bg-slate-100 px-2 py-1 rounded-lg">kipu</code>, <code className="font-mono bg-slate-100 px-2 py-1 rounded-lg">yleistila</code>.</li>
+          <li>• Для длинных описаний используй <code className="font-mono bg-slate-100 px-2 py-1 rounded-lg">textarea</code>, например <code className="font-mono bg-slate-100 px-2 py-1 rounded-lg">{'{{statuskuvaus:textarea}}'}</code>.</li>
           <li>• Не используй кириллицу, пробелы и сложные символы в имени поля.</li>
           <li>• Для сложных имён используй подчёркивание: <code className="font-mono bg-slate-100 px-2 py-1 rounded-lg">infektion_lahde</code>.</li>
           <li>• Значения select можно писать по-фински: <code className="font-mono bg-slate-100 px-2 py-1 rounded-lg">ei,kyllä</code>, <code className="font-mono bg-slate-100 px-2 py-1 rounded-lg">lievä,kohtalainen,voimakas</code>.</li>
