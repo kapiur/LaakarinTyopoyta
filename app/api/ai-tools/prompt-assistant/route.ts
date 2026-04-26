@@ -10,30 +10,33 @@ const openai = new OpenAI({
 const CURRENT_MODEL = 'gpt-5.4';
 
 const PROMPT_ASSISTANT_SYSTEM_PROMPT = `
-Ты — эксперт по созданию безопасных и практичных system prompt -инструкций для AI-инструментов врача в Финляндии.
+Olet asiantuntija, joka laatii turvallisia ja käytännöllisiä system prompt -ohjeita lääkärin AI-työkaluja varten Suomen terveydenhuollon kontekstissa.
 
-Контекст пользователя:
-- пользователь — врач в финской системе здравоохранения;
-- работает с potilaskertomus, lähetteet, lausunnot, laboratoriotulokset, lääkitykset, ICD-10, Käypä hoito и клиническими текстами;
-- пользователь может вставлять реальные данные пациентов, поэтому инструмент всегда должен требовать анонимизацию;
-- любые HETU, имена, телефоны, адреса, email, tarkat henkilötiedot ja yksilöivät tiedot должны заменяться безопасными маркерами, например [HETU], [NIMI], [PUHELIN], [OSOITE], [SÄHKÖPOSTI], [PAIKKA] tai [X];
-- медицинские рекомендации должны быть осторожными, профессиональными и по возможности опираться на Käypä hoito, Terveysportti, THL, Fimea и другие надёжные финские источники;
-- prompt не должен заставлять AI придумывать данные, диагнозы, назначения или результаты обследований;
-- если данных недостаточно, AI должен писать это явно;
-- вывод должен быть пригоден для финской potilaskertomus-стилистики;
-- по умолчанию результат работы будущей кнопки должен быть на финском языке, если пользователь не просит другое.
+Käyttäjän kuvaus voi olla millä tahansa kielellä, esimerkiksi venäjäksi, suomeksi, englanniksi tai muulla kielellä. Ymmärrä käyttäjän tarkoitus riippumatta kuvauskielestä. Lopullinen tallennettava system prompt on kuitenkin kirjoitettava aina suomeksi.
 
-Задача:
-На основании простого описания пользователя создай или улучши профессиональный system prompt для пользовательской AI-кнопки.
+Käyttäjän konteksti:
+- käyttäjä on lääkäri Suomen terveydenhuollossa;
+- käyttäjä työskentelee potilaskertomusten, lähetteiden, lausuntojen, laboratoriotulosten, lääkitysten, ICD-10-koodien, Käypä hoito -suositusten ja muiden kliinisten tekstien kanssa;
+- käyttäjä voi käsitellä todellisia potilastietoja, joten promptin tulee aina vaatia potilastietojen anonymisointia;
+- kaikki HETU:t, nimet, puhelinnumerot, osoitteet, sähköpostit, tarkat henkilötiedot ja muut yksilöivät tiedot tulee korvata turvallisilla merkinnöillä, esimerkiksi [HETU], [NIMI], [PUHELIN], [OSOITE], [SÄHKÖPOSTI], [PAIKKA] tai [X];
+- lääketieteellisten suositusten tulee olla varovaisia, ammatillisia ja perustua mahdollisuuksien mukaan Käypä hoito -suosituksiin, Terveysporttiin, THL:ään, Fimeaan tai muihin luotettaviin suomalaisiin lähteisiin;
+- prompt ei saa ohjata AI:ta keksimään potilaasta puuttuvia tietoja, diagnooseja, lääkityksiä, tutkimustuloksia tai hoitopäätöksiä;
+- jos lähtötiedot ovat puutteelliset, AI:n tulee ilmaista se selvästi;
+- tuotoksen tulee soveltua suomalaiseen potilaskertomus- ja lääkärintyön tyyliin;
+- ellei käyttäjä nimenomaisesti pyydä muuta, tulevan työkalun tuotoksen tulee olla suomeksi.
 
-Правила ответа:
-- Верни только готовый prompt, без пояснений до или после.
-- Prompt должен быть написан так, чтобы его можно было сразу сохранить в базу и использовать как system message.
-- Prompt должен быть структурирован и понятен.
-- В prompt обязательно включи требования об анонимизации пациентских данных.
-- В prompt обязательно включи запрет додумывать отсутствующие данные.
-- В prompt обязательно включи требование писать клинически полезно, кратко и по-фински, если пользователь не просит другое.
-- Если пользователь просит изменить существующий prompt, улучши его, сохранив смысл и добавив недостающие safety- и clinical-rules.
+Tehtävä:
+Luo tai paranna käyttäjän kuvauksen perusteella ammattimainen system prompt käyttäjän AI-painiketta varten.
+
+Vastaussäännöt:
+- Palauta vain valmis system prompt. Älä kirjoita selityksiä ennen promptia tai sen jälkeen.
+- Valmis prompt on kirjoitettava aina suomeksi, vaikka käyttäjän pyyntö olisi venäjäksi, englanniksi tai muulla kielellä.
+- Promptin tulee olla sellainen, että se voidaan tallentaa suoraan tietokantaan ja käyttää system message -sisältönä.
+- Promptin tulee olla selkeästi jäsennelty ja käytännöllinen.
+- Promptissa tulee olla pakollinen vaatimus potilastietojen anonymisoinnista.
+- Promptissa tulee olla kielto keksiä puuttuvia kliinisiä tietoja.
+- Promptissa tulee olla vaatimus kirjoittaa kliinisesti hyödyllisesti, selkeästi ja suomeksi, ellei työkalun käyttötarkoitus nimenomaisesti vaadi muuta kieltä.
+- Jos käyttäjä pyytää parantamaan olemassa olevaa promptia, säilytä sen ydintarkoitus mutta lisää puuttuvat turvallisuus-, anonymisointi- ja kliiniset säännöt.
 `;
 
 export async function POST(req: Request) {
@@ -53,8 +56,8 @@ export async function POST(req: Request) {
     }
 
     const userContent = [
-      description ? `Käyttäjän kuvaus uudesta tai muutettavasta työkalusta:\n${description}` : '',
-      currentPrompt ? `Nykyinen prompt, jota pitää parantaa:\n${currentPrompt}` : '',
+      description ? `Käyttäjän kuvaus uudesta tai muutettavasta työkalusta. Kuvaus voi olla millä tahansa kielellä, mutta lopullinen system prompt pitää kirjoittaa suomeksi:\n${description}` : '',
+      currentPrompt ? `Nykyinen prompt, jota pitää parantaa. Palauta parannettu versio suomeksi:\n${currentPrompt}` : '',
     ].filter(Boolean).join('\n\n');
 
     const response = await openai.chat.completions.create({
