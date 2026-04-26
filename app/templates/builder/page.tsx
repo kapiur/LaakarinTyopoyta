@@ -103,7 +103,7 @@ export default function TemplateBuilderPage() {
   const createTemplateFromSyntax = () => {
     if (!generatedSyntax) return;
     const encodedContent = encodeURIComponent(generatedSyntax);
-    router.push(`/templates?new=1&content=${encodedContent}`);
+    router.push(`/templates/new?content=${encodedContent}`);
   };
 
   return (
