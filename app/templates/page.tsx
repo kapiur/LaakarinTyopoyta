@@ -1,23 +1,32 @@
 "use client";
 import { useState, useEffect, useMemo } from 'react';
 import { useSession } from "next-auth/react";
-import { 
-  Plus, Search, Trash2, ChevronRight, 
-  Copy, Loader2, X, Edit2, Bot, Sparkles, Wand2, HelpCircle, 
+import {
+  Plus, Search, Trash2, ChevronRight,
+  Copy, Loader2, X, Edit2, Bot, Sparkles, Wand2, HelpCircle,
   FileText, Layout, MessageSquare, Share2, AlertCircle
 } from 'lucide-react';
+import {
+  getTemplateFields,
+  isTemplateFieldVisible,
+  renderTemplate,
+  type TemplateCategory,
+  type TemplateFormData,
+  type TemplateItem,
+  type TemplateValues,
+} from '../../lib/templates';
 
 export default function TemplatesPage() {
   const { data: session } = useSession();
-  const [categories, setCategories] = useState<any[]>([]);
+  const [categories, setCategories] = useState<TemplateCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeCategoryId, setActiveCategoryId] = useState<number | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedTemplate, setSelectedTemplate] = useState<any>(null);
+  const [selectedTemplate, setSelectedTemplate] = useState<TemplateItem | null>(null);
   const [isAdding, setIsAdding] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [templateValues, setTemplateValues] = useState<Record<string, string>>({});
+  const [templateValues, setTemplateValues] = useState<TemplateValues>({});
 
   // Состояния для Share
   const [isSharing, setIsSharing] = useState(false);
@@ -30,20 +39,22 @@ export default function TemplatesPage() {
   const [aiFixedText, setAiFixedText] = useState<string | null>(null);
   const [isGeneratingMalli, setIsGeneratingMalli] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null); // Для вывода ошибок API
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const [formData, setFormData] = useState({
-    id: null as number | null,
+  const emptyFormData: TemplateFormData = {
+    id: null,
     title: '',
     content: '',
     categoryName: '',
-    author: ''
-  });
+    author: '',
+  };
+
+  const [formData, setFormData] = useState<TemplateFormData>(emptyFormData);
 
   useEffect(() => { fetchTemplates(); }, []);
-  useEffect(() => { 
-    setTemplateValues({}); 
-    setAiFixedText(null); 
+  useEffect(() => {
+    setTemplateValues({});
+    setAiFixedText(null);
     setErrorMsg(null);
   }, [selectedTemplate?.id]);
 
@@ -60,18 +71,18 @@ export default function TemplatesPage() {
     if (!shareEmail.trim()) return;
     setShareLoading(true);
     try {
-      const templatesToShare = sharingType === 'category' 
+      const templatesToShare = sharingType === 'category'
         ? categories.find(c => c.id === activeCategoryId)?.templates || []
-        : [selectedTemplate];
+        : selectedTemplate ? [selectedTemplate] : [];
 
-      for (const t of templatesToShare) {
+      for (const template of templatesToShare) {
         await fetch('/api/templates/share', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ templateId: t.id, targetEmail: shareEmail.toLowerCase().trim() }),
+          body: JSON.stringify({ templateId: template.id, targetEmail: shareEmail.toLowerCase().trim() }),
         });
       }
-      
+
       alert(sharingType === 'category' ? "Koko kategoria jaettu!" : "Malli jaettu!");
       setIsSharing(false);
       setShareEmail('');
@@ -119,9 +130,8 @@ export default function TemplatesPage() {
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          // Добавлен контекст для GPT-5.4, чтобы лучше выделяла переменные
-          messages: [{ role: 'user', content: `malli: Luo dynaaminen lääketieteellinen pohja tästä tekstistä: ${anonymize(formData.content)}` }] 
+        body: JSON.stringify({
+          messages: [{ role: 'user', content: `malli: Luo dynaaminen lääketieteellinen pohja tästä tekstistä: ${anonymize(formData.content)}` }]
         }),
       });
       const data = await response.json();
@@ -130,59 +140,16 @@ export default function TemplatesPage() {
       } else if (data.error) {
         setErrorMsg(data.details || data.error);
       }
-    } catch (err) { 
-      setErrorMsg("Yhteysvirhe tekoälyyn"); 
-      console.error(err); 
+    } catch (err) {
+      setErrorMsg("Yhteysvirhe tekoälyyn");
+      console.error(err);
     } finally { setIsGeneratingMalli(false); }
-  };
-
-  const parseTemplate = (content: string) => {
-    const parts = [];
-    const regex = /{{(.*?)}}/g;
-    let lastIndex = 0, match;
-    while ((match = regex.exec(content)) !== null) {
-      if (match.index > lastIndex) {
-        parts.push({ type: 'text', value: content.slice(lastIndex, match.index) });
-      }
-      const rawConfig = match[1];
-      const config = rawConfig.split(':').map(p => p.trim());
-      const id = config[0];
-      const showIfCond = config.find(c => c.toLowerCase().startsWith('showif:'));
-      let condition = null;
-      if (showIfCond) {
-        const cleanCond = showIfCond.replace(/showif:/i, '').trim();
-        const [pId, pVal] = cleanCond.split('=');
-        if (pId && pVal) condition = { parentId: pId.trim().toLowerCase(), value: pVal.trim().toLowerCase() };
-      }
-      parts.push({ 
-        id: id.toLowerCase(), displayName: id,
-        type: config.includes('select') ? 'select' : 'input', 
-        options: config.find(c => c.includes(','))?.split(',').map(o => o.trim()) || [],
-        condition, raw: rawConfig 
-      });
-      lastIndex = regex.lastIndex;
-    }
-    if (lastIndex < content.length) parts.push({ type: 'text', value: content.slice(lastIndex) });
-    return parts;
   };
 
   const generateFinalText = useMemo(() => {
     if (aiFixedText) return aiFixedText;
     if (!selectedTemplate) return "";
-    const parsed = parseTemplate(selectedTemplate.content);
-    let result = "";
-    parsed.forEach(part => {
-      if (part.type === 'text') result += part.value;
-      else {
-        let isVisible = true;
-        if (part.condition) {
-          const currentVal = (templateValues[part.condition.parentId] || "").toLowerCase().trim();
-          isVisible = currentVal === part.condition.value;
-        }
-        if (isVisible) result += templateValues[part.id] || `[${part.displayName}]`;
-      }
-    });
-    return result.replace(/[ ]{2,}/g, ' ').replace(/\s+\./g, '.').trim();
+    return renderTemplate(selectedTemplate.content, templateValues);
   }, [selectedTemplate, templateValues, aiFixedText]);
 
   // УЛУЧШЕНО: Обработка результатов шлифовки текста
@@ -204,9 +171,9 @@ export default function TemplatesPage() {
       } else if (data.error) {
         setErrorMsg(data.details || data.error);
       }
-    } catch (err) { 
+    } catch (err) {
       setErrorMsg("Virhe AI-hionnassa");
-      console.error(err); 
+      console.error(err);
     } finally { setIsChecking(false); }
   };
 
@@ -231,23 +198,24 @@ export default function TemplatesPage() {
     } catch (err) { console.error(err); }
   };
 
-  const startEditing = (template: any) => {
+  const startEditing = (template: TemplateItem) => {
     setFormData({
       id: template.id, title: template.title, content: template.content,
-      categoryName: categories.find(c => c.id === template.categoryId)?.name || '', 
+      categoryName: categories.find(c => c.id === template.categoryId)?.name || '',
       author: template.author || ''
     });
     setIsEditing(true); setIsAdding(false);
   };
 
   const activeCategory = categories.find(c => c.id === activeCategoryId);
-  const displayedTemplates = activeCategory?.templates?.filter((t: any) => 
-    t.title.toLowerCase().includes(searchTerm.toLowerCase())
+  const displayedTemplates = activeCategory?.templates?.filter((template) =>
+    template.title.toLowerCase().includes(searchTerm.toLowerCase())
   ) || [];
+  const selectedTemplateFields = selectedTemplate ? getTemplateFields(selectedTemplate.content) : [];
 
   return (
     <div className="max-w-[1600px] mx-auto h-[calc(100vh-100px)] flex flex-col gap-4 p-4 text-slate-900 font-sans relative animate-in fade-in duration-500">
-      
+
       {/* ERROR NOTIFICATION */}
       {errorMsg && (
         <div className="absolute top-24 left-1/2 -translate-x-1/2 z-[100] bg-red-50 border border-red-100 p-4 rounded-2xl shadow-xl flex items-center gap-3 animate-in slide-in-from-top-4">
@@ -268,8 +236,8 @@ export default function TemplatesPage() {
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Hallinta ja generointi</p>
           </div>
         </div>
-        <button 
-          onClick={() => { setIsAdding(true); setIsEditing(false); setSelectedTemplate(null); setFormData({id:null, title:'', content:'', categoryName:'', author:''}); }}
+        <button
+          onClick={() => { setIsAdding(true); setIsEditing(false); setSelectedTemplate(null); setFormData(emptyFormData); }}
           className="bg-blue-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-blue-700 shadow-lg shadow-blue-100 transition-all active:scale-95 flex items-center gap-2 text-sm"
         >
           <Plus size={18} /> Uusi malli
@@ -285,13 +253,13 @@ export default function TemplatesPage() {
               {cat.name}
             </button>
             <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover/cat:opacity-100 transition-all">
-               <button 
+               <button
                 onClick={(e) => { e.stopPropagation(); setSharingType('category'); setActiveCategoryId(cat.id); setIsSharing(true); }}
                 className={`p-1 rounded-md ${activeCategoryId === cat.id ? 'text-white/50 hover:text-white' : 'text-slate-300 hover:text-blue-500'}`}
               >
                 <Share2 size={12} />
               </button>
-              <button 
+              <button
                 onClick={(e) => { e.stopPropagation(); handleDeleteCategory(cat.id); }}
                 className={`p-1 rounded-md ${activeCategoryId === cat.id ? 'text-white/50 hover:text-white' : 'text-slate-300 hover:text-red-500'}`}
               >
@@ -307,28 +275,28 @@ export default function TemplatesPage() {
         <div className="col-span-3 flex flex-col gap-4 min-h-0">
           <div className="relative group">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-blue-500 transition-colors" size={16} />
-            <input 
-              placeholder="Etsi malleja..." 
-              className="w-full pl-12 pr-4 py-4 bg-white border border-slate-100 rounded-2xl outline-none focus:ring-4 focus:ring-blue-500/5 font-bold text-sm transition-all shadow-sm" 
-              value={searchTerm} 
-              onChange={(e) => setSearchTerm(e.target.value)} 
+            <input
+              placeholder="Etsi malleja..."
+              className="w-full pl-12 pr-4 py-4 bg-white border border-slate-100 rounded-2xl outline-none focus:ring-4 focus:ring-blue-500/5 font-bold text-sm transition-all shadow-sm"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
           <div className="flex-1 overflow-y-auto space-y-2 no-scrollbar">
             {loading ? (
               <div className="flex justify-center py-10"><Loader2 className="animate-spin text-blue-500" /></div>
-            ) : displayedTemplates.map((t: any) => (
-              <div key={t.id} className="group relative">
-                <button 
-                  onClick={() => { setSelectedTemplate(t); setIsAdding(false); setIsEditing(false); setAiFixedText(null); }} 
-                  className={`w-full text-left p-4 rounded-2xl border transition-all relative overflow-hidden pr-12 ${selectedTemplate?.id === t.id ? 'bg-blue-600 text-white border-blue-600 shadow-lg' : 'bg-white border-slate-50 hover:border-blue-200'}`}
+            ) : displayedTemplates.map((template) => (
+              <div key={template.id} className="group relative">
+                <button
+                  onClick={() => { setSelectedTemplate(template); setIsAdding(false); setIsEditing(false); setAiFixedText(null); }}
+                  className={`w-full text-left p-4 rounded-2xl border transition-all relative overflow-hidden pr-12 ${selectedTemplate?.id === template.id ? 'bg-blue-600 text-white border-blue-600 shadow-lg' : 'bg-white border-slate-50 hover:border-blue-200'}`}
                 >
-                  <span className="font-bold text-xs truncate block relative z-10">{t.title}</span>
-                  <ChevronRight size={14} className={`absolute right-4 top-1/2 -translate-y-1/2 transition-all ${selectedTemplate?.id === t.id ? 'translate-x-0 opacity-100' : 'translate-x-2 opacity-0'}`} />
+                  <span className="font-bold text-xs truncate block relative z-10">{template.title}</span>
+                  <ChevronRight size={14} className={`absolute right-4 top-1/2 -translate-y-1/2 transition-all ${selectedTemplate?.id === template.id ? 'translate-x-0 opacity-100' : 'translate-x-2 opacity-0'}`} />
                 </button>
-                <button 
-                  onClick={(e) => handleDeleteTemplate(t.id, e)}
-                  className={`absolute right-10 top-1/2 -translate-y-1/2 p-2 rounded-xl transition-all z-20 ${selectedTemplate?.id === t.id ? 'text-white/40 hover:text-white' : 'text-slate-200 hover:text-red-500 opacity-0 group-hover:opacity-100'}`}
+                <button
+                  onClick={(e) => handleDeleteTemplate(template.id, e)}
+                  className={`absolute right-10 top-1/2 -translate-y-1/2 p-2 rounded-xl transition-all z-20 ${selectedTemplate?.id === template.id ? 'text-white/40 hover:text-white' : 'text-slate-200 hover:text-red-500 opacity-0 group-hover:opacity-100'}`}
                 >
                   <Trash2 size={14} />
                 </button>
@@ -350,7 +318,7 @@ export default function TemplatesPage() {
                 </div>
                 <div className="flex gap-3">
                   <button onClick={() => setShowHelp(true)} className="p-3 text-slate-300 hover:text-blue-600 transition-colors"><HelpCircle size={20} /></button>
-                  <button 
+                  <button
                     onClick={handleGenerateMalli}
                     disabled={isGeneratingMalli || !formData.content}
                     className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-100 disabled:opacity-50"
@@ -374,10 +342,10 @@ export default function TemplatesPage() {
                 </div>
                 <div className="space-y-2">
                   <label className="text-[9px] font-black text-blue-600 uppercase ml-4 flex items-center gap-2 tracking-[0.2em]"><Bot size={14}/> Sisältö & Muuttujat</label>
-                  <textarea 
-                    className="w-full p-8 bg-slate-50 border-none rounded-[2.5rem] font-mono text-sm min-h-[400px] outline-none focus:bg-white focus:ring-8 focus:ring-blue-500/5 transition-all leading-relaxed shadow-inner" 
-                    value={formData.content} 
-                    onChange={e => setFormData({...formData, content: e.target.value})} 
+                  <textarea
+                    className="w-full p-8 bg-slate-50 border-none rounded-[2.5rem] font-mono text-sm min-h-[400px] outline-none focus:bg-white focus:ring-8 focus:ring-blue-500/5 transition-all leading-relaxed shadow-inner"
+                    value={formData.content}
+                    onChange={e => setFormData({...formData, content: e.target.value})}
                   />
                 </div>
                 <button onClick={handleSave} className="w-full py-5 bg-slate-900 text-white rounded-[2rem] font-black uppercase tracking-[0.2em] shadow-xl shadow-slate-200 hover:bg-black transition-all text-[11px]">Tallenna Järjestelmään</button>
@@ -394,20 +362,15 @@ export default function TemplatesPage() {
                   <button onClick={() => startEditing(selectedTemplate)} className="p-2.5 text-slate-300 hover:text-blue-600 transition-all bg-white rounded-xl border border-slate-100 shadow-sm"><Edit2 size={16} /></button>
                 </div>
                 <div className="p-8 flex-1 overflow-y-auto no-scrollbar space-y-8">
-                  {parseTemplate(selectedTemplate.content).filter(p => p.type !== 'text').map((part, idx) => {
-                    let isVisible = true;
-                    if (part.condition) {
-                      const currentVal = (templateValues[part.condition.parentId] || "").toLowerCase().trim();
-                      isVisible = currentVal === part.condition.value;
-                    }
-                    if (!isVisible) return null;
+                  {selectedTemplateFields.map((part, idx) => {
+                    if (!isTemplateFieldVisible(part.condition, templateValues)) return null;
                     return (
-                      <div key={idx} className="flex flex-col gap-3 animate-in fade-in slide-in-from-top-2">
+                      <div key={`${part.raw}-${idx}`} className="flex flex-col gap-3 animate-in fade-in slide-in-from-top-2">
                         <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">{part.displayName}</label>
                         {part.type === 'select' ? (
                           <div className="flex flex-wrap gap-2">
-                            {part.options.map((opt: any) => (
-                              <button key={opt} onClick={() => { setTemplateValues(prev => ({ ...prev, [part.id]: opt })); setAiFixedText(null); }} 
+                            {part.options.map((opt) => (
+                              <button key={opt} onClick={() => { setTemplateValues(prev => ({ ...prev, [part.id]: opt })); setAiFixedText(null); }}
                                 className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase border transition-all ${templateValues[part.id] === opt ? 'bg-slate-900 text-white border-slate-900 shadow-lg' : 'bg-slate-50 border-slate-100 text-slate-400 hover:border-blue-300 hover:bg-white'}`}>
                                 {opt}
                               </button>
@@ -486,7 +449,7 @@ export default function TemplatesPage() {
             <div className="p-10 space-y-6">
               <div className="space-y-2">
                 <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-4">Vastaanottajan sähköposti</label>
-                <input 
+                <input
                   type="email"
                   placeholder="matti.meikalainen@terveys.fi"
                   className="w-full p-4 bg-slate-50 border-none rounded-2xl outline-none focus:ring-4 focus:ring-blue-500/5 font-bold transition-all shadow-inner"
@@ -495,14 +458,14 @@ export default function TemplatesPage() {
                 />
               </div>
               <p className="text-[10px] text-slate-400 italic px-4 leading-relaxed">
-                {sharingType === 'category' 
-                  ? "Kaikki tämän kategorian mallit kopioidaan toisen käyttäjän tilille." 
+                {sharingType === 'category'
+                  ? "Kaikki tämän kategorian mallit kopioidaan toisen käyttäjän tilille."
                   : "Tämä malli kopioidaan suoraan toisen käyttäjän vastaavaan kategoriaan."}
               </p>
             </div>
             <div className="p-8 bg-slate-50 border-t flex gap-3 justify-end">
               <button onClick={() => setIsSharing(false)} className="px-6 py-4 text-slate-400 font-black uppercase tracking-widest text-[10px]">Peruuta</button>
-              <button 
+              <button
                 onClick={handleShare}
                 disabled={shareLoading || !shareEmail}
                 className="px-10 py-4 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 transition-all text-[10px] shadow-lg shadow-blue-100 disabled:opacity-50"
@@ -537,11 +500,6 @@ export default function TemplatesPage() {
           </div>
         </div>
       )}
-
-      <style jsx global>{`
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-      `}</style>
     </div>
   );
 }
