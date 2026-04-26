@@ -24,6 +24,7 @@ export default function CalculatorsTabEnhancer() {
 
     if (pcaButton instanceof HTMLButtonElement) {
       pcaButton.style.order = '-10';
+      pcaButton.title = 'Avaa uusi PCA-laskuri';
     }
 
     const handlePedsClick = (event: Event) => {
@@ -35,16 +36,28 @@ export default function CalculatorsTabEnhancer() {
       router.push('/calculators/peds');
     };
 
+    const handlePcaClick = (event: Event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (typeof (event as any).stopImmediatePropagation === 'function') {
+        (event as any).stopImmediatePropagation();
+      }
+      router.push('/calculators/pca');
+    };
+
     pedsButton?.addEventListener('click', handlePedsClick, true);
+    pcaButton?.addEventListener('click', handlePcaClick, true);
 
     return () => {
       pedsButton?.removeEventListener('click', handlePedsClick, true);
+      pcaButton?.removeEventListener('click', handlePcaClick, true);
       if (pedsButton instanceof HTMLButtonElement) {
         pedsButton.style.order = '';
         pedsButton.title = '';
       }
       if (pcaButton instanceof HTMLButtonElement) {
         pcaButton.style.order = '';
+        pcaButton.title = '';
       }
     };
   }, [pathname, router]);
