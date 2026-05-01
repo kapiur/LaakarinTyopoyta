@@ -8,12 +8,17 @@ function normalizeEmail(email: string) {
   return email.toLowerCase().trim();
 }
 
+function parseUserId(value: string) {
+  const userId = Number(value);
+  return Number.isInteger(userId) ? userId : null;
+}
+
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
   const { session, error } = await requireAdmin();
   if (error) return error;
 
-  const userId = Number(params.id);
-  if (!Number.isInteger(userId)) {
+  const userId = parseUserId(params.id);
+  if (!userId) {
     return NextResponse.json({ error: "Virheellinen käyttäjä-ID" }, { status: 400 });
   }
 
@@ -73,5 +78,54 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     return NextResponse.json(updatedUser);
   } catch (error) {
     return NextResponse.json({ error: "Käyttäjän päivitys epäonnistui" }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: Request, { params }: { params: { id: string } }) {
+  const { session, error } = await requireAdmin();
+  if (error) return error;
+
+  const userId = parseUserId(params.id);
+  if (!userId) {
+    return NextResponse.json({ error: "Virheellinen käyttäjä-ID" }, { status: 400 });
+  }
+
+  try {
+    const currentUserId = Number((session?.user as any)?.id);
+    const targetUser = await prisma.user.findUnique({ where: { id: userId } });
+
+    if (!targetUser) {
+      return NextResponse.json({ error: "Käyttäjää ei löydy" }, { status: 404 });
+    }
+
+    if (targetUser.role === "ADMIN") {
+      return NextResponse.json({ error: "Admin-käyttäjää ei voi poistaa käyttöliittymästä" }, { status: 400 });
+    }
+
+    if (currentUserId === targetUser.id) {
+      return NextResponse.json({ error: "Et voi poistaa omaa käyttäjääsi" }, { status: 400 });
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.substance.updateMany({
+        where: { lastUpdatedById: userId },
+        data: { lastUpdatedById: null }
+      });
+
+      await tx.aIHistory.deleteMany({ where: { userId } });
+      await tx.aiTool.deleteMany({ where: { userId } });
+      await tx.pcaDrug.deleteMany({ where: { userId } });
+      await tx.pedsDrug.deleteMany({ where: { userId } });
+      await tx.pedsIndication.deleteMany({ where: { userId } });
+      await tx.template.deleteMany({ where: { userId } });
+      await tx.category.deleteMany({ where: { userId } });
+      await tx.quickLink.deleteMany({ where: { userId } });
+      await tx.linkCategory.deleteMany({ where: { userId } });
+      await tx.user.delete({ where: { id: userId } });
+    });
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    return NextResponse.json({ error: "Käyttäjän poistaminen epäonnistui" }, { status: 500 });
   }
 }
