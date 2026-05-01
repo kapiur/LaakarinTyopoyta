@@ -136,6 +136,15 @@ function normalize(value: string) {
   return value.replace(/\s+/g, " ").trim();
 }
 
+function replaceElementText(root: ParentNode, map: Replacements) {
+  root.querySelectorAll<HTMLElement>("label, h1, h2, h3, p, span, button, a").forEach((element) => {
+    if (element.querySelector("input, select, textarea, svg")) return;
+    const value = normalize(element.textContent || "");
+    const replacement = map[value];
+    if (replacement) element.textContent = replacement;
+  });
+}
+
 function replaceText(root: ParentNode, map: Replacements) {
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   const nodes: Text[] = [];
@@ -171,6 +180,8 @@ export default function StandaloneCalculatorsI18nEnhancer() {
 
     const apply = () => {
       const root = document.body;
+      replaceElementText(root, reverseText.ru || {});
+      replaceElementText(root, reverseText.en || {});
       replaceText(root, reverseText.ru || {});
       replaceText(root, reverseText.en || {});
       replaceOptions(root, reversePlaceholders.ru || {});
@@ -178,6 +189,7 @@ export default function StandaloneCalculatorsI18nEnhancer() {
 
       if (language === "fi") return;
 
+      replaceElementText(root, text[language] || {});
       replaceText(root, text[language] || {});
       replaceOptions(root, placeholders[language] || {});
     };
