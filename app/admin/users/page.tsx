@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, Loader2, Plus, RefreshCcw, Save, Shield, UserCog, UserPlus, XCircle } from "lucide-react";
+import { CheckCircle2, Loader2, Plus, RefreshCcw, Save, Shield, Trash2, UserCog, UserPlus, XCircle } from "lucide-react";
 
 type AdminUser = {
   id: number;
@@ -127,6 +127,43 @@ export default function AdminUsersPage() {
       await fetchUsers();
     } catch (err: any) {
       setError(err.message || "Käyttäjän päivitys epäonnistui");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function deleteUser(user: AdminUser) {
+    if (user.role === "ADMIN") {
+      setError("Admin-käyttäjää ei voi poistaa käyttöliittymästä.");
+      return;
+    }
+
+    const confirmed = confirm(
+      `Poistetaanko käyttäjä ${user.email} pysyvästi?\n\nTämä poistaa myös käyttäjän omat mallit, linkit, AI-historian ja lääkekirjastot.`
+    );
+
+    if (!confirmed) return;
+
+    setSaving(true);
+    setMessage(null);
+    setError(null);
+
+    try {
+      const response = await fetch(`/api/admin/users/${user.id}`, {
+        method: "DELETE"
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Käyttäjän poistaminen epäonnistui");
+      }
+
+      setMessage("Käyttäjä poistettu pysyvästi.");
+      if (editingId === user.id) cancelEdit();
+      await fetchUsers();
+    } catch (err: any) {
+      setError(err.message || "Käyttäjän poistaminen epäonnistui");
     } finally {
       setSaving(false);
     }
@@ -326,12 +363,23 @@ export default function AdminUsersPage() {
                             </button>
                           </div>
                         ) : (
-                          <button
-                            onClick={() => startEdit(user)}
-                            className="px-3 py-2 rounded-lg border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50"
-                          >
-                            Muokkaa
-                          </button>
+                          <div className="flex justify-end gap-2">
+                            <button
+                              onClick={() => startEdit(user)}
+                              className="px-3 py-2 rounded-lg border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50"
+                            >
+                              Muokkaa
+                            </button>
+                            {user.role !== "ADMIN" && (
+                              <button
+                                onClick={() => deleteUser(user)}
+                                disabled={saving}
+                                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-red-200 text-xs font-bold text-red-600 hover:bg-red-50 disabled:opacity-50"
+                              >
+                                <Trash2 size={14} /> Poista
+                              </button>
+                            )}
+                          </div>
                         )}
                       </td>
                     </tr>
