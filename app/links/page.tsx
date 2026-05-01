@@ -4,16 +4,84 @@ import { useState, useEffect } from "react";
 import { 
   Plus, ExternalLink, Trash2, Globe, Lock, 
   FolderPlus, Loader2, Link as LinkIcon, X, 
-  ChevronRight, MoveHorizontal
+  MoveHorizontal
 } from "lucide-react";
+import { useI18n } from "../../lib/useI18n";
+
+const copy = {
+  fi: {
+    title: "Linkit ja Ohjeet",
+    subtitle: "Tärkeät resurssit ja omat suosikit.",
+    newCategory: "Uusi kategoria",
+    addLink: "Lisää linkki",
+    own: "Oma",
+    common: "Yleinen",
+    move: "Siirrä",
+    emptyCategory: "Tyhjä kategoria",
+    addNewLink: "Lisää uusi linkki",
+    description: "Kuvaus",
+    url: "URL (https://...)",
+    categoryName: "Kategorian nimi",
+    personalOnly: "Vain minun käytössäni",
+    cancel: "Peruuta",
+    save: "Tallenna",
+    deleteLinkConfirm: "Haluatko varmasti poistaa linkin?",
+    deleteCategoryConfirm: "Poistetaanko tämä kategoria? Se onnistuu vain, jos kategoria on tyhjä.",
+    deleteCategoryFailed: "Kategoriaa ei voitu poistaa. Varmista, että se on tyhjä.",
+    errorPrefix: "Virhe:",
+  },
+  ru: {
+    title: "Ссылки и инструкции",
+    subtitle: "Важные ресурсы и личные избранные ссылки.",
+    newCategory: "Новая категория",
+    addLink: "Добавить ссылку",
+    own: "Личное",
+    common: "Общее",
+    move: "Перенести",
+    emptyCategory: "Пустая категория",
+    addNewLink: "Добавить новую ссылку",
+    description: "Описание",
+    url: "URL (https://...)",
+    categoryName: "Название категории",
+    personalOnly: "Только для меня",
+    cancel: "Отмена",
+    save: "Сохранить",
+    deleteLinkConfirm: "Вы действительно хотите удалить ссылку?",
+    deleteCategoryConfirm: "Удалить эту категорию? Это возможно только если категория пустая.",
+    deleteCategoryFailed: "Категорию не удалось удалить. Убедитесь, что она пустая.",
+    errorPrefix: "Ошибка:",
+  },
+  en: {
+    title: "Links and guides",
+    subtitle: "Important resources and personal favourites.",
+    newCategory: "New category",
+    addLink: "Add link",
+    own: "Personal",
+    common: "Shared",
+    move: "Move",
+    emptyCategory: "Empty category",
+    addNewLink: "Add new link",
+    description: "Description",
+    url: "URL (https://...)",
+    categoryName: "Category name",
+    personalOnly: "Only for me",
+    cancel: "Cancel",
+    save: "Save",
+    deleteLinkConfirm: "Do you really want to delete this link?",
+    deleteCategoryConfirm: "Delete this category? This only works if the category is empty.",
+    deleteCategoryFailed: "Could not delete the category. Make sure it is empty.",
+    errorPrefix: "Error:",
+  },
+} as const;
 
 export default function LinksPage() {
+  const { language } = useI18n();
+  const c = copy[language] ?? copy.fi;
   const [categories, setCategories] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalType, setModalType] = useState<"link" | "category">("link");
 
-  // Состояния для форм
   const [newLink, setNewLink] = useState({ title: "", url: "", categoryId: "", isPersonal: true });
   const [newCat, setNewCat] = useState({ name: "", isPersonal: true });
 
@@ -30,7 +98,7 @@ export default function LinksPage() {
         setNewLink(prev => ({ ...prev, categoryId: data[0].id.toString() }));
       }
     } catch (err) {
-      console.error("Virhe:", err);
+      console.error(c.errorPrefix, err);
     } finally {
       setLoading(false);
     }
@@ -59,15 +127,15 @@ export default function LinksPage() {
   }
 
   async function handleDelete(id: number) {
-    if (!confirm("Haluatko varmasti poistaa linkin?")) return;
+    if (!confirm(c.deleteLinkConfirm)) return;
     await fetch(`/api/links/${id}`, { method: "DELETE" });
     loadData();
   }
 
   async function handleDeleteCategory(id: number) {
-    if (!confirm("Poistetaanko tämä kategoria? Se onnistuu vain, jos kategoria on tyhjä.")) return;
+    if (!confirm(c.deleteCategoryConfirm)) return;
     const res = await fetch(`/api/links/${id}?type=category`, { method: "DELETE" });
-    if (!res.ok) alert("Kategoriaa ei voitu poistaa. Varmista, että se on tyhjä.");
+    if (!res.ok) alert(c.deleteCategoryFailed);
     loadData();
   }
 
@@ -88,30 +156,27 @@ export default function LinksPage() {
   return (
     <div className="min-h-screen bg-slate-50 pb-20">
       <div className="max-w-6xl mx-auto p-4 md:p-8">
-        
-        {/* Header - Дизайн 1 */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-4">
           <div>
-            <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Linkit ja Ohjeet</h1>
-            <p className="text-slate-500 mt-1 font-medium">Tärkeät resurssit ja omat suosikit.</p>
+            <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">{c.title}</h1>
+            <p className="text-slate-500 mt-1 font-medium">{c.subtitle}</p>
           </div>
           <div className="flex gap-3">
             <button 
               onClick={() => { setModalType("category"); setIsModalOpen(true); }}
               className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-50 transition-all shadow-sm font-semibold text-sm"
             >
-              <FolderPlus size={18} /> Uusi kategoria
+              <FolderPlus size={18} /> {c.newCategory}
             </button>
             <button 
               onClick={() => { setModalType("link"); setIsModalOpen(true); }}
               className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all shadow-md shadow-blue-200 font-semibold text-sm"
             >
-              <Plus size={18} /> Lisää linkki
+              <Plus size={18} /> {c.addLink}
             </button>
           </div>
         </div>
 
-        {/* Categories Grid - Дизайн 1 */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {categories.map((cat: any) => (
             <div key={cat.id} className="bg-white border border-slate-200 rounded-2xl shadow-sm hover:shadow-md transition-all overflow-hidden flex flex-col">
@@ -130,11 +195,11 @@ export default function LinksPage() {
                   )}
                   {cat.userId ? (
                     <div className="flex items-center gap-1 text-amber-600 bg-amber-50 px-2 py-1 rounded-md text-[10px] font-bold uppercase">
-                      <Lock size={10} /> Oma
+                      <Lock size={10} /> {c.own}
                     </div>
                   ) : (
                     <div className="flex items-center gap-1 text-slate-500 bg-slate-100 px-2 py-1 rounded-md text-[10px] font-bold uppercase">
-                      <Globe size={10} /> Yleinen
+                      <Globe size={10} /> {c.common}
                     </div>
                   )}
                 </div>
@@ -165,7 +230,6 @@ export default function LinksPage() {
                       </div>
                     </div>
                     
-                    {/* Перенос ссылки (Siirrä) */}
                     <div className="mt-2 pl-11 opacity-0 group-hover:opacity-100 transition-all flex items-center gap-1.5">
                       <MoveHorizontal size={10} className="text-slate-300" />
                       <select 
@@ -173,8 +237,8 @@ export default function LinksPage() {
                         value={cat.id}
                         onChange={(e) => handleMoveLink(link.id, e.target.value)}
                       >
-                        {categories.map((c: any) => (
-                          <option key={c.id} value={c.id}>Siirrä: {c.name}</option>
+                        {categories.map((targetCategory: any) => (
+                          <option key={targetCategory.id} value={targetCategory.id}>{c.move}: {targetCategory.name}</option>
                         ))}
                       </select>
                     </div>
@@ -182,7 +246,7 @@ export default function LinksPage() {
                 ))}
                 {cat.links.length === 0 && (
                   <div className="py-8 text-center border-2 border-dashed border-slate-100 rounded-xl">
-                    <p className="text-xs text-slate-400 italic font-medium">Tyhjä kategoria</p>
+                    <p className="text-xs text-slate-400 italic font-medium">{c.emptyCategory}</p>
                   </div>
                 )}
               </ul>
@@ -190,13 +254,12 @@ export default function LinksPage() {
           ))}
         </div>
 
-        {/* Modal - Универсальный дизайн */}
         {isModalOpen && (
           <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
             <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden animate-in fade-in zoom-in duration-200">
               <div className="p-6 border-b border-slate-100 flex justify-between items-center">
                 <h3 className="text-xl font-bold text-slate-900">
-                  {modalType === "link" ? "Lisää uusi linkki" : "Uusi kategoria"}
+                  {modalType === "link" ? c.addNewLink : c.newCategory}
                 </h3>
                 <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600">
                   <X size={20} />
@@ -207,13 +270,13 @@ export default function LinksPage() {
                 {modalType === "link" ? (
                   <>
                     <input 
-                      required placeholder="Kuvaus" 
+                      required placeholder={c.description}
                       className="w-full p-2.5 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
                       value={newLink.title}
                       onChange={e => setNewLink({...newLink, title: e.target.value})}
                     />
                     <input 
-                      required type="url" placeholder="URL (https://...)" 
+                      required type="url" placeholder={c.url}
                       className="w-full p-2.5 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
                       value={newLink.url}
                       onChange={e => setNewLink({...newLink, url: e.target.value})}
@@ -223,12 +286,12 @@ export default function LinksPage() {
                       value={newLink.categoryId}
                       onChange={e => setNewLink({...newLink, categoryId: e.target.value})}
                     >
-                      {categories.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      {categories.map((targetCategory: any) => <option key={targetCategory.id} value={targetCategory.id}>{targetCategory.name}</option>)}
                     </select>
                   </>
                 ) : (
                   <input 
-                    required placeholder="Kategorian nimi" 
+                    required placeholder={c.categoryName}
                     className="w-full p-2.5 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
                     value={newCat.name}
                     onChange={e => setNewCat({...newCat, name: e.target.value})}
@@ -247,14 +310,14 @@ export default function LinksPage() {
                       }
                     />
                     <div className="flex flex-col">
-                      <span className="text-sm font-bold text-slate-700">Vain minun käytössäni</span>
+                      <span className="text-sm font-bold text-slate-700">{c.personalOnly}</span>
                     </div>
                   </label>
                 </div>
 
                 <div className="flex gap-3 pt-2">
-                  <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 px-4 py-2.5 border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 font-bold transition">Peruuta</button>
-                  <button type="submit" className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-bold transition">Tallenna</button>
+                  <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 px-4 py-2.5 border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 font-bold transition">{c.cancel}</button>
+                  <button type="submit" className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-bold transition">{c.save}</button>
                 </div>
               </form>
             </div>
