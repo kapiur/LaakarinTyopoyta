@@ -4,6 +4,7 @@ import PasswordChangeGuard from "./PasswordChangeGuard";
 import { I18nProvider } from "./I18nProvider";
 import MalliSyntaxHelpEnhancer from "./MalliSyntaxHelpEnhancer";
 import CoreUiI18nEnhancer from "./CoreUiI18nEnhancer";
+import CalculatorsI18nEnhancer from "./CalculatorsI18nEnhancer";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
@@ -12,6 +13,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
         <PasswordChangeGuard />
         <MalliSyntaxHelpEnhancer />
         <CoreUiI18nEnhancer />
+        <CalculatorsI18nEnhancer />
         {children}
       </I18nProvider>
     </SessionProvider>
