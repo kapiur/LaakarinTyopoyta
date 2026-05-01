@@ -5,6 +5,7 @@ import { I18nProvider } from "./I18nProvider";
 import MalliSyntaxHelpEnhancer from "./MalliSyntaxHelpEnhancer";
 import CoreUiI18nEnhancer from "./CoreUiI18nEnhancer";
 import CalculatorsI18nEnhancer from "./CalculatorsI18nEnhancer";
+import StandaloneCalculatorsI18nEnhancer from "./StandaloneCalculatorsI18nEnhancer";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
@@ -14,6 +15,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
         <MalliSyntaxHelpEnhancer />
         <CoreUiI18nEnhancer />
         <CalculatorsI18nEnhancer />
+        <StandaloneCalculatorsI18nEnhancer />
         {children}
       </I18nProvider>
     </SessionProvider>
