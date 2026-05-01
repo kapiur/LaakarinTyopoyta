@@ -14,23 +14,25 @@ import {
   Bot,
   FlaskConical
 } from "lucide-react";
+import { useI18n } from "../lib/useI18n";
 
 export default function Sidebar() {
   const pathname = usePathname();
   const { data: session } = useSession();
+  const { t } = useI18n();
   const isAdmin = (session?.user as any)?.role === "ADMIN";
 
   if (pathname === '/login') return null;
 
   const navItems = [
-    { href: "/", label: "Pääsivu", icon: LayoutDashboard },
-    { href: "/templates", label: "Mallit", icon: FileText },
-    { href: "/ai-tools", label: "AI-työkalut", icon: Bot },
-    { href: "/pikaohjeet", label: "Pikaohjeet", icon: Zap },
-    { href: "/links", label: "Linkit", icon: LinkIcon },
-    { href: "/medicines", label: "Lääkkeet", icon: Pill },
-    { href: "/calculators", label: "Laskurit", icon: Calculator },
-    { href: "/calculators/peds-library", label: "Lääkekirjastot", icon: FlaskConical },
+    { href: "/", label: t("sidebar.home"), icon: LayoutDashboard },
+    { href: "/malli", label: t("sidebar.templates"), icon: FileText },
+    { href: "/ai-tools", label: t("sidebar.aiTools"), icon: Bot },
+    { href: "/pikaohjeet", label: t("sidebar.quickGuides"), icon: Zap },
+    { href: "/links", label: t("sidebar.links"), icon: LinkIcon },
+    { href: "/medicines", label: t("sidebar.medicines"), icon: Pill },
+    { href: "/calculators", label: t("sidebar.calculators"), icon: Calculator },
+    { href: "/calculators/peds-library", label: t("sidebar.drugLibraries"), icon: FlaskConical },
   ];
 
   return (
@@ -64,7 +66,7 @@ export default function Sidebar() {
       <div className="p-4 border-t border-slate-100 space-y-2">
         {session?.user && (
           <div className="px-4 py-2 mb-2 bg-slate-50 rounded-xl">
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider italic">Käyttäjä</p>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider italic">{t("sidebar.user")}</p>
             <p className="text-xs font-medium text-slate-700 truncate">{session.user.email}</p>
             {isAdmin && <p className="text-[10px] font-bold text-blue-600 uppercase tracking-wider mt-1">Admin</p>}
           </div>
@@ -72,7 +74,7 @@ export default function Sidebar() {
         
         <Link href="/settings" className={`flex items-center gap-3 w-full px-4 py-3 transition-all group rounded-xl ${pathname.startsWith('/settings') || pathname.startsWith('/profile/security') || pathname.startsWith('/admin/users') ? 'bg-blue-50 text-blue-600 font-bold shadow-sm' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}>
           <Settings size={20} className="group-hover:rotate-45 transition-transform" />
-          <span className="text-sm font-medium">Asetukset</span>
+          <span className="text-sm font-medium">{t("sidebar.settings")}</span>
         </Link>
 
         <button 
@@ -80,7 +82,7 @@ export default function Sidebar() {
           className="flex items-center gap-3 w-full px-4 py-3 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all group font-medium"
         >
           <LogOut size={20} className="group-hover:translate-x-1 transition-transform" />
-          <span className="text-sm">Kirjaudu ulos</span>
+          <span className="text-sm">{t("sidebar.logout")}</span>
         </button>
       </div>
     </aside>

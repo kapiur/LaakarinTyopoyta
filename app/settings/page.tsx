@@ -2,10 +2,13 @@
 
 import Link from "next/link";
 import { useSession } from "next-auth/react";
-import { KeyRound, Settings, Shield, UserCog, Users } from "lucide-react";
+import { KeyRound, Settings, Shield, Users } from "lucide-react";
+import LanguageSettingsCard from "../../components/LanguageSettingsCard";
+import { useI18n } from "../../lib/useI18n";
 
 export default function SettingsPage() {
   const { data: session } = useSession();
+  const { t } = useI18n();
   const isAdmin = (session?.user as any)?.role === "ADMIN";
 
   return (
@@ -15,10 +18,12 @@ export default function SettingsPage() {
           <Settings size={26} />
         </div>
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Asetukset</h1>
-          <p className="text-sm text-slate-500">Käyttäjätilin ja ylläpidon asetukset.</p>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">{t("settings.title")}</h1>
+          <p className="text-sm text-slate-500">{t("settings.subtitle")}</p>
         </div>
       </header>
+
+      <LanguageSettingsCard />
 
       <section className="grid grid-cols-1 md:grid-cols-2 gap-5">
         <Link
@@ -30,8 +35,8 @@ export default function SettingsPage() {
               <KeyRound size={24} />
             </div>
             <div className="space-y-1">
-              <h2 className="text-lg font-bold text-slate-900">Turva-asetukset</h2>
-              <p className="text-sm text-slate-500">Vaihda oma salasana ja tarkista kirjautumistilin perustiedot.</p>
+              <h2 className="text-lg font-bold text-slate-900">{t("settings.securityTitle")}</h2>
+              <p className="text-sm text-slate-500">{t("settings.securityDescription")}</p>
               <p className="text-xs font-semibold text-slate-400 pt-2">{session?.user?.email}</p>
             </div>
           </div>
@@ -47,8 +52,8 @@ export default function SettingsPage() {
                 <Users size={24} />
               </div>
               <div className="space-y-1">
-                <h2 className="text-lg font-bold text-slate-900">Käyttäjähallinta</h2>
-                <p className="text-sm text-slate-500">Luo käyttäjiä, poista käyttäjätilejä ja hallitse käyttöoikeuksia.</p>
+                <h2 className="text-lg font-bold text-slate-900">{t("settings.userManagementTitle")}</h2>
+                <p className="text-sm text-slate-500">{t("settings.userManagementDescription")}</p>
                 <p className="text-xs font-semibold text-blue-600 uppercase tracking-wider pt-2">Admin</p>
               </div>
             </div>
@@ -62,10 +67,8 @@ export default function SettingsPage() {
             <Shield size={20} />
           </div>
           <div>
-            <h2 className="text-sm font-bold text-slate-800">Ylläpitäjän huomio</h2>
-            <p className="text-sm text-slate-500 mt-1">
-              Prompt Lab on poistettu sivuvalikosta. AI-työkalujen hallinta tapahtuu jatkossa uuden AI-työkalut-rakenteen kautta.
-            </p>
+            <h2 className="text-sm font-bold text-slate-800">{t("settings.adminNoticeTitle")}</h2>
+            <p className="text-sm text-slate-500 mt-1">{t("settings.adminNotice")}</p>
           </div>
         </section>
       )}

@@ -8,6 +8,7 @@ import {
 import Link from 'next/link';
 import ReactMarkdown from 'react-markdown';
 import { DEFAULT_AI_TOOL_METADATA, type DefaultAiToolMetadata } from '../lib/ai/toolMetadata';
+import { useI18n } from '../lib/useI18n';
 
 const aiToolIcons = {
   ListChecks: <ListChecks size={14} />,
@@ -18,10 +19,11 @@ const aiToolIcons = {
 };
 
 export default function Dashboard() {
+  const { t } = useI18n();
   // Состояния для чата (справа)
   const [chatInput, setChatInput] = useState('');
   const [messages, setMessages] = useState([
-    { role: 'assistant', content: 'Hei! Miten voin auttaa sinua tänään? Voin auttaa tekstien muotoilussa, diagnoosikriteerien tarkistamisessa tai lääketieteellisissä kysymyksissä.' }
+    { role: 'assistant', content: t('dashboard.assistantGreeting') }
   ]);
   const [isChatLoading, setIsChatLoading] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -50,12 +52,12 @@ export default function Dashboard() {
           setAiTools(data.tools);
         }
       } catch (error) {
-        console.error('AI-työkalujen lataus epäonnistui:', error);
+        console.error(t('dashboard.aiToolsLoadingFailed'), error);
       }
     };
 
     loadAiTools();
-  }, []);
+  }, [t]);
 
   // Улучшенная анонимизация (HETU + Телефоны)
   const anonymize = (text: string) => {
@@ -94,7 +96,7 @@ export default function Dashboard() {
       }
     } catch (error) {
       console.error("AI-virhe:", error);
-      setMessages(prev => [...prev, { role: 'assistant', content: 'Virhe yhteydessä tekoälyyn.' }]);
+      setMessages(prev => [...prev, { role: 'assistant', content: t('dashboard.aiConnectionError') }]);
     } finally {
       setIsChatLoading(false);
     }
@@ -118,7 +120,7 @@ export default function Dashboard() {
       const data = await response.json();
       if (data.content) setToolResult(data.content);
     } catch (error) {
-      setToolResult("Virhe tekstin käsittelyssä.");
+      setToolResult(t('dashboard.textProcessingError'));
     } finally {
       setIsToolLoading(false);
     }
@@ -126,7 +128,7 @@ export default function Dashboard() {
 
   const moveResultToChat = () => {
     if (!toolResult) return;
-    const promptForChat = `Tässä on käsitelty teksti, haluaisin kysyä siitä lisää:\n\n${toolResult}`;
+    const promptForChat = `${t('dashboard.processedTextIntro')}\n\n${toolResult}`;
     sendMessage(promptForChat);
   };
 
@@ -135,29 +137,29 @@ export default function Dashboard() {
       
       {/* ЛЕВАЯ И ЦЕНТРАЛЬНАЯ ЧАСТЬ */}
       <div className="lg:col-span-2 space-y-6">
-        <h2 className="text-2xl font-bold text-slate-800 tracking-tight">Lääkärin Työpöytä</h2>
+        <h2 className="text-2xl font-bold text-slate-800 tracking-tight">{t('dashboard.title')}</h2>
         
         {/* Навигация */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Link href="/templates" className="block p-5 bg-white rounded-2xl shadow-sm border border-slate-100 hover:border-blue-500 hover:shadow-md transition-all group">
+          <Link href="/malli" className="block p-5 bg-white rounded-2xl shadow-sm border border-slate-100 hover:border-blue-500 hover:shadow-md transition-all group">
             <h3 className="font-bold text-blue-700 group-hover:text-blue-600 flex items-center gap-2 mb-1">
-              Mallit <FileText size={18} />
+              {t('dashboard.templatesTitle')} <FileText size={18} />
             </h3>
-            <p className="text-[11px] leading-relaxed text-slate-500">Kliiniset tutkimusmallit ja strukturoidut tekstipohjat.</p>
+            <p className="text-[11px] leading-relaxed text-slate-500">{t('dashboard.templatesDescription')}</p>
           </Link>
 
           <Link href="/calculators" className="block p-5 bg-white rounded-2xl shadow-sm border border-slate-100 hover:border-blue-500 hover:shadow-md transition-all group">
             <h3 className="font-bold text-blue-700 group-hover:text-blue-600 flex items-center gap-2 mb-1">
-              Laskurit <Calculator size={18} />
+              {t('dashboard.calculatorsTitle')} <Calculator size={18} />
             </h3>
-            <p className="text-[11px] leading-relaxed text-slate-500">Annoslaskurit, eGFR, BMI и другие инструменты.</p>
+            <p className="text-[11px] leading-relaxed text-slate-500">{t('dashboard.calculatorsDescription')}</p>
           </Link>
 
           <Link href="/pikaohjeet" className="block p-5 bg-blue-600 rounded-2xl shadow-lg shadow-blue-100 hover:bg-blue-700 transition-all group">
             <h3 className="font-bold text-white flex items-center gap-2 mb-1">
-              Pikaohjeet <Zap size={18} className="text-amber-300" />
+              {t('dashboard.quickGuidesTitle')} <Zap size={18} className="text-amber-300" />
             </h3>
-            <p className="text-[11px] leading-relaxed text-blue-100">Interaktiiviset ohjekortit ja diagnostiikka-apu.</p>
+            <p className="text-[11px] leading-relaxed text-blue-100">{t('dashboard.quickGuidesDescription')}</p>
           </Link>
         </div>
 
@@ -166,23 +168,23 @@ export default function Dashboard() {
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-4">
               <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                <Bot size={22} className="text-blue-600" /> AI-Tekstityökalu
+                <Bot size={22} className="text-blue-600" /> {t('dashboard.textToolTitle')}
               </h3>
               <button 
                 onClick={clearTool}
                 className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-bold text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all border border-transparent hover:border-red-100 uppercase"
-                title="Tyhjennä lomake"
+                title={t('dashboard.clearToolTitle')}
               >
-                <RotateCcw size={14} /> Tyhjennä
+                <RotateCcw size={14} /> {t('common.clear')}
               </button>
             </div>
             <div className="flex items-center gap-2">
               <Link
                 href="/ai-tools"
                 className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-full border border-blue-100 uppercase transition-all"
-                title="Muokkaa omia AI-työkaluja"
+                title={t('dashboard.manageAiTools')}
               >
-                <Settings size={12} /> Muokkaa AI-työkaluja
+                <Settings size={12} /> {t('dashboard.manageAiTools')}
               </Link>
               <div className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-100">
                 <ShieldCheck size={12} /> GDPR SECURED
@@ -194,7 +196,7 @@ export default function Dashboard() {
             <textarea
               value={toolText}
               onChange={(e) => setToolText(e.target.value)}
-              placeholder="Liitä potilasteksti tai tutkimustulokset tähän (HETU анонимизируется автоматически)..."
+              placeholder={t('dashboard.textAreaPlaceholder')}
               className="w-full h-40 p-4 text-sm border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500/20 outline-none bg-slate-50/30 transition-all resize-none font-medium"
             />
 
@@ -222,10 +224,10 @@ export default function Dashboard() {
                     onClick={moveResultToChat}
                     className="px-3 py-1.5 bg-white border border-blue-200 rounded-lg text-blue-600 hover:bg-blue-600 hover:text-white flex items-center gap-2 text-[10px] font-bold uppercase transition-all shadow-sm"
                   >
-                    <MessageSquareShare size={14} /> Chattiin
+                    <MessageSquareShare size={14} /> {t('dashboard.moveToChat')}
                   </button>
                   <button 
-                    onClick={() => {navigator.clipboard.writeText(toolResult); alert("Kopioitu!");}}
+                    onClick={() => {navigator.clipboard.writeText(toolResult); alert(t('dashboard.copiedAlert'));}}
                     className="p-1.5 bg-white border border-blue-200 rounded-lg text-blue-600 hover:bg-blue-600 hover:text-white transition-all shadow-sm"
                   >
                     <Copy size={16} />
@@ -248,7 +250,7 @@ export default function Dashboard() {
               <Bot size={18} />
             </div>
             <div>
-              <span className="font-bold text-slate-800 text-sm block">AI-Avustaja</span>
+              <span className="font-bold text-slate-800 text-sm block">{t('dashboard.assistantTitle')}</span>
               <span className="text-[9px] font-bold text-emerald-500 uppercase tracking-tighter flex items-center gap-1">
                 <div className="w-1 h-1 bg-emerald-500 rounded-full animate-pulse" /> Online
               </span>
@@ -287,7 +289,7 @@ export default function Dashboard() {
               onChange={(e) => setChatInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
               type="text" 
-              placeholder="Kysy diagnoosista tai hoidosta..." 
+              placeholder={t('dashboard.chatPlaceholder')}
               className="flex-1 px-3 py-2 bg-transparent outline-none text-sm font-medium"
             />
             <button 

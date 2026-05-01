@@ -15,6 +15,7 @@ import {
   Sparkles,
   Trash2,
 } from "lucide-react";
+import { useI18n } from "../../lib/useI18n";
 
 type AiTool = {
   id: string;
@@ -48,6 +49,7 @@ const emptyForm = {
 };
 
 export default function AiToolsPage() {
+  const { t } = useI18n();
   const [tools, setTools] = useState<AiTool[]>([]);
   const [form, setForm] = useState(emptyForm);
   const [idea, setIdea] = useState("");
@@ -63,12 +65,12 @@ export default function AiToolsPage() {
     setIsLoading(true);
     try {
       const response = await fetch("/api/ai-tools?view=manage");
-      if (!response.ok) throw new Error("Työkalujen lataus epäonnistui");
+      if (!response.ok) throw new Error(t("aiTools.loadingFailed"));
       const data = await response.json();
       setTools(Array.isArray(data.tools) ? data.tools : []);
     } catch (error) {
       console.error(error);
-      setStatus("Työkalujen lataus epäonnistui.");
+      setStatus(t("aiTools.loadingFailed"));
     } finally {
       setIsLoading(false);
     }
@@ -76,6 +78,7 @@ export default function AiToolsPage() {
 
   useEffect(() => {
     loadTools();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const resetForm = () => {
@@ -100,7 +103,7 @@ export default function AiToolsPage() {
 
   const saveTool = async () => {
     if (!form.label.trim() || !form.prompt.trim()) {
-      setStatus("Nimi ja prompt ovat pakollisia.");
+      setStatus(t("aiTools.labelAndPromptRequired"));
       return;
     }
 
@@ -123,10 +126,10 @@ export default function AiToolsPage() {
         body: JSON.stringify(payload),
       });
 
-      if (!response.ok) throw new Error("Tallennus epäonnistui");
+      if (!response.ok) throw new Error(t("aiTools.saveFailed"));
 
       const data = await response.json();
-      setStatus("Tallennettu.");
+      setStatus(t("common.saved"));
       await loadTools();
 
       if (data.tool?.id) {
@@ -142,7 +145,7 @@ export default function AiToolsPage() {
       }
     } catch (error) {
       console.error(error);
-      setStatus("Tallennus epäonnistui.");
+      setStatus(t("aiTools.saveFailed"));
     } finally {
       setIsSaving(false);
     }
@@ -150,20 +153,20 @@ export default function AiToolsPage() {
 
   const deleteTool = async () => {
     if (!form.id) return;
-    if (!confirm("Poistetaanko tämä AI-työkalu?")) return;
+    if (!confirm(t("aiTools.deleteConfirm"))) return;
 
     setIsSaving(true);
     setStatus("");
 
     try {
       const response = await fetch(`/api/ai-tools/${form.id}`, { method: "DELETE" });
-      if (!response.ok) throw new Error("Poisto epäonnistui");
-      setStatus("Poistettu.");
+      if (!response.ok) throw new Error(t("aiTools.deleteFailed"));
+      setStatus(t("aiTools.deleted"));
       resetForm();
       await loadTools();
     } catch (error) {
       console.error(error);
-      setStatus("Poisto epäonnistui.");
+      setStatus(t("aiTools.deleteFailed"));
     } finally {
       setIsSaving(false);
     }
@@ -171,7 +174,7 @@ export default function AiToolsPage() {
 
   const generatePrompt = async () => {
     if (!idea.trim() && !form.prompt.trim()) {
-      setStatus("Kuvaa ensin, mitä haluat työkalun tekevän.");
+      setStatus(t("aiTools.describeFirst"));
       return;
     }
 
@@ -188,16 +191,16 @@ export default function AiToolsPage() {
         }),
       });
 
-      if (!response.ok) throw new Error("Prompt-apuri epäonnistui");
+      if (!response.ok) throw new Error(t("aiTools.assistantFailed"));
       const data = await response.json();
 
       if (typeof data.prompt === "string" && data.prompt.trim()) {
         setForm((prev) => ({ ...prev, prompt: data.prompt.trim() }));
-        setStatus("Prompt päivitetty apurin ehdotuksella.");
+        setStatus(t("aiTools.assistantUpdated"));
       }
     } catch (error) {
       console.error(error);
-      setStatus("Prompt-apuri epäonnistui.");
+      setStatus(t("aiTools.assistantFailed"));
     } finally {
       setIsAssistantLoading(false);
     }
@@ -210,30 +213,30 @@ export default function AiToolsPage() {
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-            <Bot className="text-blue-600" size={26} /> Omat AI-työkalut
+            <Bot className="text-blue-600" size={26} /> {t("aiTools.title")}
           </h1>
           <p className="text-sm text-slate-500 mt-1 max-w-3xl">
-            Luo ja muokkaa omia AI-painikkeita. Työkalut näkyvät pääsivun AI-Tekstityökalussa ja käyttävät omaa tallennettua promptia.
+            {t("aiTools.subtitle")}
           </p>
         </div>
         <button
           onClick={resetForm}
           className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-bold hover:bg-blue-700 shadow-sm"
         >
-          <Plus size={16} /> Uusi työkalu
+          <Plus size={16} /> {t("aiTools.newTool")}
         </button>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 space-y-3">
-          <h2 className="font-bold text-slate-800">Omat työkalut</h2>
+          <h2 className="font-bold text-slate-800">{t("aiTools.ownTools")}</h2>
           {isLoading ? (
             <div className="flex items-center gap-2 text-sm text-slate-500 py-6">
-              <Loader2 size={16} className="animate-spin" /> Ladataan...
+              <Loader2 size={16} className="animate-spin" /> {t("common.loading")}
             </div>
           ) : tools.length === 0 ? (
             <div className="text-sm text-slate-500 bg-slate-50 border border-dashed border-slate-200 rounded-xl p-4">
-              Ei vielä omia työkaluja. Luo ensimmäinen oikealla olevalla lomakkeella.
+              {t("aiTools.noTools")}
             </div>
           ) : (
             <div className="space-y-2">
@@ -252,9 +255,9 @@ export default function AiToolsPage() {
                     <div className="flex items-center gap-2">
                       <ToolIcon size={16} className={tool.isActive ? "text-blue-600" : "text-slate-400"} />
                       <span className="font-bold text-sm text-slate-800">{tool.label}</span>
-                      {!tool.isActive && <span className="text-[10px] font-bold text-slate-400 uppercase">piilotettu</span>}
+                      {!tool.isActive && <span className="text-[10px] font-bold text-slate-400 uppercase">{t("aiTools.hidden")}</span>}
                     </div>
-                    <p className="text-xs text-slate-500 mt-1 line-clamp-2">{tool.description || "Ei kuvausta"}</p>
+                    <p className="text-xs text-slate-500 mt-1 line-clamp-2">{tool.description || t("aiTools.noDescription")}</p>
                   </button>
                 );
               })}
@@ -266,7 +269,7 @@ export default function AiToolsPage() {
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-4">
             <div className="flex items-center justify-between gap-3">
               <h2 className="font-bold text-slate-800 flex items-center gap-2">
-                <IconPreview size={18} className="text-blue-600" /> {isEditing ? "Muokkaa työkalua" : "Luo uusi työkalu"}
+                <IconPreview size={18} className="text-blue-600" /> {isEditing ? t("aiTools.editTool") : t("aiTools.createTool")}
               </h2>
               <label className="flex items-center gap-2 text-sm font-medium text-slate-600">
                 <input
@@ -275,13 +278,13 @@ export default function AiToolsPage() {
                   onChange={(e) => setForm((prev) => ({ ...prev, isActive: e.target.checked }))}
                   className="w-4 h-4"
                 />
-                Näytä pääsivulla
+                {t("aiTools.showOnHome")}
               </label>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <label className="space-y-1">
-                <span className="text-xs font-bold text-slate-500 uppercase">Nimi</span>
+                <span className="text-xs font-bold text-slate-500 uppercase">{t("aiTools.name")}</span>
                 <input
                   value={form.label}
                   onChange={(e) => setForm((prev) => ({ ...prev, label: e.target.value }))}
@@ -291,7 +294,7 @@ export default function AiToolsPage() {
               </label>
 
               <label className="space-y-1">
-                <span className="text-xs font-bold text-slate-500 uppercase">Ikoni</span>
+                <span className="text-xs font-bold text-slate-500 uppercase">{t("aiTools.icon")}</span>
                 <select
                   value={form.icon}
                   onChange={(e) => setForm((prev) => ({ ...prev, icon: e.target.value }))}
@@ -305,7 +308,7 @@ export default function AiToolsPage() {
             </div>
 
             <label className="space-y-1 block">
-              <span className="text-xs font-bold text-slate-500 uppercase">Kuvaus</span>
+              <span className="text-xs font-bold text-slate-500 uppercase">{t("aiTools.description")}</span>
               <input
                 value={form.description}
                 onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
@@ -317,17 +320,17 @@ export default function AiToolsPage() {
             <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl border border-blue-100 shadow-sm p-5 space-y-4">
               <div>
                 <h2 className="font-bold text-slate-800 flex items-center gap-2">
-                  <Sparkles size={18} className="text-blue-600" /> Prompt-apuri
+                  <Sparkles size={18} className="text-blue-600" /> {t("aiTools.promptAssistant")}
                 </h2>
                 <p className="text-sm text-slate-600 mt-1">
-                  Kirjoita kuvaus millä tahansa kielellä. Apuri ymmärtää esimerkiksi venäjää, suomea ja englantia, mutta palauttaa valmiin tallennettavan system promptin suomeksi.
+                  {t("aiTools.promptAssistantDescription")}
                 </p>
               </div>
 
               <textarea
                 value={idea}
                 onChange={(e) => setIdea(e.target.value)}
-                placeholder="Esim. Хочу инструмент, который делает направление в erikoissairaanhoito по данным пациента. Он должен писать на финском в HUS-tyyli, анонимизировать данные и не придумывать отсутствующую информацию."
+                placeholder={t("aiTools.promptAssistantPlaceholder")}
                 className="w-full h-32 rounded-xl border border-blue-100 bg-white/80 px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300"
               />
 
@@ -337,16 +340,16 @@ export default function AiToolsPage() {
                 className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-black disabled:opacity-50 shadow-sm"
               >
                 {isAssistantLoading ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
-                Luo tai paranna prompt
+                {t("aiTools.createOrImprovePrompt")}
               </button>
             </div>
 
             <label className="space-y-1 block">
-              <span className="text-xs font-bold text-slate-500 uppercase">Prompt</span>
+              <span className="text-xs font-bold text-slate-500 uppercase">{t("aiTools.prompt")}</span>
               <textarea
                 value={form.prompt}
                 onChange={(e) => setForm((prev) => ({ ...prev, prompt: e.target.value }))}
-                placeholder="Kirjoita prompt tai luo se Prompt-apurin avulla..."
+                placeholder={t("aiTools.promptPlaceholder")}
                 className="w-full h-72 rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300 font-mono leading-relaxed"
               />
             </label>
@@ -360,7 +363,7 @@ export default function AiToolsPage() {
                     disabled={isSaving}
                     className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-red-200 text-red-600 text-sm font-bold hover:bg-red-50 disabled:opacity-50"
                   >
-                    <Trash2 size={16} /> Poista
+                    <Trash2 size={16} /> {t("common.delete")}
                   </button>
                 )}
                 <button
@@ -368,7 +371,7 @@ export default function AiToolsPage() {
                   disabled={!form.prompt}
                   className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-bold hover:bg-slate-50 disabled:opacity-50"
                 >
-                  <Copy size={16} /> Kopioi
+                  <Copy size={16} /> {t("common.copy")}
                 </button>
                 <button
                   onClick={saveTool}
@@ -376,7 +379,7 @@ export default function AiToolsPage() {
                   className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-bold hover:bg-blue-700 disabled:opacity-50 shadow-sm"
                 >
                   {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-                  Tallenna
+                  {t("common.save")}
                 </button>
               </div>
             </div>
