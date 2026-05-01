@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
   ArrowLeft,
@@ -27,6 +27,7 @@ import {
   type TemplateItem,
   type TemplateValues,
 } from '../../../lib/templates';
+import CategoryManagerDialog from '../../../components/templates/CategoryManagerDialog';
 import TemplateFieldControl from '../../../components/templates/TemplateFieldControl';
 import TemplateSnippetBuilder from '../../../components/templates/TemplateSnippetBuilder';
 
@@ -39,6 +40,7 @@ const emptyForm: TemplateFormData = {
 };
 
 export default function TemplatesRedesignPage() {
+  const contentTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [categories, setCategories] = useState<TemplateCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeCategoryId, setActiveCategoryId] = useState<number | null>(null);
@@ -48,6 +50,7 @@ export default function TemplatesRedesignPage() {
   const [copied, setCopied] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [showEditor, setShowEditor] = useState(false);
+  const [showCategoryManager, setShowCategoryManager] = useState(false);
   const [formData, setFormData] = useState<TemplateFormData>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -146,10 +149,29 @@ export default function TemplatesRedesignPage() {
   };
 
   const insertSnippet = (snippet: string) => {
-    setFormData((current) => ({
-      ...current,
-      content: current.content ? `${current.content}\n${snippet}` : snippet,
-    }));
+    const textarea = contentTextareaRef.current;
+    setFormData((current) => {
+      if (!textarea) {
+        return { ...current, content: current.content ? `${current.content}\n${snippet}` : snippet };
+      }
+
+      const start = textarea.selectionStart ?? current.content.length;
+      const end = textarea.selectionEnd ?? current.content.length;
+      const before = current.content.slice(0, start);
+      const after = current.content.slice(end);
+      const needsSpaceBefore = before.length > 0 && !/[\s\n]$/.test(before);
+      const needsSpaceAfter = after.length > 0 && !/^[\s\n.,;:!?]/.test(after);
+      const inserted = `${needsSpaceBefore ? ' ' : ''}${snippet}${needsSpaceAfter ? ' ' : ''}`;
+      const nextContent = `${before}${inserted}${after}`;
+      const nextCursor = before.length + inserted.length;
+
+      window.setTimeout(() => {
+        textarea.focus();
+        textarea.setSelectionRange(nextCursor, nextCursor);
+      }, 0);
+
+      return { ...current, content: nextContent };
+    });
   };
 
   const saveTemplate = async () => {
@@ -224,7 +246,7 @@ export default function TemplatesRedesignPage() {
           <button type="button" onClick={() => setShowHelp(true)} className="w-11 h-11 rounded-2xl bg-white border border-slate-100 text-slate-400 hover:text-blue-600 hover:bg-blue-50 flex items-center justify-center transition-colors" title="Syntaksiohje">
             <HelpCircle size={18} />
           </button>
-          <button type="button" className="h-11 px-5 rounded-2xl bg-white border border-slate-100 text-slate-500 hover:bg-slate-50 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest transition-colors">
+          <button type="button" onClick={() => setShowCategoryManager(true)} className="h-11 px-5 rounded-2xl bg-white border border-slate-100 text-slate-500 hover:bg-slate-50 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest transition-colors">
             <Settings size={14} /> Osiot
           </button>
           <button type="button" onClick={openNewTemplate} className="h-11 px-5 rounded-2xl bg-blue-600 text-white hover:bg-blue-700 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest shadow-lg shadow-blue-100 transition-colors">
@@ -330,7 +352,7 @@ export default function TemplatesRedesignPage() {
 
               <div className="space-y-2">
                 <div className="flex items-center justify-between ml-3"><label className="text-[9px] font-black text-blue-600 uppercase tracking-widest">Sisältö ja muuttujat</label><button type="button" onClick={() => setShowHelp(true)} className="text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-blue-600 flex items-center gap-1"><HelpCircle size={12} /> Ohje</button></div>
-                <textarea value={formData.content} onChange={(event) => setFormData((current) => ({ ...current, content: event.target.value }))} className="w-full min-h-[480px] p-6 bg-slate-50 border-none rounded-[2rem] outline-none focus:bg-white focus:ring-8 focus:ring-blue-500/5 font-mono text-sm leading-relaxed shadow-inner" placeholder="Kirjoita mallin sisältö... esim. Kipu: {{kipu:select:ei,kyllä}}" />
+                <textarea ref={contentTextareaRef} value={formData.content} onChange={(event) => setFormData((current) => ({ ...current, content: event.target.value }))} className="w-full min-h-[480px] p-6 bg-slate-50 border-none rounded-[2rem] outline-none focus:bg-white focus:ring-8 focus:ring-blue-500/5 font-mono text-sm leading-relaxed shadow-inner" placeholder="Kirjoita mallin sisältö... esim. Kipu: {{kipu:select:ei,kyllä}}" />
               </div>
             </div>
 
@@ -341,6 +363,8 @@ export default function TemplatesRedesignPage() {
           </div>
         </div>
       )}
+
+      {showCategoryManager && <CategoryManagerDialog categories={categories} onClose={() => setShowCategoryManager(false)} onChanged={() => loadTemplates(selectedTemplateId)} />}
 
       {showHelp && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
