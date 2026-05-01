@@ -2,12 +2,43 @@
 
 import { useMemo, useState } from 'react';
 import { Plus } from 'lucide-react';
+import { useI18n } from '../../lib/useI18n';
 
 type FieldType = 'input' | 'textarea' | 'select';
 
 type TemplateSnippetBuilderProps = {
   onInsert: (snippet: string) => void;
 };
+
+const snippetBuilderCopy = {
+  fi: {
+    title: 'Lisää kenttä',
+    description: 'Luo kentän syntaksi ja lisää se mallin sisältöön.',
+    add: 'Lisää',
+    fieldNamePlaceholder: 'kentän nimi, esim. kipu',
+    showIfFieldPlaceholder: 'showIf kenttä, esim. kipu',
+    showIfValuePlaceholder: 'showIf arvo, esim. kyllä',
+    emptySnippet: 'Täytä kentän nimi latinalla',
+  },
+  ru: {
+    title: 'Добавить поле',
+    description: 'Создайте синтаксис поля и добавьте его в содержание шаблона.',
+    add: 'Добавить',
+    fieldNamePlaceholder: 'имя поля, например kipu',
+    showIfFieldPlaceholder: 'поле showIf, например kipu',
+    showIfValuePlaceholder: 'значение showIf, например kyllä',
+    emptySnippet: 'Заполните имя поля латиницей',
+  },
+  en: {
+    title: 'Add field',
+    description: 'Create field syntax and add it to the template content.',
+    add: 'Add',
+    fieldNamePlaceholder: 'field name, e.g. kipu',
+    showIfFieldPlaceholder: 'showIf field, e.g. kipu',
+    showIfValuePlaceholder: 'showIf value, e.g. kyllä',
+    emptySnippet: 'Fill in the field name using Latin characters',
+  },
+} as const;
 
 function normalizeFieldName(value: string) {
   return value
@@ -28,6 +59,8 @@ function normalizeOptions(value: string) {
 }
 
 export default function TemplateSnippetBuilder({ onInsert }: TemplateSnippetBuilderProps) {
+  const { language } = useI18n();
+  const c = snippetBuilderCopy[language] ?? snippetBuilderCopy.fi;
   const [fieldName, setFieldName] = useState('');
   const [fieldType, setFieldType] = useState<FieldType>('input');
   const [options, setOptions] = useState('');
@@ -74,8 +107,8 @@ export default function TemplateSnippetBuilder({ onInsert }: TemplateSnippetBuil
     <div className="rounded-[1.5rem] border border-blue-100 bg-blue-50/60 p-4 space-y-4">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <div className="text-[10px] font-black uppercase tracking-widest text-blue-700">Lisää kenttä</div>
-          <div className="text-xs font-semibold text-blue-900/70">Luo kentän syntaksi ja lisää se mallin sisältöön.</div>
+          <div className="text-[10px] font-black uppercase tracking-widest text-blue-700">{c.title}</div>
+          <div className="text-xs font-semibold text-blue-900/70">{c.description}</div>
         </div>
         <button
           type="button"
@@ -83,7 +116,7 @@ export default function TemplateSnippetBuilder({ onInsert }: TemplateSnippetBuil
           disabled={!snippet}
           className="px-4 py-2.5 rounded-xl bg-blue-600 text-white text-[10px] font-black uppercase tracking-widest hover:bg-blue-700 disabled:opacity-40 flex items-center gap-2"
         >
-          <Plus size={13} /> Lisää
+          <Plus size={13} /> {c.add}
         </button>
       </div>
 
@@ -91,7 +124,7 @@ export default function TemplateSnippetBuilder({ onInsert }: TemplateSnippetBuil
         <input
           value={fieldName}
           onChange={(event) => setFieldName(event.target.value)}
-          placeholder="kentän nimi, esim. kipu"
+          placeholder={c.fieldNamePlaceholder}
           className="p-3 rounded-xl bg-white border border-blue-100 outline-none focus:ring-4 focus:ring-blue-500/5 font-bold text-sm"
         />
         <select
@@ -116,19 +149,19 @@ export default function TemplateSnippetBuilder({ onInsert }: TemplateSnippetBuil
         <input
           value={showIfParent}
           onChange={(event) => setShowIfParent(event.target.value)}
-          placeholder="showIf kenttä, esim. kipu"
+          placeholder={c.showIfFieldPlaceholder}
           className="p-3 rounded-xl bg-white border border-blue-100 outline-none focus:ring-4 focus:ring-blue-500/5 font-bold text-sm"
         />
         <input
           value={showIfValue}
           onChange={(event) => setShowIfValue(event.target.value)}
-          placeholder="showIf arvo, esim. kyllä"
+          placeholder={c.showIfValuePlaceholder}
           className="p-3 rounded-xl bg-white border border-blue-100 outline-none focus:ring-4 focus:ring-blue-500/5 font-bold text-sm"
         />
       </div>
 
       <div className="rounded-xl bg-slate-950 p-3 font-mono text-xs text-white min-h-[42px]">
-        {snippet || 'Täytä kentän nimi latinalla'}
+        {snippet || c.emptySnippet}
       </div>
     </div>
   );
