@@ -12,11 +12,11 @@ export default function PasswordChangeGuard() {
   useEffect(() => {
     if (status !== "authenticated") return;
     if (pathname === "/login") return;
-    if (pathname === "/profile/change-password") return;
+    if (pathname === "/profile/security") return;
 
     const mustChangePassword = (session?.user as any)?.mustChangePassword === true;
     if (mustChangePassword) {
-      router.replace("/profile/change-password");
+      router.replace("/profile/security");
     }
   }, [pathname, router, session, status]);
 
