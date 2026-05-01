@@ -13,12 +13,14 @@ import {
   Link as LinkIcon, // Импортируем иконку для ссылок
   Terminal,
   Bot,
-  FlaskConical
+  FlaskConical,
+  Users
 } from "lucide-react";
 
 export default function Sidebar() {
   const pathname = usePathname();
   const { data: session } = useSession();
+  const isAdmin = (session?.user as any)?.role === "ADMIN";
 
   if (pathname === '/login') return null;
 
@@ -60,6 +62,30 @@ export default function Sidebar() {
             </Link>
           );
         })}
+
+        {isAdmin && (
+          <div className="pt-4 mt-4 border-t border-slate-100 space-y-2">
+            <p className="px-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Admin</p>
+            <Link
+              href="/admin/users"
+              className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all group ${
+                pathname.startsWith('/admin/users') ? 'bg-blue-50 text-blue-600 font-bold shadow-sm' : 'text-slate-600 hover:bg-blue-50 hover:text-blue-600'
+              }`}
+            >
+              <Users size={20} className="group-hover:scale-110 transition-transform" />
+              <span>Käyttäjät</span>
+            </Link>
+            <Link
+              href="/admin/prompts"
+              className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all group ${
+                pathname.startsWith('/admin/prompts') ? 'bg-blue-50 text-blue-600 font-bold shadow-sm' : 'text-slate-600 hover:bg-blue-50 hover:text-blue-600'
+              }`}
+            >
+              <Terminal size={20} className="group-hover:scale-110 transition-transform" />
+              <span>Prompt Lab</span>
+            </Link>
+          </div>
+        )}
       </nav>
 
       <div className="p-4 border-t border-slate-100 space-y-2">
@@ -67,6 +93,7 @@ export default function Sidebar() {
           <div className="px-4 py-2 mb-2 bg-slate-50 rounded-xl">
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider italic">Käyttäjä</p>
             <p className="text-xs font-medium text-slate-700 truncate">{session.user.email}</p>
+            {isAdmin && <p className="text-[10px] font-bold text-blue-600 uppercase tracking-wider mt-1">Admin</p>}
           </div>
         )}
         
@@ -82,17 +109,6 @@ export default function Sidebar() {
           <LogOut size={20} className="group-hover:translate-x-1 transition-transform" />
           <span className="text-sm">Kirjaudu ulos</span>
         </button>
-
-        {/* СЕКРЕТНАЯ КНОПКА (PROMPT LAB) */}
-        <div className="pt-4 mt-2 border-t border-slate-50 flex justify-center">
-          <Link 
-            href="/admin/prompts" 
-            className="flex items-center gap-1.5 text-[9px] font-bold text-slate-200 hover:text-slate-400 transition-colors uppercase tracking-[0.2em] group"
-          >
-            <Terminal size={10} className="opacity-50 group-hover:opacity-100" />
-            <span>Lab v0.8.2</span>
-          </Link>
-        </div>
       </div>
     </aside>
   );
