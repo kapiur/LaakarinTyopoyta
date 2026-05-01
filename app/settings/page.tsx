@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { KeyRound, Settings, Shield, UserCog, Users } from "lucide-react";
+import LanguageSettingsCard from "../../components/LanguageSettingsCard";
 
 export default function SettingsPage() {
   const { data: session } = useSession();
@@ -19,6 +20,8 @@ export default function SettingsPage() {
           <p className="text-sm text-slate-500">Käyttäjätilin ja ylläpidon asetukset.</p>
         </div>
       </header>
+
+      <LanguageSettingsCard />
 
       <section className="grid grid-cols-1 md:grid-cols-2 gap-5">
         <Link
