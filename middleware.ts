@@ -10,6 +10,7 @@ export const config = {
     "/links/:path*",
     "/medicines/:path*",
     "/calculators/:path*",
+    "/settings/:path*",
     "/admin/:path*",
     "/profile/:path*",
     "/api/chat/:path*", // Защищаем и AI чат тоже
