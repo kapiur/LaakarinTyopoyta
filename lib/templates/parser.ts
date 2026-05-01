@@ -23,7 +23,9 @@ function parseShowIfCondition(config: string[]): TemplateCondition | null {
 }
 
 function getTemplateFieldType(config: string[]): TemplateFieldPart['type'] {
-  return config.some((part) => part.toLowerCase() === 'select') ? 'select' : 'input';
+  if (config.some((part) => part.toLowerCase() === 'select')) return 'select';
+  if (config.some((part) => part.toLowerCase() === 'textarea')) return 'textarea';
+  return 'input';
 }
 
 function getTemplateFieldOptions(config: string[]): string[] {
