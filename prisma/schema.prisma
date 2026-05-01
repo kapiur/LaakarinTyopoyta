@@ -12,12 +12,22 @@ datasource db {
 // 1. ПОЛЬЗОВАТЕЛИ И АУТЕНТИФИКАЦИЯ
 // ==========================================
 
+enum UserRole {
+  ADMIN
+  USER
+}
+
 model User {
-  id              Int              @id @default(autoincrement())
-  email           String           @unique
-  password        String
-  name            String?
-  createdAt       DateTime         @default(now())
+  id                 Int              @id @default(autoincrement())
+  email              String           @unique
+  password           String
+  name               String?
+  role               UserRole         @default(USER)
+  isActive           Boolean          @default(true)
+  mustChangePassword Boolean          @default(false)
+  lastLoginAt        DateTime?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
 
   // Обратные связи
   categories      Category[]

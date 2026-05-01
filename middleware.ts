@@ -5,7 +5,14 @@ export const config = {
   matcher: [
     "/",
     "/templates/:path*",
+    "/ai-tools/:path*",
+    "/pikaohjeet/:path*",
+    "/links/:path*",
+    "/medicines/:path*",
     "/calculators/:path*",
+    "/settings/:path*",
+    "/admin/:path*",
+    "/profile/:path*",
     "/api/chat/:path*", // Защищаем и AI чат тоже
   ] 
 };

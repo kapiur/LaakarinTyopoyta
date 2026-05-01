@@ -10,8 +10,7 @@ import {
   LogOut, 
   Pill,
   Zap,
-  Link as LinkIcon, // Импортируем иконку для ссылок
-  Terminal,
+  Link as LinkIcon,
   Bot,
   FlaskConical
 } from "lucide-react";
@@ -19,16 +18,16 @@ import {
 export default function Sidebar() {
   const pathname = usePathname();
   const { data: session } = useSession();
+  const isAdmin = (session?.user as any)?.role === "ADMIN";
 
   if (pathname === '/login') return null;
 
-  // Основные навигационные элементы
   const navItems = [
     { href: "/", label: "Pääsivu", icon: LayoutDashboard },
     { href: "/templates", label: "Mallit", icon: FileText },
     { href: "/ai-tools", label: "AI-työkalut", icon: Bot },
     { href: "/pikaohjeet", label: "Pikaohjeet", icon: Zap },
-    { href: "/links", label: "Linkit", icon: LinkIcon }, // НОВЫЙ ПУНКТ
+    { href: "/links", label: "Linkit", icon: LinkIcon },
     { href: "/medicines", label: "Lääkkeet", icon: Pill },
     { href: "/calculators", label: "Laskurit", icon: Calculator },
     { href: "/calculators/peds-library", label: "Lääkekirjastot", icon: FlaskConical },
@@ -67,13 +66,14 @@ export default function Sidebar() {
           <div className="px-4 py-2 mb-2 bg-slate-50 rounded-xl">
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider italic">Käyttäjä</p>
             <p className="text-xs font-medium text-slate-700 truncate">{session.user.email}</p>
+            {isAdmin && <p className="text-[10px] font-bold text-blue-600 uppercase tracking-wider mt-1">Admin</p>}
           </div>
         )}
         
-        <button className="flex items-center gap-3 w-full px-4 py-3 text-slate-400 hover:text-slate-600 transition-all group">
+        <Link href="/settings" className={`flex items-center gap-3 w-full px-4 py-3 transition-all group rounded-xl ${pathname.startsWith('/settings') || pathname.startsWith('/profile/security') || pathname.startsWith('/admin/users') ? 'bg-blue-50 text-blue-600 font-bold shadow-sm' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}>
           <Settings size={20} className="group-hover:rotate-45 transition-transform" />
           <span className="text-sm font-medium">Asetukset</span>
-        </button>
+        </Link>
 
         <button 
           onClick={() => signOut({ callbackUrl: '/login' })}
@@ -82,17 +82,6 @@ export default function Sidebar() {
           <LogOut size={20} className="group-hover:translate-x-1 transition-transform" />
           <span className="text-sm">Kirjaudu ulos</span>
         </button>
-
-        {/* СЕКРЕТНАЯ КНОПКА (PROMPT LAB) */}
-        <div className="pt-4 mt-2 border-t border-slate-50 flex justify-center">
-          <Link 
-            href="/admin/prompts" 
-            className="flex items-center gap-1.5 text-[9px] font-bold text-slate-200 hover:text-slate-400 transition-colors uppercase tracking-[0.2em] group"
-          >
-            <Terminal size={10} className="opacity-50 group-hover:opacity-100" />
-            <span>Lab v0.8.2</span>
-          </Link>
-        </div>
       </div>
     </aside>
   );
