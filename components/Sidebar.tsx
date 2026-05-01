@@ -26,7 +26,7 @@ export default function Sidebar() {
 
   const navItems = [
     { href: "/", label: t("sidebar.home"), icon: LayoutDashboard },
-    { href: "/templates", label: t("sidebar.templates"), icon: FileText },
+    { href: "/malli", label: t("sidebar.templates"), icon: FileText },
     { href: "/ai-tools", label: t("sidebar.aiTools"), icon: Bot },
     { href: "/pikaohjeet", label: t("sidebar.quickGuides"), icon: Zap },
     { href: "/links", label: t("sidebar.links"), icon: LinkIcon },
