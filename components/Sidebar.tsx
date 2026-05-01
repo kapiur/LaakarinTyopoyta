@@ -10,11 +10,9 @@ import {
   LogOut, 
   Pill,
   Zap,
-  Link as LinkIcon, // Импортируем иконку для ссылок
-  Terminal,
+  Link as LinkIcon,
   Bot,
-  FlaskConical,
-  Users
+  FlaskConical
 } from "lucide-react";
 
 export default function Sidebar() {
@@ -24,13 +22,12 @@ export default function Sidebar() {
 
   if (pathname === '/login') return null;
 
-  // Основные навигационные элементы
   const navItems = [
     { href: "/", label: "Pääsivu", icon: LayoutDashboard },
     { href: "/templates", label: "Mallit", icon: FileText },
     { href: "/ai-tools", label: "AI-työkalut", icon: Bot },
     { href: "/pikaohjeet", label: "Pikaohjeet", icon: Zap },
-    { href: "/links", label: "Linkit", icon: LinkIcon }, // НОВЫЙ ПУНКТ
+    { href: "/links", label: "Linkit", icon: LinkIcon },
     { href: "/medicines", label: "Lääkkeet", icon: Pill },
     { href: "/calculators", label: "Laskurit", icon: Calculator },
     { href: "/calculators/peds-library", label: "Lääkekirjastot", icon: FlaskConical },
@@ -62,30 +59,6 @@ export default function Sidebar() {
             </Link>
           );
         })}
-
-        {isAdmin && (
-          <div className="pt-4 mt-4 border-t border-slate-100 space-y-2">
-            <p className="px-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Admin</p>
-            <Link
-              href="/admin/users"
-              className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all group ${
-                pathname.startsWith('/admin/users') ? 'bg-blue-50 text-blue-600 font-bold shadow-sm' : 'text-slate-600 hover:bg-blue-50 hover:text-blue-600'
-              }`}
-            >
-              <Users size={20} className="group-hover:scale-110 transition-transform" />
-              <span>Käyttäjät</span>
-            </Link>
-            <Link
-              href="/admin/prompts"
-              className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all group ${
-                pathname.startsWith('/admin/prompts') ? 'bg-blue-50 text-blue-600 font-bold shadow-sm' : 'text-slate-600 hover:bg-blue-50 hover:text-blue-600'
-              }`}
-            >
-              <Terminal size={20} className="group-hover:scale-110 transition-transform" />
-              <span>Prompt Lab</span>
-            </Link>
-          </div>
-        )}
       </nav>
 
       <div className="p-4 border-t border-slate-100 space-y-2">
@@ -97,7 +70,7 @@ export default function Sidebar() {
           </div>
         )}
         
-        <Link href="/profile/security" className="flex items-center gap-3 w-full px-4 py-3 text-slate-400 hover:text-slate-600 transition-all group rounded-xl hover:bg-slate-50">
+        <Link href="/settings" className={`flex items-center gap-3 w-full px-4 py-3 transition-all group rounded-xl ${pathname.startsWith('/settings') || pathname.startsWith('/profile/security') || pathname.startsWith('/admin/users') ? 'bg-blue-50 text-blue-600 font-bold shadow-sm' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}>
           <Settings size={20} className="group-hover:rotate-45 transition-transform" />
           <span className="text-sm font-medium">Asetukset</span>
         </Link>
