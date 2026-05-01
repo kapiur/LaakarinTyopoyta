@@ -25,6 +25,7 @@ model User {
   role               UserRole         @default(USER)
   isActive           Boolean          @default(true)
   mustChangePassword Boolean          @default(false)
+  uiLanguage         String           @default("fi")
   lastLoginAt        DateTime?
   createdAt          DateTime         @default(now())
   updatedAt          DateTime         @updatedAt
