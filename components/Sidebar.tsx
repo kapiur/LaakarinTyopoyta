@@ -97,10 +97,10 @@ export default function Sidebar() {
           </div>
         )}
         
-        <button className="flex items-center gap-3 w-full px-4 py-3 text-slate-400 hover:text-slate-600 transition-all group">
+        <Link href="/profile/security" className="flex items-center gap-3 w-full px-4 py-3 text-slate-400 hover:text-slate-600 transition-all group rounded-xl hover:bg-slate-50">
           <Settings size={20} className="group-hover:rotate-45 transition-transform" />
           <span className="text-sm font-medium">Asetukset</span>
-        </button>
+        </Link>
 
         <button 
           onClick={() => signOut({ callbackUrl: '/login' })}
