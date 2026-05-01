@@ -230,7 +230,7 @@ export default function TemplatesRedesignPage() {
     <div className="max-w-[1800px] mx-auto min-h-[calc(100vh-80px)] p-5 text-slate-900 space-y-5">
       <header className="bg-white border shadow-sm rounded-[2rem] p-5 flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Link href="/templates" className="w-11 h-11 rounded-2xl border border-slate-100 flex items-center justify-center text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors">
+          <Link href="/" className="w-11 h-11 rounded-2xl border border-slate-100 flex items-center justify-center text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors">
             <ArrowLeft size={18} />
           </Link>
           <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-blue-100">
