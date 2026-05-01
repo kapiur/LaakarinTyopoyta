@@ -5,24 +5,37 @@ import Link from 'next/link';
 import {
   ArrowLeft,
   ClipboardCopy,
+  Edit2,
   FileText,
   HelpCircle,
   Loader2,
   MessageSquare,
   Plus,
+  Save,
   Search,
   Settings,
   Sparkles,
+  Trash2,
+  X,
 } from 'lucide-react';
 import {
   getTemplateFields,
   isTemplateFieldVisible,
   renderTemplate,
   type TemplateCategory,
+  type TemplateFormData,
   type TemplateItem,
   type TemplateValues,
 } from '../../../lib/templates';
 import TemplateFieldControl from '../../../components/templates/TemplateFieldControl';
+
+const emptyForm: TemplateFormData = {
+  id: null,
+  title: '',
+  content: '',
+  categoryName: '',
+  author: 'Doc',
+};
 
 export default function TemplatesRedesignPage() {
   const [categories, setCategories] = useState<TemplateCategory[]>([]);
@@ -33,30 +46,42 @@ export default function TemplatesRedesignPage() {
   const [values, setValues] = useState<TemplateValues>({});
   const [copied, setCopied] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const [showEditor, setShowEditor] = useState(false);
+  const [formData, setFormData] = useState<TemplateFormData>(emptyForm);
+  const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  useEffect(() => {
-    const fetchTemplates = async () => {
-      setLoading(true);
-      setErrorMsg(null);
-      try {
-        const res = await fetch('/api/templates');
-        const data = await res.json();
-        const nextCategories: TemplateCategory[] = Array.isArray(data) ? data : [];
-        setCategories(nextCategories);
-        const firstCategory = nextCategories[0];
-        if (firstCategory) {
-          setActiveCategoryId(firstCategory.id);
-          setSelectedTemplateId(firstCategory.templates?.[0]?.id || null);
-        }
-      } catch (err: any) {
-        setErrorMsg(err.message || 'Mallien lataus epäonnistui');
-      } finally {
-        setLoading(false);
-      }
-    };
+  const loadTemplates = async (nextSelectedId?: number | null) => {
+    setLoading(true);
+    setErrorMsg(null);
+    try {
+      const res = await fetch('/api/templates');
+      const data = await res.json();
+      const nextCategories: TemplateCategory[] = Array.isArray(data) ? data : [];
+      setCategories(nextCategories);
 
-    fetchTemplates();
+      const previousCategory = nextCategories.find((category) => category.id === activeCategoryId);
+      const firstCategory = previousCategory || nextCategories[0] || null;
+
+      if (firstCategory) {
+        setActiveCategoryId(firstCategory.id);
+        const allTemplates = firstCategory.templates || [];
+        const selectedExists = allTemplates.some((template) => template.id === nextSelectedId);
+        setSelectedTemplateId(selectedExists ? nextSelectedId || null : allTemplates[0]?.id || null);
+      } else {
+        setActiveCategoryId(null);
+        setSelectedTemplateId(null);
+      }
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Mallien lataus epäonnistui');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadTemplates();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const activeCategory = categories.find((category) => category.id === activeCategoryId) || null;
@@ -95,6 +120,84 @@ export default function TemplatesRedesignPage() {
     setTimeout(() => setCopied(false), 1800);
   };
 
+  const openNewTemplate = () => {
+    setFormData({
+      ...emptyForm,
+      categoryName: activeCategory?.name || '',
+    });
+    setShowEditor(true);
+  };
+
+  const openEditTemplate = () => {
+    if (!selectedTemplate) return;
+    setFormData({
+      id: selectedTemplate.id,
+      title: selectedTemplate.title,
+      content: selectedTemplate.content,
+      categoryName: categories.find((category) => category.id === selectedTemplate.categoryId)?.name || activeCategory?.name || '',
+      author: selectedTemplate.author || 'Doc',
+    });
+    setShowEditor(true);
+  };
+
+  const closeEditor = () => {
+    setShowEditor(false);
+    setFormData(emptyForm);
+    setSaving(false);
+  };
+
+  const saveTemplate = async () => {
+    if (saving) return;
+    if (!formData.title.trim() || !formData.categoryName.trim() || !formData.content.trim()) {
+      setErrorMsg('Täytä otsikko, osio ja sisältö.');
+      return;
+    }
+
+    setSaving(true);
+    setErrorMsg(null);
+
+    try {
+      const method = formData.id ? 'PUT' : 'POST';
+      const res = await fetch('/api/templates', {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Tallennus epäonnistui');
+
+      const savedId = data.id || formData.id || null;
+      closeEditor();
+      await loadTemplates(savedId);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Tallennus epäonnistui');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteTemplate = async () => {
+    if (!formData.id || saving) return;
+    if (!confirm(`Haluatko varmasti poistaa mallin "${formData.title}"?`)) return;
+
+    setSaving(true);
+    setErrorMsg(null);
+
+    try {
+      const res = await fetch(`/api/templates?id=${formData.id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Poisto epäonnistui');
+      }
+      closeEditor();
+      await loadTemplates(null);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Poisto epäonnistui');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="max-w-[1800px] mx-auto min-h-[calc(100vh-80px)] p-5 text-slate-900 space-y-5">
       <header className="bg-white border shadow-sm rounded-[2rem] p-5 flex items-center justify-between">
@@ -131,6 +234,7 @@ export default function TemplatesRedesignPage() {
           </button>
           <button
             type="button"
+            onClick={openNewTemplate}
             className="h-11 px-5 rounded-2xl bg-blue-600 text-white hover:bg-blue-700 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest shadow-lg shadow-blue-100 transition-colors"
           >
             <Plus size={14} /> Uusi malli
@@ -212,7 +316,19 @@ export default function TemplatesRedesignPage() {
                 <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Täytä kentät</div>
                 <div className="font-black text-slate-800">{selectedTemplate?.title || 'Valitse malli'}</div>
               </div>
-              <MessageSquare className="text-slate-300" size={18} />
+              <div className="flex items-center gap-2">
+                {selectedTemplate && (
+                  <button
+                    type="button"
+                    onClick={openEditTemplate}
+                    className="p-2.5 text-slate-400 hover:text-blue-600 transition-all bg-white rounded-xl border border-slate-100 shadow-sm"
+                    title="Muokkaa mallia"
+                  >
+                    <Edit2 size={16} />
+                  </button>
+                )}
+                <MessageSquare className="text-slate-300" size={18} />
+              </div>
             </div>
 
             <div className="p-6 flex-1 overflow-y-auto space-y-6 no-scrollbar">
@@ -267,8 +383,99 @@ export default function TemplatesRedesignPage() {
         </main>
       )}
 
+      {showEditor && (
+        <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/40 backdrop-blur-sm">
+          <div className="h-full w-full max-w-3xl bg-white shadow-2xl flex flex-col animate-in slide-in-from-right-6">
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{formData.id ? 'Muokkaa mallia' : 'Uusi malli'}</div>
+                <h2 className="text-2xl font-black text-slate-900">{formData.title || 'Nimetön malli'}</h2>
+              </div>
+              <button onClick={closeEditor} className="p-3 rounded-2xl hover:bg-slate-50 text-slate-400 hover:text-slate-700">
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-6 flex-1 overflow-y-auto space-y-6">
+              <div className="grid md:grid-cols-2 gap-5">
+                <div className="space-y-2">
+                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-3">Mallin otsikko</label>
+                  <input
+                    value={formData.title}
+                    onChange={(event) => setFormData((current) => ({ ...current, title: event.target.value }))}
+                    className="w-full p-4 bg-slate-50 border-none rounded-2xl outline-none focus:bg-white focus:ring-4 focus:ring-blue-500/5 font-bold shadow-inner"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-3">Osio / siirrä osioon</label>
+                  <select
+                    value={formData.categoryName}
+                    onChange={(event) => setFormData((current) => ({ ...current, categoryName: event.target.value }))}
+                    className="w-full p-4 bg-slate-50 border-none rounded-2xl outline-none focus:bg-white focus:ring-4 focus:ring-blue-500/5 font-bold shadow-inner"
+                  >
+                    <option value="">Valitse osio</option>
+                    {categories.map((category) => (
+                      <option key={category.id} value={category.name}>{category.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between ml-3">
+                  <label className="text-[9px] font-black text-blue-600 uppercase tracking-widest">Sisältö ja muuttujat</label>
+                  <button
+                    type="button"
+                    onClick={() => setShowHelp(true)}
+                    className="text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-blue-600 flex items-center gap-1"
+                  >
+                    <HelpCircle size={12} /> Ohje
+                  </button>
+                </div>
+                <textarea
+                  value={formData.content}
+                  onChange={(event) => setFormData((current) => ({ ...current, content: event.target.value }))}
+                  className="w-full min-h-[480px] p-6 bg-slate-50 border-none rounded-[2rem] outline-none focus:bg-white focus:ring-8 focus:ring-blue-500/5 font-mono text-sm leading-relaxed shadow-inner"
+                  placeholder="Kirjoita mallin sisältö... esim. Kipu: {{kipu:select:ei,kyllä}}"
+                />
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-slate-100 flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={deleteTemplate}
+                disabled={!formData.id || saving}
+                className="px-5 py-3 rounded-2xl bg-white text-red-500 ring-1 ring-red-100 text-[10px] font-black uppercase tracking-widest hover:bg-red-50 disabled:opacity-30 flex items-center gap-2"
+              >
+                <Trash2 size={14} /> Poista
+              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={closeEditor}
+                  className="px-5 py-3 rounded-2xl bg-white text-slate-500 ring-1 ring-slate-100 text-[10px] font-black uppercase tracking-widest hover:bg-slate-50"
+                >
+                  Peruuta
+                </button>
+                <button
+                  type="button"
+                  onClick={saveTemplate}
+                  disabled={saving}
+                  className="px-6 py-3 rounded-2xl bg-blue-600 text-white text-[10px] font-black uppercase tracking-widest hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2 shadow-lg shadow-blue-100"
+                >
+                  {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                  Tallenna
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showHelp && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
           <div className="bg-white rounded-[2rem] shadow-2xl max-w-2xl w-full p-6 space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-black">Syntaksin pikamuistio</h2>
