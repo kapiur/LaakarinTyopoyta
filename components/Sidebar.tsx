@@ -25,7 +25,7 @@ export default function Sidebar() {
   // Основные навигационные элементы
   const navItems = [
     { href: "/", label: "Pääsivu", icon: LayoutDashboard },
-    { href: "/templates", label: "Mallit", icon: FileText },
+    { href: "/malli", label: "Mallit", icon: FileText },
     { href: "/ai-tools", label: "AI-työkalut", icon: Bot },
     { href: "/pikaohjeet", label: "Pikaohjeet", icon: Zap },
     { href: "/links", label: "Linkit", icon: LinkIcon }, // НОВЫЙ ПУНКТ
