@@ -139,7 +139,7 @@ export default function Dashboard() {
         
         {/* Навигация */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Link href="/templates" className="block p-5 bg-white rounded-2xl shadow-sm border border-slate-100 hover:border-blue-500 hover:shadow-md transition-all group">
+          <Link href="/malli" className="block p-5 bg-white rounded-2xl shadow-sm border border-slate-100 hover:border-blue-500 hover:shadow-md transition-all group">
             <h3 className="font-bold text-blue-700 group-hover:text-blue-600 flex items-center gap-2 mb-1">
               Mallit <FileText size={18} />
             </h3>
