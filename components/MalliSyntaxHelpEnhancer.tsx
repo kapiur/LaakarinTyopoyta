@@ -93,7 +93,8 @@ export default function MalliSyntaxHelpEnhancer() {
 
     const enhance = () => {
       const headings = Array.from(document.querySelectorAll("h2"));
-      const title = headings.find((h) => c.titles.includes((h.textContent || "").trim()));
+      const knownTitles: readonly string[] = c.titles;
+      const title = headings.find((h) => knownTitles.includes((h.textContent || "").trim()));
       if (!title) return;
 
       const dialog = title.closest(".bg-white.rounded-\\[2rem\\]") as HTMLElement | null;
