@@ -1,6 +1,7 @@
 import assert from 'assert';
 import { getTemplateFields } from '../lib/templates/parser';
 import { renderTemplate } from '../lib/templates/renderer';
+import { validateTemplate } from '../lib/templates/validation';
 
 function testSelectField() {
   const fields = getTemplateFields('Yleistila {{yleistila:select:hyvä,kohtalainen,heikko}}.');
@@ -143,6 +144,33 @@ function testExtendedRendering() {
   );
 }
 
+function testValidTemplateValidation() {
+  const result = validateTemplate([
+    '{{kipu:radio:ei kipua|lievä kipu|kohtalainen kipu|voimakas kipu:default:ei kipua}}',
+    '{{kipukuvaus:textarea:showIfAny:kipu=kohtalainen kipu|voimakas kipu}}',
+    '{{lisaoireet:multiselect:huimaus|pahoinvointi|oksentelu}}',
+    '{{huimaus_kuvaus:textarea:showIfIncludes:lisaoireet=huimaus}}',
+  ].join(' '));
+
+  assert.equal(result.ok, true);
+  assert.equal(result.errors.length, 0);
+}
+
+function testInvalidTemplateValidation() {
+  const result = validateTemplate([
+    '{{kipu:select}}',
+    '{{kipukuvaus:textarea:showIf:puuttuva=kyllä}}',
+    '{{bad-name:input}}',
+    '{{oire:radio:ei|kyllä:default:muu}}',
+  ].join(' '));
+
+  assert.equal(result.ok, false);
+  assert.ok(result.errors.some((issue) => issue.message.includes('has no options')));
+  assert.ok(result.errors.some((issue) => issue.message.includes('missing field')));
+  assert.ok(result.errors.some((issue) => issue.message.includes('invalid technical name')));
+  assert.ok(result.warnings.some((issue) => issue.message.includes('default value outside')));
+}
+
 function run() {
   testSelectField();
   testShowIfInputField();
@@ -152,6 +180,8 @@ function run() {
   testHiddenConditionalFieldRendering();
   testVisibleConditionalFieldRendering();
   testExtendedRendering();
+  testValidTemplateValidation();
+  testInvalidTemplateValidation();
 
   console.log('Template parser tests passed.');
 }
