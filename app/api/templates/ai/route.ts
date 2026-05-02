@@ -95,7 +95,19 @@ function jsonError(message: string, status = 400) {
   return NextResponse.json({ error: message }, { status });
 }
 
+function looksLikeHtml(raw: string) {
+  return /^\s*<!doctype html/i.test(raw) || /^\s*<html/i.test(raw) || /^\s*</.test(raw);
+}
+
+function truncateForError(raw: string, maxLength = 240) {
+  return raw.replace(/\s+/g, ' ').slice(0, maxLength);
+}
+
 function safeJsonParse(raw: string) {
+  if (looksLikeHtml(raw)) {
+    throw new Error(`AI service returned HTML instead of JSON: ${truncateForError(raw)}`);
+  }
+
   try {
     return JSON.parse(raw);
   } catch {
@@ -103,7 +115,26 @@ function safeJsonParse(raw: string) {
     if (match?.[1]) {
       return JSON.parse(match[1]);
     }
-    throw new Error('AI response was not valid JSON.');
+    throw new Error(`AI response was not valid JSON: ${truncateForError(raw)}`);
+  }
+}
+
+async function readOpenAiHttpResponse(response: Response) {
+  const contentType = response.headers.get('content-type') || '';
+  const raw = await response.text();
+
+  if (!raw.trim()) {
+    throw new Error(`OpenAI returned an empty response. HTTP ${response.status}.`);
+  }
+
+  if (!contentType.includes('application/json')) {
+    throw new Error(`OpenAI returned non-JSON response. HTTP ${response.status}. Content-Type: ${contentType || 'unknown'}. Body: ${truncateForError(raw)}`);
+  }
+
+  try {
+    return JSON.parse(raw);
+  } catch {
+    throw new Error(`OpenAI returned invalid JSON. HTTP ${response.status}. Body: ${truncateForError(raw)}`);
   }
 }
 
@@ -428,7 +459,7 @@ async function createBaseTemplateWithTrustedWebSearch(body: TemplateAiRequest) {
       }),
     });
 
-    const data = await response.json();
+    const data = await readOpenAiHttpResponse(response);
     if (!response.ok) {
       throw new Error(data?.error?.message || 'OpenAI web search request failed.');
     }
