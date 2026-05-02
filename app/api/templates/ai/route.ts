@@ -10,6 +10,7 @@ const openai = new OpenAI({
 
 const CURRENT_MODEL = 'gpt-5.4';
 const WEB_SEARCH_MODEL = process.env.OPENAI_WEB_SEARCH_MODEL || 'gpt-5';
+const CHAT_SEARCH_MODEL = process.env.OPENAI_CHAT_SEARCH_MODEL || 'gpt-4o-search-preview';
 
 const TRUSTED_MEDICAL_DOMAINS = [
   'kaypahoito.fi',
@@ -189,6 +190,16 @@ function buildUserPayload(body: TemplateAiRequest) {
   });
 }
 
+function isTrustedUrl(url: string | undefined) {
+  if (!url) return true;
+  try {
+    const host = new URL(url).hostname.replace(/^www\./, '');
+    return TRUSTED_MEDICAL_DOMAINS.some((domain) => host === domain || host.endsWith(`.${domain}`));
+  } catch {
+    return false;
+  }
+}
+
 function normalizeAiResponse(
   parsed: any,
   mode: TemplateAiMode,
@@ -203,13 +214,8 @@ function normalizeAiResponse(
 
   const filteredSources = usedSources.filter((source: AllowedSource) => {
     if (!source || typeof source.title !== 'string') return false;
-    if (!source.url) return true;
-    try {
-      const host = new URL(source.url).hostname.replace(/^www\./, '');
-      return TRUSTED_MEDICAL_DOMAINS.some((domain) => host === domain || host.endsWith(`.${domain}`));
-    } catch {
-      return fallbackSources.some((fallback) => fallback.title === source.title);
-    }
+    if (source.url) return isTrustedUrl(source.url);
+    return fallbackSources.some((fallback) => fallback.title === source.title);
   });
 
   const parsedStatus = parsed?.status === 'needs_sources' ? 'needs_sources' : validation.ok ? 'ok' : 'invalid_request';
@@ -271,48 +277,112 @@ function getResponseOutputText(response: any) {
   return textPart?.text || '{}';
 }
 
-async function createBaseTemplateWithTrustedWebSearch(body: TemplateAiRequest) {
-  const response = await fetch('https://api.openai.com/v1/responses', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model: WEB_SEARCH_MODEL,
-      reasoning: { effort: 'low' },
-      tools: [
-        {
-          type: 'web_search',
-          filters: {
-            allowed_domains: TRUSTED_MEDICAL_DOMAINS,
-          },
-        },
-      ],
-      tool_choice: 'auto',
-      include: ['web_search_call.action.sources'],
-      text: { format: { type: 'json_object' } },
-      input: [
-        {
-          role: 'system',
-          content: buildSystemPrompt('create_base_template_from_topic'),
-        },
-        {
-          role: 'user',
-          content: buildUserPayload(body),
-        },
-      ],
-    }),
-  });
+function getChatCitations(message: any): AllowedSource[] {
+  const annotations = Array.isArray(message?.annotations) ? message.annotations : [];
+  return annotations
+    .map((annotation: any) => annotation?.url_citation)
+    .filter(Boolean)
+    .map((citation: any) => ({
+      title: citation.title || citation.url,
+      url: citation.url,
+      sourceType: 'web_search',
+    }))
+    .filter((source: AllowedSource) => isTrustedUrl(source.url));
+}
 
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data?.error?.message || 'OpenAI web search request failed.');
+function buildTrustedSearchFallbackPrompt(body: TemplateAiRequest) {
+  const domainQuery = TRUSTED_MEDICAL_DOMAINS.map((domain) => `site:${domain}`).join(' OR ');
+  return `Find current relevant Finnish or European medical guidance for topic: "${body.topic}".
+
+Use only these domains: ${TRUSTED_MEDICAL_DOMAINS.join(', ')}.
+Search query hint: (${domainQuery}) ${body.topic}
+
+Then create a Finnish clinical documentation template for a physician using only trusted sources from those domains. Return JSON only with keys ok, status, summary, templateTitle, templateCategory, templateText, usedSources, limitations, warnings.`;
+}
+
+async function createBaseTemplateWithChatSearchFallback(body: TemplateAiRequest, previousError: string) {
+  const completion = await openai.chat.completions.create({
+    model: CHAT_SEARCH_MODEL,
+    web_search_options: {},
+    messages: [
+      { role: 'system', content: buildSystemPrompt('create_base_template_from_topic') },
+      { role: 'user', content: buildTrustedSearchFallbackPrompt(body) },
+    ],
+  } as any);
+
+  const message = completion.choices[0]?.message;
+  const raw = message?.content || '{}';
+  const parsed = safeJsonParse(raw);
+  const citations = getChatCitations(message);
+  const parsedSources = Array.isArray(parsed?.usedSources) ? parsed.usedSources : [];
+  const trustedParsedSources = parsedSources.filter((source: AllowedSource) => isTrustedUrl(source.url));
+  parsed.usedSources = trustedParsedSources.length > 0 ? trustedParsedSources : citations;
+  parsed.warnings = [
+    ...(Array.isArray(parsed?.warnings) ? parsed.warnings : []),
+    `Responses web_search fallback used. Original error: ${previousError}`,
+  ];
+
+  const normalized = normalizeAiResponse(parsed, 'create_base_template_from_topic', citations);
+
+  if (normalized.usedSources.length === 0 && !body.allowGeneralTechnicalSkeleton) {
+    return {
+      ok: false,
+      status: 'needs_sources' as const,
+      mode: 'create_base_template_from_topic' as const,
+      summary: 'Trusted source search did not return accepted sources.',
+      templateText: '',
+      fields: [],
+      usedSources: [],
+      limitations: [
+        'Automatic search did not return a source from the trusted allow-list.',
+        `Responses web_search error: ${previousError}`,
+      ],
+      warnings: [],
+      validation: { ok: false, errors: ['No trusted source found.'], warnings: [] },
+    };
   }
 
-  const raw = getResponseOutputText(data);
-  const parsed = safeJsonParse(raw);
-  return normalizeAiResponse(parsed, 'create_base_template_from_topic', []);
+  return normalized;
+}
+
+async function createBaseTemplateWithTrustedWebSearch(body: TemplateAiRequest) {
+  try {
+    const response = await fetch('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: WEB_SEARCH_MODEL,
+        reasoning: { effort: 'low' },
+        tools: [
+          {
+            type: 'web_search',
+            filters: {
+              allowed_domains: TRUSTED_MEDICAL_DOMAINS,
+            },
+          },
+        ],
+        tool_choice: 'auto',
+        include: ['web_search_call.action.sources'],
+        text: { format: { type: 'json_object' } },
+        instructions: buildSystemPrompt('create_base_template_from_topic'),
+        input: buildUserPayload(body),
+      }),
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data?.error?.message || 'OpenAI web search request failed.');
+    }
+
+    const raw = getResponseOutputText(data);
+    const parsed = safeJsonParse(raw);
+    return normalizeAiResponse(parsed, 'create_base_template_from_topic', []);
+  } catch (error: any) {
+    return createBaseTemplateWithChatSearchFallback(body, error?.message || 'Unknown Responses web_search error');
+  }
 }
 
 export async function POST(req: Request) {
