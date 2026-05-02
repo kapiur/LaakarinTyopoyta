@@ -6,6 +6,7 @@ import Sidebar from "../components/Sidebar";
 import CalculatorsTabEnhancer from "../components/CalculatorsTabEnhancer";
 import PcaLibraryEditLinksEnhancer from "../components/PcaLibraryEditLinksEnhancer";
 import MalliTemplateValidatorEnhancer from "../components/MalliTemplateValidatorEnhancer";
+import MalliTemplateAiAssistantEnhancer from "../components/MalliTemplateAiAssistantEnhancer";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -26,6 +27,7 @@ export default function RootLayout({
           <CalculatorsTabEnhancer />
           <PcaLibraryEditLinksEnhancer />
           <MalliTemplateValidatorEnhancer />
+          <MalliTemplateAiAssistantEnhancer />
           <div className="flex h-screen overflow-hidden">
             {/* Боковая панель навигации */}
             <Sidebar />
