@@ -1,8 +1,26 @@
-export type TemplateFieldType = 'input' | 'textarea' | 'select';
+export type TemplateFieldType =
+  | 'input'
+  | 'textarea'
+  | 'select'
+  | 'radio'
+  | 'multiselect'
+  | 'checkbox'
+  | 'date'
+  | 'number';
+
+export type TemplateConditionOperator =
+  | 'equals'
+  | 'notEquals'
+  | 'in'
+  | 'includes'
+  | 'empty'
+  | 'notEmpty';
 
 export type TemplateCondition = {
   parentId: string;
-  value: string;
+  operator: TemplateConditionOperator;
+  value?: string;
+  values?: string[];
 };
 
 export type TemplateTextPart = {
@@ -14,9 +32,13 @@ export type TemplateFieldPart = {
   type: TemplateFieldType;
   id: string;
   displayName: string;
+  label?: string;
   options: string[];
   condition: TemplateCondition | null;
   raw: string;
+  defaultValue?: string;
+  placeholder?: string;
+  required?: boolean;
 };
 
 export type TemplatePart = TemplateTextPart | TemplateFieldPart;

@@ -9,7 +9,7 @@
     "lint": "next lint",
     "db:sync": "ts-node scripts/sync-medicines.ts",
     "seed:pikaohjeet": "node scripts/seed_pikaohjeet.cjs",
-    "test:templates": "ts-node scripts/test-template-parser.ts"
+    "test:templates": "ts-node --compiler-options '{\"module\":\"commonjs\"}' scripts/test-template-parser.ts"
   },
   "dependencies": {
     "react": "^18",
