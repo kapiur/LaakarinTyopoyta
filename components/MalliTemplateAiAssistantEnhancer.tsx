@@ -2,11 +2,19 @@
 
 import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
-import { AlertTriangle, Bot, CheckCircle2, Copy, Loader2, Sparkles, X } from 'lucide-react';
+import { AlertTriangle, Bot, CheckCircle2, Copy, Loader2, Plus, Sparkles, Trash2, X } from 'lucide-react';
 import { useI18n } from '../lib/useI18n';
 
 type AiMode = 'transform_instruction' | 'create_from_sample' | 'improve_template' | 'create_base_template_from_topic';
 type ApplyMode = 'replace' | 'insert' | 'append';
+
+type AllowedSource = {
+  title: string;
+  url?: string;
+  sourceType?: string;
+  excerpt?: string;
+  usedFor?: string;
+};
 
 type AiResponse = {
   ok: boolean;
@@ -17,6 +25,7 @@ type AiResponse = {
   templateText?: string;
   warnings?: string[];
   limitations?: string[];
+  usedSources?: AllowedSource[];
   validation?: {
     ok: boolean;
     errors: string[];
@@ -41,6 +50,18 @@ const copy = {
     topic: 'Aihe',
     topicPlaceholder: 'Esim. polvikivun vastaanottomalli',
     allowSkeleton: 'Salli tekninen runko ilman lähteitä',
+    sources: 'Lähteet',
+    sourceTitle: 'Lähteen nimi',
+    sourceTitlePlaceholder: 'Esim. Polvi- ja lonkkanivelrikko. Käypä hoito -suositus',
+    sourceUrl: 'URL',
+    sourceUrlPlaceholder: 'https://www.kaypahoito.fi/...',
+    sourceType: 'Lähdetyyppi',
+    sourceExcerpt: 'Keskeinen ote / huomio',
+    sourceExcerptPlaceholder: 'Kirjoita lyhyt ote tai oma tiivistys siitä, mitä lähteestä saa käyttää...',
+    addSource: 'Lisää lähde',
+    removeSource: 'Poista',
+    noSources: 'Ei lisättyjä lähteitä.',
+    usedSources: 'Käytetyt lähteet',
     run: 'Luo ehdotus',
     apply: 'Käytä',
     applyMode: 'Käyttötapa',
@@ -76,6 +97,18 @@ const copy = {
     topic: 'Тема',
     topicPlaceholder: 'Например: шаблон осмотра колена',
     allowSkeleton: 'Разрешить технический каркас без источников',
+    sources: 'Источники',
+    sourceTitle: 'Название источника',
+    sourceTitlePlaceholder: 'Например: Polvi- ja lonkkanivelrikko. Käypä hoito -suositus',
+    sourceUrl: 'URL',
+    sourceUrlPlaceholder: 'https://www.kaypahoito.fi/...',
+    sourceType: 'Тип источника',
+    sourceExcerpt: 'Ключевой фрагмент / заметка',
+    sourceExcerptPlaceholder: 'Кратко вставьте фрагмент или опишите, что из источника можно использовать...',
+    addSource: 'Добавить источник',
+    removeSource: 'Удалить',
+    noSources: 'Источники не добавлены.',
+    usedSources: 'Использованные источники',
     run: 'Создать предложение',
     apply: 'Применить',
     applyMode: 'Как применить',
@@ -111,6 +144,18 @@ const copy = {
     topic: 'Topic',
     topicPlaceholder: 'For example: knee examination template',
     allowSkeleton: 'Allow technical skeleton without sources',
+    sources: 'Sources',
+    sourceTitle: 'Source title',
+    sourceTitlePlaceholder: 'For example: Polvi- ja lonkkanivelrikko. Käypä hoito -suositus',
+    sourceUrl: 'URL',
+    sourceUrlPlaceholder: 'https://www.kaypahoito.fi/...',
+    sourceType: 'Source type',
+    sourceExcerpt: 'Key excerpt / note',
+    sourceExcerptPlaceholder: 'Paste a short excerpt or describe what may be used from this source...',
+    addSource: 'Add source',
+    removeSource: 'Remove',
+    noSources: 'No sources added.',
+    usedSources: 'Used sources',
     run: 'Create suggestion',
     apply: 'Apply',
     applyMode: 'Apply mode',
@@ -131,6 +176,16 @@ const copy = {
     validationError: 'AI suggestion has errors. Review before use.',
   },
 } as const;
+
+const sourceTypes = [
+  'kaypa_hoito',
+  'terveyskirjasto',
+  'thl',
+  'fimea',
+  'hus',
+  'european_guideline',
+  'other_finnish_official',
+];
 
 function isMalliPath(pathname: string | null) {
   return pathname === '/malli' || pathname === '/templates/redesign';
@@ -182,6 +237,11 @@ export default function MalliTemplateAiAssistantEnhancer() {
   const [sampleText, setSampleText] = useState('');
   const [topic, setTopic] = useState('');
   const [allowSkeleton, setAllowSkeleton] = useState(false);
+  const [sources, setSources] = useState<AllowedSource[]>([]);
+  const [sourceTitle, setSourceTitle] = useState('');
+  const [sourceUrl, setSourceUrl] = useState('');
+  const [sourceType, setSourceType] = useState('kaypa_hoito');
+  const [sourceExcerpt, setSourceExcerpt] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<AiResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -214,6 +274,29 @@ export default function MalliTemplateAiAssistantEnhancer() {
 
   const getCurrentTemplate = () => findTemplateContentTextarea()?.value || '';
 
+  const addSource = () => {
+    const title = sourceTitle.trim();
+    if (!title) return;
+
+    setSources((current) => [
+      ...current,
+      {
+        title,
+        url: sourceUrl.trim() || undefined,
+        sourceType,
+        excerpt: sourceExcerpt.trim() || undefined,
+      },
+    ]);
+    setSourceTitle('');
+    setSourceUrl('');
+    setSourceType('kaypa_hoito');
+    setSourceExcerpt('');
+  };
+
+  const removeSource = (indexToRemove: number) => {
+    setSources((current) => current.filter((_, index) => index !== indexToRemove));
+  };
+
   const runAi = async () => {
     setLoading(true);
     setError(null);
@@ -231,7 +314,7 @@ export default function MalliTemplateAiAssistantEnhancer() {
         topic,
         clinicalContext: 'terveysasema',
         allowGeneralTechnicalSkeleton: allowSkeleton,
-        allowedSources: [],
+        allowedSources: mode === 'create_base_template_from_topic' ? sources : [],
       };
 
       const response = await fetch('/api/templates/ai', {
@@ -339,7 +422,7 @@ export default function MalliTemplateAiAssistantEnhancer() {
             )}
 
             {mode === 'create_base_template_from_topic' && (
-              <div className="space-y-3">
+              <div className="space-y-4">
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">{c.topic}</label>
                   <input
@@ -357,6 +440,74 @@ export default function MalliTemplateAiAssistantEnhancer() {
                   />
                   {c.allowSkeleton}
                 </label>
+
+                <div className="rounded-[1.5rem] border border-slate-100 bg-slate-50 p-3 space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">{c.sources}</div>
+                    <div className="text-[10px] font-black text-slate-400">{sources.length}</div>
+                  </div>
+
+                  <input
+                    value={sourceTitle}
+                    onChange={(event) => setSourceTitle(event.target.value)}
+                    placeholder={c.sourceTitlePlaceholder}
+                    className="w-full rounded-2xl bg-white p-3 text-sm font-bold outline-none ring-1 ring-slate-100 focus:ring-4 focus:ring-blue-500/5"
+                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      value={sourceUrl}
+                      onChange={(event) => setSourceUrl(event.target.value)}
+                      placeholder={c.sourceUrlPlaceholder}
+                      className="w-full rounded-2xl bg-white p-3 text-sm font-bold outline-none ring-1 ring-slate-100 focus:ring-4 focus:ring-blue-500/5"
+                    />
+                    <select
+                      value={sourceType}
+                      onChange={(event) => setSourceType(event.target.value)}
+                      className="w-full rounded-2xl bg-white p-3 text-sm font-bold outline-none ring-1 ring-slate-100 focus:ring-4 focus:ring-blue-500/5"
+                    >
+                      {sourceTypes.map((type) => <option key={type} value={type}>{type}</option>)}
+                    </select>
+                  </div>
+                  <textarea
+                    value={sourceExcerpt}
+                    onChange={(event) => setSourceExcerpt(event.target.value)}
+                    placeholder={c.sourceExcerptPlaceholder}
+                    className="min-h-[90px] w-full rounded-2xl bg-white p-3 text-sm font-bold outline-none ring-1 ring-slate-100 focus:ring-4 focus:ring-blue-500/5"
+                  />
+                  <button
+                    type="button"
+                    onClick={addSource}
+                    disabled={!sourceTitle.trim()}
+                    className="flex items-center gap-2 rounded-2xl bg-slate-900 px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-white disabled:opacity-40"
+                  >
+                    <Plus size={13} /> {c.addSource}
+                  </button>
+
+                  <div className="space-y-2">
+                    {sources.length === 0 ? (
+                      <div className="rounded-2xl bg-white p-3 text-xs font-bold text-slate-400">{c.noSources}</div>
+                    ) : sources.map((source, index) => (
+                      <div key={`${source.title}-${index}`} className="rounded-2xl bg-white p-3 text-xs font-bold text-slate-600 ring-1 ring-slate-100">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <div className="text-slate-900">{source.title}</div>
+                            <div className="mt-1 text-[10px] uppercase tracking-widest text-slate-400">{source.sourceType}</div>
+                            {source.url ? <div className="mt-1 break-all text-blue-600">{source.url}</div> : null}
+                            {source.excerpt ? <div className="mt-2 whitespace-pre-wrap text-slate-500">{source.excerpt}</div> : null}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => removeSource(index)}
+                            className="rounded-xl p-2 text-slate-400 hover:bg-red-50 hover:text-red-600"
+                            title={c.removeSource}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
             )}
 
@@ -407,6 +558,15 @@ export default function MalliTemplateAiAssistantEnhancer() {
               <div className="rounded-2xl bg-amber-50 p-3 text-xs font-bold text-amber-700">
                 <ul className="list-disc pl-4">
                   {result.warnings.map((item, index) => <li key={index}>{item}</li>)}
+                </ul>
+              </div>
+            ) : null}
+
+            {result?.usedSources?.length ? (
+              <div className="rounded-2xl bg-slate-50 p-3 text-xs font-bold text-slate-600">
+                <div className="mb-2 text-[10px] font-black uppercase tracking-widest text-slate-400">{c.usedSources}</div>
+                <ul className="list-disc pl-4">
+                  {result.usedSources.map((source, index) => <li key={index}>{source.title}</li>)}
                 </ul>
               </div>
             ) : null}
