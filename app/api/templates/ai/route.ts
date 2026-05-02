@@ -200,6 +200,16 @@ function isTrustedUrl(url: string | undefined) {
   }
 }
 
+function uniqueSources(sources: AllowedSource[]) {
+  const seen = new Set<string>();
+  return sources.filter((source) => {
+    const key = source.url || source.title;
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function normalizeAiResponse(
   parsed: any,
   mode: TemplateAiMode,
@@ -208,15 +218,14 @@ function normalizeAiResponse(
   const templateText = typeof parsed?.templateText === 'string' ? parsed.templateText : '';
   const validation = validateTemplate(templateText);
   const fields = templateText ? getTemplateFields(templateText) : [];
-  const usedSources = Array.isArray(parsed?.usedSources) ? parsed.usedSources : [];
+  const parsedUsedSources = Array.isArray(parsed?.usedSources) ? parsed.usedSources : [];
   const limitations = Array.isArray(parsed?.limitations) ? parsed.limitations.map(String) : [];
   const warnings = Array.isArray(parsed?.warnings) ? parsed.warnings.map(String) : [];
 
-  const filteredSources = usedSources.filter((source: AllowedSource) => {
+  const filteredSources = uniqueSources([...parsedUsedSources, ...fallbackSources].filter((source: AllowedSource) => {
     if (!source || typeof source.title !== 'string') return false;
-    if (source.url) return isTrustedUrl(source.url);
-    return fallbackSources.some((fallback) => fallback.title === source.title);
-  });
+    return isTrustedUrl(source.url);
+  }));
 
   const parsedStatus = parsed?.status === 'needs_sources' ? 'needs_sources' : validation.ok ? 'ok' : 'invalid_request';
 
@@ -277,8 +286,34 @@ function getResponseOutputText(response: any) {
   return textPart?.text || '{}';
 }
 
+function getResponseSources(response: any): AllowedSource[] {
+  const outputItems = Array.isArray(response?.output) ? response.output : [];
+  const actionSources = outputItems
+    .filter((item: any) => item?.type === 'web_search_call')
+    .flatMap((item: any) => item?.action?.sources || [])
+    .map((source: any) => ({
+      title: source.title || source.url,
+      url: source.url,
+      sourceType: 'web_search',
+    }));
+
+  const messageSources = outputItems
+    .filter((item: any) => item?.type === 'message')
+    .flatMap((item: any) => item?.content || [])
+    .flatMap((content: any) => content?.annotations || [])
+    .map((annotation: any) => annotation?.url_citation)
+    .filter(Boolean)
+    .map((citation: any) => ({
+      title: citation.title || citation.url,
+      url: citation.url,
+      sourceType: 'web_search',
+    }));
+
+  return uniqueSources([...actionSources, ...messageSources].filter((source) => isTrustedUrl(source.url)));
+}
+
 function getChatCitations(message: any): AllowedSource[] {
-  const annotations = Array.isArray(message?.annotations) ? message.annotations : [];
+  const annotations = Array.isArray((message as any)?.annotations) ? (message as any).annotations : [];
   return annotations
     .map((annotation: any) => annotation?.url_citation)
     .filter(Boolean)
@@ -366,7 +401,6 @@ async function createBaseTemplateWithTrustedWebSearch(body: TemplateAiRequest) {
         ],
         tool_choice: 'auto',
         include: ['web_search_call.action.sources'],
-        text: { format: { type: 'json_object' } },
         instructions: buildSystemPrompt('create_base_template_from_topic'),
         input: buildUserPayload(body),
       }),
@@ -379,7 +413,8 @@ async function createBaseTemplateWithTrustedWebSearch(body: TemplateAiRequest) {
 
     const raw = getResponseOutputText(data);
     const parsed = safeJsonParse(raw);
-    return normalizeAiResponse(parsed, 'create_base_template_from_topic', []);
+    const responseSources = getResponseSources(data);
+    return normalizeAiResponse(parsed, 'create_base_template_from_topic', responseSources);
   } catch (error: any) {
     return createBaseTemplateWithChatSearchFallback(body, error?.message || 'Unknown Responses web_search error');
   }
