@@ -164,14 +164,33 @@ Return this JSON shape:
   return `${basePrompt}
 
 Additional rules for mode create_base_template_from_topic:
-- This mode creates a base clinical template from a topic.
+- This mode creates a base clinical documentation template from a topic.
+- Sources are NOT expected to contain ready-made templates.
+- Use searched sources as the clinical evidence/checklist basis for deciding what the physician should ask, examine, assess and document.
 - Search and use only Finnish or European professional/official medical sources from the configured trusted domain allow-list.
 - Priority: Käypä hoito, THL, Fimea, HUS / official Finnish wellbeing service county instructions, Duodecim / Terveyskirjasto / Lääkärikirja Duodecim, then European professional guidelines.
 - Do not rely on uncited memory for medical recommendations.
+- Do not copy source text. Convert source-based clinical requirements into a practical Finnish primary-care template.
+- Before writing templateText, internally derive a clinical checklist from sources:
+  1) relevant anamnesis and symptom characterization,
+  2) duration, severity and functional impact,
+  3) risk factors and medication/context factors,
+  4) status/examination items that should be documented,
+  5) red flags / hälytysmerkit that must not be missed,
+  6) findings that should trigger conditional additional fields,
+  7) indications for further investigations/referral/follow-up when supported by sources,
+  8) practical assessment and plan fields for Finnish primary care.
+- Convert that checklist into an interactive Lääkärin Työpöytä template using radio/select/multiselect/checkbox/date/number/textarea and showIf rules.
+- Include ordinary normal-findings options and abnormal findings options where clinically useful.
+- Use conditional fields to avoid clutter: detailed textarea fields should appear only when a relevant symptom/finding/red flag is selected.
+- The final templateText must be usable directly as a Finnish physician note template; it should not be merely a list of recommendations.
+- The template should usually include sections or content for: Tulosyy, Esitiedot/anamneesi, Oireen kuvaus, Riskitekijät/context, Status, Hälytysmerkit, Arvio, Suunnitelma.
+- If the topic is an examination-only template, emphasize status/examination fields but still include brief indication and relevant red flags.
 - If no relevant source is found, return ok=false, status="needs_sources", templateText="", and explain that trusted sources could not be found.
 - If allowGeneralTechnicalSkeleton is true and no relevant source is found, create only a neutral technical documentation structure without medical recommendations, and clearly add this limitation.
 - Never fabricate usedSources. usedSources must reflect searched source pages.
-- Do not include links in templateText. Put sources only in usedSources.`;
+- Do not include links in templateText. Put sources only in usedSources.
+- In summary, briefly explain which clinical dimensions were included and why, in the requested UI language if possible.`;
 }
 
 function buildUserPayload(body: TemplateAiRequest) {
@@ -187,6 +206,7 @@ function buildUserPayload(body: TemplateAiRequest) {
     allowedSources: Array.isArray(body.allowedSources) ? body.allowedSources : [],
     allowGeneralTechnicalSkeleton: Boolean(body.allowGeneralTechnicalSkeleton),
     trustedDomains: TRUSTED_MEDICAL_DOMAINS,
+    expectedWorkflow: 'Search trusted sources, derive a clinical checklist from them, then convert that checklist into an interactive Finnish template. Do not search for ready-made templates.',
   });
 }
 
@@ -332,7 +352,9 @@ function buildTrustedSearchFallbackPrompt(body: TemplateAiRequest) {
 Use only these domains: ${TRUSTED_MEDICAL_DOMAINS.join(', ')}.
 Search query hint: (${domainQuery}) ${body.topic}
 
-Then create a Finnish clinical documentation template for a physician using only trusted sources from those domains. Return JSON only with keys ok, status, summary, templateTitle, templateCategory, templateText, usedSources, limitations, warnings.`;
+Important: sources are not expected to contain ready-made templates. Use them to derive a clinical checklist: anamnesis, symptom characterization, duration, severity, functional impact, risk factors/context, examination/status items, red flags, investigations/referral/follow-up triggers and plan fields. Then convert that checklist into an interactive Finnish primary-care documentation template using the project's syntax.
+
+Return JSON only with keys ok, status, summary, templateTitle, templateCategory, templateText, usedSources, limitations, warnings.`;
 }
 
 async function createBaseTemplateWithChatSearchFallback(body: TemplateAiRequest, previousError: string) {
