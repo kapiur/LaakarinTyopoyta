@@ -110,12 +110,11 @@ function isMalliPath(pathname: string | null) {
 
 function findTemplateContentTextarea() {
   const textareas = Array.from(document.querySelectorAll('textarea')) as HTMLTextAreaElement[];
-  if (textareas.length === 0) return null;
 
-  return textareas.reduce<HTMLTextAreaElement | null>((largest, textarea) => {
-    if (!largest) return textarea;
-    return textarea.value.length >= largest.value.length ? textarea : largest;
-  }, null);
+  return textareas.find((textarea) => {
+    const className = String(textarea.className || '');
+    return className.includes('font-mono') && className.includes('min-h-[480px]');
+  }) || null;
 }
 
 function dispatchTextareaValue(textarea: HTMLTextAreaElement, value: string) {
@@ -154,13 +153,13 @@ export default function MalliTemplateAiAssistantEnhancer() {
   }, [enabled]);
 
   useEffect(() => {
-    if (!enabled) {
+    if (!enabled || !editorOpen) {
       setDialogOpen(false);
-      setEditorOpen(false);
       setResult(null);
       setError(null);
     }
-  }, [enabled]);
+    if (!enabled) setEditorOpen(false);
+  }, [enabled, editorOpen]);
 
   if (!enabled || !editorOpen) return null;
 
@@ -219,9 +218,9 @@ export default function MalliTemplateAiAssistantEnhancer() {
   };
 
   return (
-    <div className="fixed bottom-44 right-8 z-[89] flex flex-col items-end gap-3">
+    <div className="fixed top-6 right-[270px] z-[91] flex flex-col items-end gap-3">
       {dialogOpen && (
-        <div className="w-[520px] max-w-[calc(100vw-2rem)] max-h-[78vh] overflow-hidden rounded-[1.75rem] border border-blue-100 bg-white shadow-2xl shadow-slate-300/40 flex flex-col">
+        <div className="mt-14 w-[520px] max-w-[calc(100vw-2rem)] max-h-[78vh] overflow-hidden rounded-[1.75rem] border border-blue-100 bg-white shadow-2xl shadow-slate-300/40 flex flex-col">
           <div className="flex items-center justify-between gap-3 border-b border-slate-100 p-4">
             <div>
               <div className="text-[10px] font-black uppercase tracking-widest text-blue-600">{c.open}</div>
@@ -360,7 +359,7 @@ export default function MalliTemplateAiAssistantEnhancer() {
       <button
         type="button"
         onClick={() => setDialogOpen(true)}
-        className="flex items-center gap-2 rounded-2xl bg-blue-600 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-white shadow-2xl shadow-blue-300/40 hover:bg-blue-700 transition-colors"
+        className="flex items-center gap-2 rounded-2xl bg-blue-600 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-white shadow-xl shadow-blue-300/30 hover:bg-blue-700 transition-colors"
       >
         <Bot size={15} /> {c.open}
       </button>
