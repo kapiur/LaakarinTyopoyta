@@ -183,6 +183,14 @@ function buildInsertedValue(textarea: HTMLTextAreaElement, value: string, applyM
   return `${before}${prefix}${value}${suffix}${after}`;
 }
 
+function getDetailedError(data: any, fallback: string) {
+  if (data?.validation?.errors?.length) return data.validation.errors.join('\n');
+  if (data?.limitations?.length) return data.limitations.join('\n');
+  if (data?.summary) return data.summary;
+  if (data?.error) return data.error;
+  return fallback;
+}
+
 export default function MalliTemplateAiAssistantEnhancer() {
   const pathname = usePathname();
   const { language } = useI18n();
@@ -255,8 +263,11 @@ export default function MalliTemplateAiAssistantEnhancer() {
       });
 
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || c.failed);
+      if (!response.ok) throw new Error(getDetailedError(data, c.failed));
       setResult(data);
+      if (data?.status === 'ai_error') {
+        setError(getDetailedError(data, c.failed));
+      }
     } catch (err: any) {
       setError(err?.message || c.failed);
     } finally {
@@ -377,7 +388,7 @@ export default function MalliTemplateAiAssistantEnhancer() {
               </div>
             )}
 
-            {error && <div className="rounded-2xl bg-red-50 p-3 text-xs font-bold text-red-700">{error}</div>}
+            {error && <div className="whitespace-pre-wrap rounded-2xl bg-red-50 p-3 text-xs font-bold text-red-700">{error}</div>}
             {statusMessage && <div className="rounded-2xl bg-emerald-50 p-3 text-xs font-bold text-emerald-700">{statusMessage}</div>}
 
             {result?.summary && (
