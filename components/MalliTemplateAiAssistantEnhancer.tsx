@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
-import { Bot, Copy, Loader2, Sparkles, X } from 'lucide-react';
+import { AlertTriangle, Bot, CheckCircle2, Copy, Loader2, Sparkles, X } from 'lucide-react';
 import { useI18n } from '../lib/useI18n';
 
 type AiMode = 'transform_instruction' | 'create_from_sample' | 'improve_template' | 'create_base_template_from_topic';
+type ApplyMode = 'replace' | 'insert' | 'append';
 
 type AiResponse = {
   ok: boolean;
@@ -41,14 +42,23 @@ const copy = {
     topicPlaceholder: 'Esim. polvikivun vastaanottomalli',
     allowSkeleton: 'Salli tekninen runko ilman lähteitä',
     run: 'Luo ehdotus',
-    apply: 'Käytä muutosta editorissa',
+    apply: 'Käytä',
+    applyMode: 'Käyttötapa',
+    replace: 'Korvaa koko malli',
+    insert: 'Lisää kursoriin',
+    append: 'Lisää loppuun',
+    replaceConfirm: 'Korvataanko koko mallin sisältö AI-ehdotuksella? Tätä ei tallenneta ennen kuin painat Tallenna.',
     copyResult: 'Kopioi ehdotus',
     copied: 'Kopioitu',
+    applied: 'Lisätty editoriin. Muista tallentaa malli erikseen.',
     result: 'AI-ehdotus',
     noEditor: 'Avaa ensin mallin editori.',
     noResult: 'Ei ehdotusta vielä.',
     needsSources: 'Lähteitä tarvitaan lähdepohjaisen lääketieteellisen perusmallin luomiseen.',
     failed: 'AI-pyyntö epäonnistui.',
+    validationOk: 'AI-ehdotuksen syntaksi on kunnossa.',
+    validationWarning: 'AI-ehdotuksessa on varoituksia.',
+    validationError: 'AI-ehdotuksessa on virheitä. Tarkista ennen käyttöä.',
   },
   ru: {
     open: 'AI-помощник',
@@ -67,14 +77,23 @@ const copy = {
     topicPlaceholder: 'Например: шаблон осмотра колена',
     allowSkeleton: 'Разрешить технический каркас без источников',
     run: 'Создать предложение',
-    apply: 'Вставить в редактор',
+    apply: 'Применить',
+    applyMode: 'Как применить',
+    replace: 'Заменить весь шаблон',
+    insert: 'Вставить в позицию курсора',
+    append: 'Добавить в конец',
+    replaceConfirm: 'Заменить всё содержимое шаблона AI-предложением? Это не будет сохранено, пока вы не нажмёте Сохранить.',
     copyResult: 'Копировать предложение',
     copied: 'Скопировано',
+    applied: 'Вставлено в редактор. Не забудьте отдельно сохранить шаблон.',
     result: 'AI-предложение',
     noEditor: 'Сначала откройте редактор шаблона.',
     noResult: 'Пока нет предложения.',
     needsSources: 'Для медицинского базового шаблона по источникам нужны источники.',
     failed: 'AI-запрос не удался.',
+    validationOk: 'Синтаксис AI-предложения корректен.',
+    validationWarning: 'В AI-предложении есть предупреждения.',
+    validationError: 'В AI-предложении есть ошибки. Проверьте перед использованием.',
   },
   en: {
     open: 'AI assistant',
@@ -93,14 +112,23 @@ const copy = {
     topicPlaceholder: 'For example: knee examination template',
     allowSkeleton: 'Allow technical skeleton without sources',
     run: 'Create suggestion',
-    apply: 'Apply to editor',
+    apply: 'Apply',
+    applyMode: 'Apply mode',
+    replace: 'Replace whole template',
+    insert: 'Insert at cursor',
+    append: 'Append to end',
+    replaceConfirm: 'Replace the whole template content with the AI suggestion? It will not be saved until you click Save.',
     copyResult: 'Copy suggestion',
     copied: 'Copied',
+    applied: 'Applied to the editor. Remember to save the template separately.',
     result: 'AI suggestion',
     noEditor: 'Open the template editor first.',
     noResult: 'No suggestion yet.',
     needsSources: 'Sources are required to create a source-based medical base template.',
     failed: 'AI request failed.',
+    validationOk: 'AI suggestion syntax is valid.',
+    validationWarning: 'AI suggestion has warnings.',
+    validationError: 'AI suggestion has errors. Review before use.',
   },
 } as const;
 
@@ -123,6 +151,24 @@ function dispatchTextareaValue(textarea: HTMLTextAreaElement, value: string) {
   textarea.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
+function buildInsertedValue(textarea: HTMLTextAreaElement, value: string, applyMode: ApplyMode) {
+  if (applyMode === 'replace') return value;
+
+  if (applyMode === 'append') {
+    const current = textarea.value || '';
+    const separator = current.trim() ? '\n\n' : '';
+    return `${current}${separator}${value}`;
+  }
+
+  const start = textarea.selectionStart ?? textarea.value.length;
+  const end = textarea.selectionEnd ?? textarea.value.length;
+  const before = textarea.value.slice(0, start);
+  const after = textarea.value.slice(end);
+  const prefix = before && !/\s$/.test(before) ? '\n' : '';
+  const suffix = after && !/^\s/.test(after) ? '\n' : '';
+  return `${before}${prefix}${value}${suffix}${after}`;
+}
+
 export default function MalliTemplateAiAssistantEnhancer() {
   const pathname = usePathname();
   const { language } = useI18n();
@@ -131,6 +177,7 @@ export default function MalliTemplateAiAssistantEnhancer() {
   const [editorOpen, setEditorOpen] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [mode, setMode] = useState<AiMode>('transform_instruction');
+  const [applyMode, setApplyMode] = useState<ApplyMode>('replace');
   const [instruction, setInstruction] = useState('');
   const [sampleText, setSampleText] = useState('');
   const [topic, setTopic] = useState('');
@@ -138,6 +185,7 @@ export default function MalliTemplateAiAssistantEnhancer() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<AiResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -157,6 +205,7 @@ export default function MalliTemplateAiAssistantEnhancer() {
       setDialogOpen(false);
       setResult(null);
       setError(null);
+      setStatusMessage(null);
     }
     if (!enabled) setEditorOpen(false);
   }, [enabled, editorOpen]);
@@ -168,6 +217,7 @@ export default function MalliTemplateAiAssistantEnhancer() {
   const runAi = async () => {
     setLoading(true);
     setError(null);
+    setStatusMessage(null);
     setResult(null);
     setCopied(false);
 
@@ -207,7 +257,12 @@ export default function MalliTemplateAiAssistantEnhancer() {
       setError(c.noEditor);
       return;
     }
-    dispatchTextareaValue(textarea, result.templateText);
+
+    if (applyMode === 'replace' && !window.confirm(c.replaceConfirm)) return;
+
+    const nextValue = buildInsertedValue(textarea, result.templateText, applyMode);
+    dispatchTextareaValue(textarea, nextValue);
+    setStatusMessage(c.applied);
   };
 
   const copySuggestion = async () => {
@@ -217,10 +272,18 @@ export default function MalliTemplateAiAssistantEnhancer() {
     setTimeout(() => setCopied(false), 1500);
   };
 
+  const validationState = result?.validation
+    ? result.validation.ok
+      ? result.validation.warnings.length > 0
+        ? 'warning'
+        : 'ok'
+      : 'error'
+    : null;
+
   return (
     <div className="fixed top-6 right-24 z-[91] flex flex-col items-end gap-3">
       {dialogOpen && (
-        <div className="mt-2 w-[520px] max-w-[calc(100vw-2rem)] max-h-[78vh] overflow-hidden rounded-[1.75rem] border border-blue-100 bg-white shadow-2xl shadow-slate-300/40 flex flex-col">
+        <div className="mt-2 w-[560px] max-w-[calc(100vw-2rem)] max-h-[78vh] overflow-hidden rounded-[1.75rem] border border-blue-100 bg-white shadow-2xl shadow-slate-300/40 flex flex-col">
           <div className="flex items-center justify-between gap-3 border-b border-slate-100 p-4">
             <div>
               <div className="text-[10px] font-black uppercase tracking-widest text-blue-600">{c.open}</div>
@@ -298,6 +361,11 @@ export default function MalliTemplateAiAssistantEnhancer() {
             )}
 
             {error && <div className="rounded-2xl bg-red-50 p-3 text-xs font-bold text-red-700">{error}</div>}
+            {statusMessage && <div className="rounded-2xl bg-emerald-50 p-3 text-xs font-bold text-emerald-700">{statusMessage}</div>}
+
+            {result?.summary && (
+              <div className="rounded-2xl bg-blue-50 p-3 text-xs font-bold text-blue-800">{result.summary}</div>
+            )}
 
             {result?.status === 'needs_sources' && (
               <div className="rounded-2xl bg-amber-50 p-3 text-xs font-bold text-amber-700">
@@ -310,47 +378,91 @@ export default function MalliTemplateAiAssistantEnhancer() {
               </div>
             )}
 
+            {validationState && (
+              <div className={`rounded-2xl p-3 text-xs font-bold ${
+                validationState === 'ok'
+                  ? 'bg-emerald-50 text-emerald-700'
+                  : validationState === 'warning'
+                    ? 'bg-amber-50 text-amber-700'
+                    : 'bg-red-50 text-red-700'
+              }`}>
+                <div className="flex items-center gap-2">
+                  {validationState === 'ok' ? <CheckCircle2 size={15} /> : <AlertTriangle size={15} />}
+                  {validationState === 'ok' ? c.validationOk : validationState === 'warning' ? c.validationWarning : c.validationError}
+                </div>
+                {result?.validation?.errors?.length ? (
+                  <ul className="mt-2 list-disc pl-4">
+                    {result.validation.errors.map((item, index) => <li key={index}>{item}</li>)}
+                  </ul>
+                ) : null}
+                {result?.validation?.warnings?.length ? (
+                  <ul className="mt-2 list-disc pl-4">
+                    {result.validation.warnings.map((item, index) => <li key={index}>{item}</li>)}
+                  </ul>
+                ) : null}
+              </div>
+            )}
+
+            {result?.warnings?.length ? (
+              <div className="rounded-2xl bg-amber-50 p-3 text-xs font-bold text-amber-700">
+                <ul className="list-disc pl-4">
+                  {result.warnings.map((item, index) => <li key={index}>{item}</li>)}
+                </ul>
+              </div>
+            ) : null}
+
             <div className="space-y-2">
               <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">{c.result}</div>
               <div className="min-h-[160px] whitespace-pre-wrap rounded-2xl bg-slate-950 p-4 font-mono text-xs leading-relaxed text-white">
-                {result?.templateText || result?.summary || c.noResult}
+                {result?.templateText || c.noResult}
               </div>
             </div>
-
-            {result?.validation && !result.validation.ok && (
-              <div className="rounded-2xl bg-red-50 p-3 text-xs font-bold text-red-700">
-                {result.validation.errors.map((item, index) => <div key={index}>{item}</div>)}
-              </div>
-            )}
           </div>
 
-          <div className="flex items-center justify-between gap-3 border-t border-slate-100 p-4">
-            <button
-              type="button"
-              onClick={runAi}
-              disabled={loading}
-              className="rounded-2xl bg-blue-600 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-white shadow-lg shadow-blue-100 hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
-            >
-              {loading ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-              {c.run}
-            </button>
-            <div className="flex items-center gap-2">
+          <div className="flex flex-col gap-3 border-t border-slate-100 p-4">
+            <div className="grid grid-cols-3 gap-2">
+              {(['replace', 'insert', 'append'] as ApplyMode[]).map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() => setApplyMode(option)}
+                  className={`rounded-2xl px-3 py-2 text-[10px] font-black uppercase tracking-widest ${
+                    applyMode === option ? 'bg-slate-900 text-white' : 'bg-slate-50 text-slate-500 hover:bg-slate-100'
+                  }`}
+                >
+                  {option === 'replace' ? c.replace : option === 'insert' ? c.insert : c.append}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex items-center justify-between gap-3">
               <button
                 type="button"
-                onClick={copySuggestion}
-                disabled={!result?.templateText}
-                className="rounded-2xl bg-white px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-600 ring-1 ring-slate-100 hover:bg-slate-50 disabled:opacity-40 flex items-center gap-2"
+                onClick={runAi}
+                disabled={loading}
+                className="rounded-2xl bg-blue-600 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-white shadow-lg shadow-blue-100 hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
               >
-                <Copy size={13} /> {copied ? c.copied : c.copyResult}
+                {loading ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                {c.run}
               </button>
-              <button
-                type="button"
-                onClick={applyResult}
-                disabled={!result?.templateText}
-                className="rounded-2xl bg-slate-900 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-white hover:bg-slate-800 disabled:opacity-40"
-              >
-                {c.apply}
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={copySuggestion}
+                  disabled={!result?.templateText}
+                  className="rounded-2xl bg-white px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-600 ring-1 ring-slate-100 hover:bg-slate-50 disabled:opacity-40 flex items-center gap-2"
+                >
+                  <Copy size={13} /> {copied ? c.copied : c.copyResult}
+                </button>
+                <button
+                  type="button"
+                  onClick={applyResult}
+                  disabled={!result?.templateText || validationState === 'error'}
+                  className="rounded-2xl bg-slate-900 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-white hover:bg-slate-800 disabled:opacity-40"
+                >
+                  {c.apply}
+                </button>
+              </div>
             </div>
           </div>
         </div>
