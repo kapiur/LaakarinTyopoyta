@@ -219,7 +219,7 @@ export default function MalliTemplateAiAssistantEnhancer() {
   };
 
   return (
-    <div className="fixed bottom-28 left-8 z-[89] flex flex-col items-start gap-3">
+    <div className="fixed bottom-44 right-8 z-[89] flex flex-col items-end gap-3">
       {dialogOpen && (
         <div className="w-[520px] max-w-[calc(100vw-2rem)] max-h-[78vh] overflow-hidden rounded-[1.75rem] border border-blue-100 bg-white shadow-2xl shadow-slate-300/40 flex flex-col">
           <div className="flex items-center justify-between gap-3 border-b border-slate-100 p-4">
