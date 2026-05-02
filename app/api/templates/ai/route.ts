@@ -9,8 +9,6 @@ const openai = new OpenAI({
 });
 
 const CURRENT_MODEL = 'gpt-5.4';
-const WEB_SEARCH_MODEL = process.env.OPENAI_WEB_SEARCH_MODEL || 'gpt-5';
-const CHAT_SEARCH_MODEL = process.env.OPENAI_CHAT_SEARCH_MODEL || 'gpt-4o-search-preview';
 
 const TRUSTED_MEDICAL_DOMAINS = [
   'kaypahoito.fi',
@@ -119,25 +117,6 @@ function safeJsonParse(raw: string) {
   }
 }
 
-async function readOpenAiHttpResponse(response: Response) {
-  const contentType = response.headers.get('content-type') || '';
-  const raw = await response.text();
-
-  if (!raw.trim()) {
-    throw new Error(`OpenAI returned an empty response. HTTP ${response.status}.`);
-  }
-
-  if (!contentType.includes('application/json')) {
-    throw new Error(`OpenAI returned non-JSON response. HTTP ${response.status}. Content-Type: ${contentType || 'unknown'}. Body: ${truncateForError(raw)}`);
-  }
-
-  try {
-    return JSON.parse(raw);
-  } catch {
-    throw new Error(`OpenAI returned invalid JSON. HTTP ${response.status}. Body: ${truncateForError(raw)}`);
-  }
-}
-
 function buildSystemPrompt(mode: TemplateAiMode) {
   const basePrompt = `You are an AI assistant for dr.kapustin.fi / Lääkärin Työpöytä.
 
@@ -196,20 +175,20 @@ Return this JSON shape:
 
 Additional rules for mode create_base_template_from_topic:
 - This mode creates a base clinical documentation template from a topic.
+- Work like the existing main medical AI chat: base the clinical content primarily on trusted Finnish and European medical recommendations.
+- Prioritize: Käypä hoito, Terveyskirjasto / Duodecim, THL, Fimea, HUS / official Finnish wellbeing service county instructions, and European professional guidelines when applicable.
 - Sources are NOT expected to contain ready-made templates.
-- Use searched sources as the clinical evidence/checklist basis for deciding what the physician should ask, examine, assess and document.
-- Search and use only Finnish or European professional/official medical sources from the configured trusted domain allow-list.
-- Priority: Käypä hoito, THL, Fimea, HUS / official Finnish wellbeing service county instructions, Duodecim / Terveyskirjasto / Lääkärikirja Duodecim, then European professional guidelines.
-- Do not rely on uncited memory for medical recommendations.
+- Use trusted recommendations as the clinical evidence/checklist basis for deciding what the physician should ask, examine, assess and document.
+- Do not use non-medical, commercial, marketing, patient forum, blog or social media sources.
 - Do not copy source text. Convert source-based clinical requirements into a practical Finnish primary-care template.
-- Before writing templateText, internally derive a clinical checklist from sources:
+- Before writing templateText, internally derive a clinical checklist:
   1) relevant anamnesis and symptom characterization,
   2) duration, severity and functional impact,
   3) risk factors and medication/context factors,
   4) status/examination items that should be documented,
   5) red flags / hälytysmerkit that must not be missed,
   6) findings that should trigger conditional additional fields,
-  7) indications for further investigations/referral/follow-up when supported by sources,
+  7) indications for further investigations/referral/follow-up when supported by trusted sources,
   8) practical assessment and plan fields for Finnish primary care.
 - Convert that checklist into an interactive Lääkärin Työpöytä template using radio/select/multiselect/checkbox/date/number/textarea and showIf rules.
 - Include ordinary normal-findings options and abnormal findings options where clinically useful.
@@ -217,9 +196,7 @@ Additional rules for mode create_base_template_from_topic:
 - The final templateText must be usable directly as a Finnish physician note template; it should not be merely a list of recommendations.
 - The template should usually include sections or content for: Tulosyy, Esitiedot/anamneesi, Oireen kuvaus, Riskitekijät/context, Status, Hälytysmerkit, Arvio, Suunnitelma.
 - If the topic is an examination-only template, emphasize status/examination fields but still include brief indication and relevant red flags.
-- If no relevant source is found, return ok=false, status="needs_sources", templateText="", and explain that trusted sources could not be found.
-- If allowGeneralTechnicalSkeleton is true and no relevant source is found, create only a neutral technical documentation structure without medical recommendations, and clearly add this limitation.
-- Never fabricate usedSources. usedSources must reflect searched source pages.
+- If you are unsure about exact source attribution, do not fabricate links. In usedSources, list only reliable source names/URLs you are confident about.
 - Do not include links in templateText. Put sources only in usedSources.
 - In summary, briefly explain which clinical dimensions were included and why, in the requested UI language if possible.`;
 }
@@ -237,7 +214,7 @@ function buildUserPayload(body: TemplateAiRequest) {
     allowedSources: Array.isArray(body.allowedSources) ? body.allowedSources : [],
     allowGeneralTechnicalSkeleton: Boolean(body.allowGeneralTechnicalSkeleton),
     trustedDomains: TRUSTED_MEDICAL_DOMAINS,
-    expectedWorkflow: 'Search trusted sources, derive a clinical checklist from them, then convert that checklist into an interactive Finnish template. Do not search for ready-made templates.',
+    expectedWorkflow: 'Derive a clinical checklist from trusted Finnish/European medical recommendations, then convert that checklist into an interactive Finnish template. Do not search for ready-made templates.',
   });
 }
 
@@ -329,148 +306,20 @@ function validateRequest(body: TemplateAiRequest) {
   return null;
 }
 
-function getResponseOutputText(response: any) {
-  if (typeof response?.output_text === 'string') return response.output_text;
-
-  const message = response?.output?.find((item: any) => item?.type === 'message');
-  const textPart = message?.content?.find((item: any) => item?.type === 'output_text' || item?.type === 'text');
-  return textPart?.text || '{}';
-}
-
-function getResponseSources(response: any): AllowedSource[] {
-  const outputItems = Array.isArray(response?.output) ? response.output : [];
-  const actionSources = outputItems
-    .filter((item: any) => item?.type === 'web_search_call')
-    .flatMap((item: any) => item?.action?.sources || [])
-    .map((source: any) => ({
-      title: source.title || source.url,
-      url: source.url,
-      sourceType: 'web_search',
-    }));
-
-  const messageSources = outputItems
-    .filter((item: any) => item?.type === 'message')
-    .flatMap((item: any) => item?.content || [])
-    .flatMap((content: any) => content?.annotations || [])
-    .map((annotation: any) => annotation?.url_citation)
-    .filter(Boolean)
-    .map((citation: any) => ({
-      title: citation.title || citation.url,
-      url: citation.url,
-      sourceType: 'web_search',
-    }));
-
-  return uniqueSources([...actionSources, ...messageSources].filter((source) => isTrustedUrl(source.url)));
-}
-
-function getChatCitations(message: any): AllowedSource[] {
-  const annotations = Array.isArray((message as any)?.annotations) ? (message as any).annotations : [];
-  return annotations
-    .map((annotation: any) => annotation?.url_citation)
-    .filter(Boolean)
-    .map((citation: any) => ({
-      title: citation.title || citation.url,
-      url: citation.url,
-      sourceType: 'web_search',
-    }))
-    .filter((source: AllowedSource) => isTrustedUrl(source.url));
-}
-
-function buildTrustedSearchFallbackPrompt(body: TemplateAiRequest) {
-  const domainQuery = TRUSTED_MEDICAL_DOMAINS.map((domain) => `site:${domain}`).join(' OR ');
-  return `Find current relevant Finnish or European medical guidance for topic: "${body.topic}".
-
-Use only these domains: ${TRUSTED_MEDICAL_DOMAINS.join(', ')}.
-Search query hint: (${domainQuery}) ${body.topic}
-
-Important: sources are not expected to contain ready-made templates. Use them to derive a clinical checklist: anamnesis, symptom characterization, duration, severity, functional impact, risk factors/context, examination/status items, red flags, investigations/referral/follow-up triggers and plan fields. Then convert that checklist into an interactive Finnish primary-care documentation template using the project's syntax.
-
-Return JSON only with keys ok, status, summary, templateTitle, templateCategory, templateText, usedSources, limitations, warnings.`;
-}
-
-async function createBaseTemplateWithChatSearchFallback(body: TemplateAiRequest, previousError: string) {
-  const completion = await openai.chat.completions.create({
-    model: CHAT_SEARCH_MODEL,
-    web_search_options: {},
+async function runTemplateAiCompletion(body: TemplateAiRequest) {
+  const response = await openai.chat.completions.create({
+    model: CURRENT_MODEL,
+    temperature: 0,
+    response_format: { type: 'json_object' },
     messages: [
-      { role: 'system', content: buildSystemPrompt('create_base_template_from_topic') },
-      { role: 'user', content: buildTrustedSearchFallbackPrompt(body) },
+      { role: 'system', content: buildSystemPrompt(body.mode as TemplateAiMode) },
+      { role: 'user', content: buildUserPayload(body) },
     ],
-  } as any);
+  });
 
-  const message = completion.choices[0]?.message;
-  const raw = message?.content || '{}';
+  const raw = response.choices[0]?.message?.content || '{}';
   const parsed = safeJsonParse(raw);
-  const citations = getChatCitations(message);
-  const parsedSources = Array.isArray(parsed?.usedSources) ? parsed.usedSources : [];
-  const trustedParsedSources = parsedSources.filter((source: AllowedSource) => isTrustedUrl(source.url));
-  parsed.usedSources = trustedParsedSources.length > 0 ? trustedParsedSources : citations;
-  parsed.warnings = [
-    ...(Array.isArray(parsed?.warnings) ? parsed.warnings : []),
-    `Responses web_search fallback used. Original error: ${previousError}`,
-  ];
-
-  const normalized = normalizeAiResponse(parsed, 'create_base_template_from_topic', citations);
-
-  if (normalized.usedSources.length === 0 && !body.allowGeneralTechnicalSkeleton) {
-    return {
-      ok: false,
-      status: 'needs_sources' as const,
-      mode: 'create_base_template_from_topic' as const,
-      summary: 'Trusted source search did not return accepted sources.',
-      templateText: '',
-      fields: [],
-      usedSources: [],
-      limitations: [
-        'Automatic search did not return a source from the trusted allow-list.',
-        `Responses web_search error: ${previousError}`,
-      ],
-      warnings: [],
-      validation: { ok: false, errors: ['No trusted source found.'], warnings: [] },
-    };
-  }
-
-  return normalized;
-}
-
-async function createBaseTemplateWithTrustedWebSearch(body: TemplateAiRequest) {
-  try {
-    const response = await fetch('https://api.openai.com/v1/responses', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: WEB_SEARCH_MODEL,
-        reasoning: { effort: 'low' },
-        tools: [
-          {
-            type: 'web_search',
-            filters: {
-              allowed_domains: TRUSTED_MEDICAL_DOMAINS,
-            },
-          },
-        ],
-        tool_choice: 'auto',
-        include: ['web_search_call.action.sources'],
-        instructions: buildSystemPrompt('create_base_template_from_topic'),
-        input: buildUserPayload(body),
-      }),
-    });
-
-    const data = await readOpenAiHttpResponse(response);
-    if (!response.ok) {
-      throw new Error(data?.error?.message || 'OpenAI web search request failed.');
-    }
-
-    const raw = getResponseOutputText(data);
-    const parsed = safeJsonParse(raw);
-    const responseSources = getResponseSources(data);
-    return normalizeAiResponse(parsed, 'create_base_template_from_topic', responseSources);
-  } catch (error: any) {
-    return createBaseTemplateWithChatSearchFallback(body, error?.message || 'Unknown Responses web_search error');
-  }
+  return normalizeAiResponse(parsed, body.mode as TemplateAiMode, []);
 }
 
 export async function POST(req: Request) {
@@ -490,27 +339,7 @@ export async function POST(req: Request) {
       return jsonError(requestError || 'Invalid mode.', 400);
     }
 
-    const allowedSources = Array.isArray(body.allowedSources) ? body.allowedSources : [];
-
-    if (body.mode === 'create_base_template_from_topic' && allowedSources.length === 0) {
-      const normalized = await createBaseTemplateWithTrustedWebSearch(body);
-      return NextResponse.json(normalized);
-    }
-
-    const response = await openai.chat.completions.create({
-      model: CURRENT_MODEL,
-      temperature: 0,
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: buildSystemPrompt(body.mode) },
-        { role: 'user', content: buildUserPayload(body) },
-      ],
-    });
-
-    const raw = response.choices[0]?.message?.content || '{}';
-    const parsed = safeJsonParse(raw);
-    const normalized = normalizeAiResponse(parsed, body.mode, allowedSources);
-
+    const normalized = await runTemplateAiCompletion(body);
     return NextResponse.json(normalized);
   } catch (error: any) {
     console.error('Template AI Error:', error?.message || error);
