@@ -108,9 +108,9 @@ export default function MalliTemplateValidatorEnhancer() {
   };
 
   return (
-    <div className="fixed top-6 right-24 z-[90] flex flex-col items-end gap-3">
+    <div className="fixed top-24 right-24 z-[90] flex flex-col items-end gap-3">
       {panelOpen && (
-        <div className="mt-14 w-[380px] max-w-[calc(100vw-2rem)] rounded-[1.5rem] border border-slate-200 bg-white p-4 shadow-2xl shadow-slate-300/40">
+        <div className="w-[380px] max-w-[calc(100vw-2rem)] rounded-[1.5rem] border border-slate-200 bg-white p-4 shadow-2xl shadow-slate-300/40">
           <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-3">
             <div>
               <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">{c.title}</div>
@@ -166,7 +166,7 @@ export default function MalliTemplateValidatorEnhancer() {
       <button
         type="button"
         onClick={handleCheck}
-        className="flex items-center gap-2 rounded-2xl bg-slate-900 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-white shadow-xl shadow-slate-300/30 hover:bg-blue-700 transition-colors"
+        className="flex min-w-[250px] items-center justify-center gap-2 rounded-2xl bg-slate-900 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-white shadow-xl shadow-slate-300/30 hover:bg-blue-700 transition-colors"
       >
         <ListChecks size={15} /> {c.check}
       </button>
