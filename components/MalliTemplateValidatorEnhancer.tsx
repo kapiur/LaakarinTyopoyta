@@ -109,7 +109,7 @@ export default function MalliTemplateValidatorEnhancer() {
   };
 
   return (
-    <div className="fixed bottom-6 right-6 z-[90] flex flex-col items-end gap-3">
+    <div className="fixed bottom-28 right-8 z-[90] flex flex-col items-end gap-3">
       {panelOpen && (
         <div className="w-[380px] max-w-[calc(100vw-2rem)] rounded-[1.5rem] border border-slate-200 bg-white p-4 shadow-2xl shadow-slate-300/40">
           <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-3">
