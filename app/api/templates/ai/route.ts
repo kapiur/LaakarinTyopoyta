@@ -9,6 +9,26 @@ const openai = new OpenAI({
 });
 
 const CURRENT_MODEL = 'gpt-5.4';
+const WEB_SEARCH_MODEL = process.env.OPENAI_WEB_SEARCH_MODEL || 'gpt-5';
+
+const TRUSTED_MEDICAL_DOMAINS = [
+  'kaypahoito.fi',
+  'terveyskirjasto.fi',
+  'thl.fi',
+  'fimea.fi',
+  'hus.fi',
+  'duodecimlehti.fi',
+  'laakarilehti.fi',
+  'eular.org',
+  'escardio.org',
+  'ersnet.org',
+  'uroweb.org',
+  'easl.eu',
+  'efort.org',
+  'esska.org',
+  'esmo.org',
+  'ean.org',
+];
 
 const ALLOWED_MODES = [
   'create_from_sample',
@@ -144,13 +164,13 @@ Return this JSON shape:
 
 Additional rules for mode create_base_template_from_topic:
 - This mode creates a base clinical template from a topic.
-- Use only allowed Finnish or European sources provided in the user payload under allowedSources.
+- Search and use only Finnish or European professional/official medical sources from the configured trusted domain allow-list.
 - Priority: Käypä hoito, THL, Fimea, HUS / official Finnish wellbeing service county instructions, Duodecim / Terveyskirjasto / Lääkärikirja Duodecim, then European professional guidelines.
 - Do not rely on uncited memory for medical recommendations.
-- If allowedSources is empty and allowGeneralTechnicalSkeleton is not true, return:
-  ok=false, status="needs_sources", templateText="", usedSources=[], and explain that source material is needed.
-- If allowGeneralTechnicalSkeleton is true and no allowedSources are provided, create only a neutral technical documentation structure without medical recommendations, and clearly add this limitation.
-- Never fabricate usedSources. usedSources must come only from allowedSources.`;
+- If no relevant source is found, return ok=false, status="needs_sources", templateText="", and explain that trusted sources could not be found.
+- If allowGeneralTechnicalSkeleton is true and no relevant source is found, create only a neutral technical documentation structure without medical recommendations, and clearly add this limitation.
+- Never fabricate usedSources. usedSources must reflect searched source pages.
+- Do not include links in templateText. Put sources only in usedSources.`;
 }
 
 function buildUserPayload(body: TemplateAiRequest) {
@@ -165,6 +185,7 @@ function buildUserPayload(body: TemplateAiRequest) {
     clinicalContext: body.clinicalContext || 'terveysasema',
     allowedSources: Array.isArray(body.allowedSources) ? body.allowedSources : [],
     allowGeneralTechnicalSkeleton: Boolean(body.allowGeneralTechnicalSkeleton),
+    trustedDomains: TRUSTED_MEDICAL_DOMAINS,
   });
 }
 
@@ -180,16 +201,22 @@ function normalizeAiResponse(
   const limitations = Array.isArray(parsed?.limitations) ? parsed.limitations.map(String) : [];
   const warnings = Array.isArray(parsed?.warnings) ? parsed.warnings.map(String) : [];
 
-  const allowedSourceTitles = new Set(fallbackSources.map((source) => source.title));
   const filteredSources = usedSources.filter((source: AllowedSource) => {
     if (!source || typeof source.title !== 'string') return false;
-    if (fallbackSources.length === 0) return false;
-    return allowedSourceTitles.has(source.title);
+    if (!source.url) return true;
+    try {
+      const host = new URL(source.url).hostname.replace(/^www\./, '');
+      return TRUSTED_MEDICAL_DOMAINS.some((domain) => host === domain || host.endsWith(`.${domain}`));
+    } catch {
+      return fallbackSources.some((fallback) => fallback.title === source.title);
+    }
   });
+
+  const parsedStatus = parsed?.status === 'needs_sources' ? 'needs_sources' : validation.ok ? 'ok' : 'invalid_request';
 
   return {
     ok: Boolean(parsed?.ok) && validation.ok,
-    status: parsed?.status === 'needs_sources' ? 'needs_sources' : validation.ok ? 'ok' : 'invalid_request',
+    status: parsedStatus,
     mode,
     summary: typeof parsed?.summary === 'string' ? parsed.summary : '',
     templateTitle: typeof parsed?.templateTitle === 'string' ? parsed.templateTitle : undefined,
@@ -236,6 +263,58 @@ function validateRequest(body: TemplateAiRequest) {
   return null;
 }
 
+function getResponseOutputText(response: any) {
+  if (typeof response?.output_text === 'string') return response.output_text;
+
+  const message = response?.output?.find((item: any) => item?.type === 'message');
+  const textPart = message?.content?.find((item: any) => item?.type === 'output_text' || item?.type === 'text');
+  return textPart?.text || '{}';
+}
+
+async function createBaseTemplateWithTrustedWebSearch(body: TemplateAiRequest) {
+  const response = await fetch('https://api.openai.com/v1/responses', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: WEB_SEARCH_MODEL,
+      reasoning: { effort: 'low' },
+      tools: [
+        {
+          type: 'web_search',
+          filters: {
+            allowed_domains: TRUSTED_MEDICAL_DOMAINS,
+          },
+        },
+      ],
+      tool_choice: 'auto',
+      include: ['web_search_call.action.sources'],
+      text: { format: { type: 'json_object' } },
+      input: [
+        {
+          role: 'system',
+          content: buildSystemPrompt('create_base_template_from_topic'),
+        },
+        {
+          role: 'user',
+          content: buildUserPayload(body),
+        },
+      ],
+    }),
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data?.error?.message || 'OpenAI web search request failed.');
+  }
+
+  const raw = getResponseOutputText(data);
+  const parsed = safeJsonParse(raw);
+  return normalizeAiResponse(parsed, 'create_base_template_from_topic', []);
+}
+
 export async function POST(req: Request) {
   try {
     const session = await getServerSession(authOptions);
@@ -255,28 +334,9 @@ export async function POST(req: Request) {
 
     const allowedSources = Array.isArray(body.allowedSources) ? body.allowedSources : [];
 
-    if (
-      body.mode === 'create_base_template_from_topic' &&
-      allowedSources.length === 0 &&
-      !body.allowGeneralTechnicalSkeleton
-    ) {
-      const response: TemplateAiResponse = {
-        ok: false,
-        status: 'needs_sources',
-        mode: body.mode,
-        summary: 'Source material is required before creating a source-based clinical template.',
-        templateText: '',
-        fields: [],
-        usedSources: [],
-        limitations: [
-          'No Käypä hoito, Finnish official or European source material was provided to the API request.',
-          'The endpoint will not generate a medical base template from uncited model memory.',
-        ],
-        warnings: [],
-        validation: { ok: false, errors: ['Allowed sources are required for this mode.'], warnings: [] },
-      };
-
-      return NextResponse.json(response);
+    if (body.mode === 'create_base_template_from_topic' && allowedSources.length === 0) {
+      const normalized = await createBaseTemplateWithTrustedWebSearch(body);
+      return NextResponse.json(normalized);
     }
 
     const response = await openai.chat.completions.create({
