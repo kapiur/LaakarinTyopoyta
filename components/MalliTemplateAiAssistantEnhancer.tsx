@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
-import { AlertTriangle, Bot, CheckCircle2, Copy, Loader2, Sparkles, X } from 'lucide-react';
+import { Bot, Copy, Loader2, Sparkles, X } from 'lucide-react';
 import { useI18n } from '../lib/useI18n';
 
 type AiMode = 'transform_instruction' | 'create_from_sample' | 'improve_template' | 'create_base_template_from_topic';
@@ -48,9 +48,8 @@ const copy = {
     samplePlaceholder: 'Liitä lääkärin tekstiesimerkki...',
     topic: 'Aihe',
     topicPlaceholder: 'Esim. polvikivun vastaanottomalli',
-    sourceSearchInfo: 'AI etsii lähteet automaattisesti rajatulta luotettavien suomalaisten ja eurooppalaisten lääketieteellisten lähteiden listalta.',
+    sourceSearchInfo: 'AI hyödyntää luotettavia suomalaisia ja eurooppalaisia lääketieteellisiä lähteitä kliinisen tarkistuslistan muodostamiseen.',
     allowSkeleton: 'Salli tekninen runko, jos luotettavaa lähdettä ei löydy',
-    usedSources: 'Käytetyt lähteet',
     run: 'Luo ehdotus',
     apply: 'Käytä',
     applyMode: 'Käyttötapa',
@@ -66,8 +65,6 @@ const copy = {
     noResult: 'Ei ehdotusta vielä.',
     needsSources: 'Luotettavaa lähdettä ei löytynyt automaattisesti.',
     failed: 'AI-pyyntö epäonnistui.',
-    validationOk: 'AI-ehdotuksen syntaksi on kunnossa.',
-    validationWarning: 'AI-ehdotuksessa on varoituksia.',
     validationError: 'AI-ehdotuksessa on virheitä. Tarkista ennen käyttöä.',
   },
   ru: {
@@ -85,9 +82,8 @@ const copy = {
     samplePlaceholder: 'Вставьте пример врачебного текста...',
     topic: 'Тема',
     topicPlaceholder: 'Например: шаблон осмотра колена',
-    sourceSearchInfo: 'AI сам ищет источники только по ограниченному списку доверенных финских и европейских медицинских сайтов.',
+    sourceSearchInfo: 'AI использует доверенные финские и европейские медицинские источники как клиническую основу для шаблона.',
     allowSkeleton: 'Разрешить технический каркас, если достоверный источник не найден',
-    usedSources: 'Использованные источники',
     run: 'Создать предложение',
     apply: 'Применить',
     applyMode: 'Как применить',
@@ -103,8 +99,6 @@ const copy = {
     noResult: 'Пока нет предложения.',
     needsSources: 'Достоверный источник не найден автоматически.',
     failed: 'AI-запрос не удался.',
-    validationOk: 'Синтаксис AI-предложения корректен.',
-    validationWarning: 'В AI-предложении есть предупреждения.',
     validationError: 'В AI-предложении есть ошибки. Проверьте перед использованием.',
   },
   en: {
@@ -122,9 +116,8 @@ const copy = {
     samplePlaceholder: 'Paste a doctor note example...',
     topic: 'Topic',
     topicPlaceholder: 'For example: knee examination template',
-    sourceSearchInfo: 'AI automatically searches only a restricted list of trusted Finnish and European medical sources.',
+    sourceSearchInfo: 'AI uses trusted Finnish and European medical sources as a clinical basis for the template.',
     allowSkeleton: 'Allow technical skeleton if no trusted source is found',
-    usedSources: 'Used sources',
     run: 'Create suggestion',
     apply: 'Apply',
     applyMode: 'Apply mode',
@@ -140,8 +133,6 @@ const copy = {
     noResult: 'No suggestion yet.',
     needsSources: 'No trusted source was found automatically.',
     failed: 'AI request failed.',
-    validationOk: 'AI suggestion syntax is valid.',
-    validationWarning: 'AI suggestion has warnings.',
     validationError: 'AI suggestion has errors. Review before use.',
   },
 } as const;
@@ -297,13 +288,7 @@ export default function MalliTemplateAiAssistantEnhancer() {
     setTimeout(() => setCopied(false), 1500);
   };
 
-  const validationState = result?.validation
-    ? result.validation.ok
-      ? result.validation.warnings.length > 0
-        ? 'warning'
-        : 'ok'
-      : 'error'
-    : null;
+  const hasValidationErrors = Boolean(result?.validation && !result.validation.ok && result.validation.errors.length > 0);
 
   return (
     <div className="fixed top-6 right-24 z-[91] flex flex-col items-end gap-3">
@@ -391,66 +376,20 @@ export default function MalliTemplateAiAssistantEnhancer() {
             {error && <div className="whitespace-pre-wrap rounded-2xl bg-red-50 p-3 text-xs font-bold text-red-700">{error}</div>}
             {statusMessage && <div className="rounded-2xl bg-emerald-50 p-3 text-xs font-bold text-emerald-700">{statusMessage}</div>}
 
-            {result?.summary && (
-              <div className="rounded-2xl bg-blue-50 p-3 text-xs font-bold text-blue-800">{result.summary}</div>
-            )}
-
             {result?.status === 'needs_sources' && (
               <div className="rounded-2xl bg-amber-50 p-3 text-xs font-bold text-amber-700">
                 {c.needsSources}
-                {result.limitations?.length ? (
-                  <ul className="mt-2 list-disc pl-4">
-                    {result.limitations.map((item, index) => <li key={index}>{item}</li>)}
-                  </ul>
-                ) : null}
               </div>
             )}
 
-            {validationState && (
-              <div className={`rounded-2xl p-3 text-xs font-bold ${
-                validationState === 'ok'
-                  ? 'bg-emerald-50 text-emerald-700'
-                  : validationState === 'warning'
-                    ? 'bg-amber-50 text-amber-700'
-                    : 'bg-red-50 text-red-700'
-              }`}>
-                <div className="flex items-center gap-2">
-                  {validationState === 'ok' ? <CheckCircle2 size={15} /> : <AlertTriangle size={15} />}
-                  {validationState === 'ok' ? c.validationOk : validationState === 'warning' ? c.validationWarning : c.validationError}
-                </div>
-                {result?.validation?.errors?.length ? (
-                  <ul className="mt-2 list-disc pl-4">
-                    {result.validation.errors.map((item, index) => <li key={index}>{item}</li>)}
-                  </ul>
-                ) : null}
-                {result?.validation?.warnings?.length ? (
-                  <ul className="mt-2 list-disc pl-4">
-                    {result.validation.warnings.map((item, index) => <li key={index}>{item}</li>)}
-                  </ul>
-                ) : null}
+            {hasValidationErrors && (
+              <div className="rounded-2xl bg-red-50 p-3 text-xs font-bold text-red-700">
+                <div>{c.validationError}</div>
+                <ul className="mt-2 list-disc pl-4">
+                  {result?.validation?.errors.map((item, index) => <li key={index}>{item}</li>)}
+                </ul>
               </div>
             )}
-
-            {result?.warnings?.length ? (
-              <div className="rounded-2xl bg-amber-50 p-3 text-xs font-bold text-amber-700">
-                <ul className="list-disc pl-4">
-                  {result.warnings.map((item, index) => <li key={index}>{item}</li>)}
-                </ul>
-              </div>
-            ) : null}
-
-            {result?.usedSources?.length ? (
-              <div className="rounded-2xl bg-slate-50 p-3 text-xs font-bold text-slate-600">
-                <div className="mb-2 text-[10px] font-black uppercase tracking-widest text-slate-400">{c.usedSources}</div>
-                <ul className="list-disc pl-4">
-                  {result.usedSources.map((source, index) => (
-                    <li key={index}>
-                      {source.url ? <a href={source.url} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">{source.title}</a> : source.title}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
 
             <div className="space-y-2">
               <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">{c.result}</div>
@@ -498,7 +437,7 @@ export default function MalliTemplateAiAssistantEnhancer() {
                 <button
                   type="button"
                   onClick={applyResult}
-                  disabled={!result?.templateText || validationState === 'error'}
+                  disabled={!result?.templateText || hasValidationErrors}
                   className="rounded-2xl bg-slate-900 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-white hover:bg-slate-800 disabled:opacity-40"
                 >
                   {c.apply}
