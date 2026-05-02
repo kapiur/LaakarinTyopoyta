@@ -20,10 +20,30 @@ const snippetBuilderCopy = {
     labelPlaceholder: 'otsikko, esim. Kivun voimakkuus',
     optionsPlaceholder: 'ei kipua | lievä kipu | kohtalainen kipu',
     defaultPlaceholder: 'oletusarvo',
-    placeholderPlaceholder: 'placeholder',
+    placeholderPlaceholder: 'kentän ohjeteksti',
     showIfFieldPlaceholder: 'ehdon kenttä, esim. kipu',
     showIfValuePlaceholder: 'ehdon arvo, esim. kyllä',
     emptySnippet: 'Täytä kentän nimi latinalla',
+    required: 'Pakollinen kenttä',
+    fieldTypes: {
+      input: 'Lyhyt teksti',
+      textarea: 'Pitkä teksti',
+      select: 'Pudotusvalikko',
+      radio: 'Yksi valinta',
+      multiselect: 'Useita valintoja',
+      checkbox: 'Kyllä/ei-valinta',
+      date: 'Päivämäärä',
+      number: 'Numero',
+    },
+    conditions: {
+      none: 'Näytä aina',
+      showIf: 'Näytä, jos arvo on',
+      showIfAny: 'Näytä, jos jokin arvoista on',
+      showIfNot: 'Näytä, jos arvo ei ole',
+      showIfIncludes: 'Näytä, jos monivalinta sisältää',
+      showIfEmpty: 'Näytä, jos kenttä on tyhjä',
+      showIfNotEmpty: 'Näytä, jos kenttä ei ole tyhjä',
+    },
   },
   ru: {
     title: 'Добавить поле',
@@ -37,6 +57,26 @@ const snippetBuilderCopy = {
     showIfFieldPlaceholder: 'поле условия, например kipu',
     showIfValuePlaceholder: 'значение условия, например kyllä',
     emptySnippet: 'Заполните имя поля латиницей',
+    required: 'Обязательное поле',
+    fieldTypes: {
+      input: 'Короткий текст',
+      textarea: 'Длинный текст',
+      select: 'Выпадающий список',
+      radio: 'Один вариант',
+      multiselect: 'Несколько вариантов',
+      checkbox: 'Галочка да/нет',
+      date: 'Дата',
+      number: 'Число',
+    },
+    conditions: {
+      none: 'Показывать всегда',
+      showIf: 'Показать, если значение равно',
+      showIfAny: 'Показать, если есть один из вариантов',
+      showIfNot: 'Показать, если значение не равно',
+      showIfIncludes: 'Показать, если выбрано значение',
+      showIfEmpty: 'Показать, если поле пустое',
+      showIfNotEmpty: 'Показать, если поле заполнено',
+    },
   },
   en: {
     title: 'Add field',
@@ -46,33 +86,35 @@ const snippetBuilderCopy = {
     labelPlaceholder: 'label, e.g. Pain severity',
     optionsPlaceholder: 'ei kipua | lievä kipu | kohtalainen kipu',
     defaultPlaceholder: 'default value',
-    placeholderPlaceholder: 'placeholder',
+    placeholderPlaceholder: 'field hint',
     showIfFieldPlaceholder: 'condition field, e.g. kipu',
     showIfValuePlaceholder: 'condition value, e.g. kyllä',
     emptySnippet: 'Fill in the field name using Latin characters',
+    required: 'Required field',
+    fieldTypes: {
+      input: 'Short text',
+      textarea: 'Long text',
+      select: 'Dropdown list',
+      radio: 'Single choice',
+      multiselect: 'Multiple choices',
+      checkbox: 'Yes/no checkbox',
+      date: 'Date',
+      number: 'Number',
+    },
+    conditions: {
+      none: 'Always show',
+      showIf: 'Show if value is',
+      showIfAny: 'Show if any value is',
+      showIfNot: 'Show if value is not',
+      showIfIncludes: 'Show if multiple choice includes',
+      showIfEmpty: 'Show if field is empty',
+      showIfNotEmpty: 'Show if field is not empty',
+    },
   },
 } as const;
 
-const fieldTypeLabels: Record<FieldType, string> = {
-  input: 'input',
-  textarea: 'textarea',
-  select: 'select',
-  radio: 'radio',
-  multiselect: 'multiselect',
-  checkbox: 'checkbox',
-  date: 'date',
-  number: 'number',
-};
-
-const conditionLabels: Record<ConditionType, string> = {
-  none: 'no condition',
-  showIf: 'showIf',
-  showIfAny: 'showIfAny',
-  showIfNot: 'showIfNot',
-  showIfIncludes: 'showIfIncludes',
-  showIfEmpty: 'showIfEmpty',
-  showIfNotEmpty: 'showIfNotEmpty',
-};
+const fieldTypes: FieldType[] = ['input', 'textarea', 'select', 'radio', 'multiselect', 'checkbox', 'date', 'number'];
+const conditionTypes: ConditionType[] = ['none', 'showIf', 'showIfAny', 'showIfNot', 'showIfIncludes', 'showIfEmpty', 'showIfNotEmpty'];
 
 function normalizeFieldName(value: string) {
   return value
@@ -186,8 +228,8 @@ export default function TemplateSnippetBuilder({ onInsert }: TemplateSnippetBuil
           onChange={(event) => setFieldType(event.target.value as FieldType)}
           className="p-3 rounded-xl bg-white border border-blue-100 outline-none focus:ring-4 focus:ring-blue-500/5 font-bold text-sm"
         >
-          {(Object.keys(fieldTypeLabels) as FieldType[]).map((type) => (
-            <option key={type} value={type}>{fieldTypeLabels[type]}</option>
+          {fieldTypes.map((type) => (
+            <option key={type} value={type}>{c.fieldTypes[type]}</option>
           ))}
         </select>
         <input
@@ -227,7 +269,7 @@ export default function TemplateSnippetBuilder({ onInsert }: TemplateSnippetBuil
           onChange={(event) => setRequired(event.target.checked)}
           className="h-4 w-4 rounded border-blue-200"
         />
-        required
+        {c.required}
       </label>
 
       <div className="grid md:grid-cols-3 gap-3">
@@ -236,8 +278,8 @@ export default function TemplateSnippetBuilder({ onInsert }: TemplateSnippetBuil
           onChange={(event) => setConditionType(event.target.value as ConditionType)}
           className="p-3 rounded-xl bg-white border border-blue-100 outline-none focus:ring-4 focus:ring-blue-500/5 font-bold text-sm"
         >
-          {(Object.keys(conditionLabels) as ConditionType[]).map((type) => (
-            <option key={type} value={type}>{conditionLabels[type]}</option>
+          {conditionTypes.map((type) => (
+            <option key={type} value={type}>{c.conditions[type]}</option>
           ))}
         </select>
         <input
