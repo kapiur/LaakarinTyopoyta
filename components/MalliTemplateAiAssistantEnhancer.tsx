@@ -218,9 +218,9 @@ export default function MalliTemplateAiAssistantEnhancer() {
   };
 
   return (
-    <div className="fixed top-6 right-[270px] z-[91] flex flex-col items-end gap-3">
+    <div className="fixed top-6 right-24 z-[91] flex flex-col items-end gap-3">
       {dialogOpen && (
-        <div className="mt-14 w-[520px] max-w-[calc(100vw-2rem)] max-h-[78vh] overflow-hidden rounded-[1.75rem] border border-blue-100 bg-white shadow-2xl shadow-slate-300/40 flex flex-col">
+        <div className="mt-2 w-[520px] max-w-[calc(100vw-2rem)] max-h-[78vh] overflow-hidden rounded-[1.75rem] border border-blue-100 bg-white shadow-2xl shadow-slate-300/40 flex flex-col">
           <div className="flex items-center justify-between gap-3 border-b border-slate-100 p-4">
             <div>
               <div className="text-[10px] font-black uppercase tracking-widest text-blue-600">{c.open}</div>
@@ -359,7 +359,7 @@ export default function MalliTemplateAiAssistantEnhancer() {
       <button
         type="button"
         onClick={() => setDialogOpen(true)}
-        className="flex items-center gap-2 rounded-2xl bg-blue-600 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-white shadow-xl shadow-blue-300/30 hover:bg-blue-700 transition-colors"
+        className="flex min-w-[250px] items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-white shadow-xl shadow-blue-300/30 hover:bg-blue-700 transition-colors"
       >
         <Bot size={15} /> {c.open}
       </button>
