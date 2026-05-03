@@ -27,8 +27,26 @@ function mapSectionKind(title: string, key: string) {
   return "TEXT";
 }
 
+function extractInternalStatus(tags: string[] = []) {
+  const statusTag = tags.find((tag) => tag.startsWith("_status:"));
+  const sourceTag = tags.find((tag) => tag.startsWith("_source:"));
+  return {
+    status: statusTag?.replace("_status:", "") || "NEEDS_REVIEW",
+    sourceStatus: sourceTag?.replace("_source:", "") || "NOT_CHECKED",
+    publicTags: tags.filter((tag) => !tag.startsWith("_status:") && !tag.startsWith("_source:")),
+  };
+}
+
+function withInternalTags(tags: string[] = [], status?: string, sourceStatus?: string) {
+  const clean = tags.filter((tag) => typeof tag === "string" && tag.trim() && !tag.startsWith("_status:") && !tag.startsWith("_source:")).map((tag) => tag.trim());
+  if (status) clean.push(`_status:${status}`);
+  if (sourceStatus) clean.push(`_source:${sourceStatus}`);
+  return clean;
+}
+
 function mapCard(card: any, userId: string) {
   const isPersonal = card.environment === "personal";
+  const internal = extractInternalStatus(card.tags || []);
 
   return {
     id: String(card.id),
@@ -37,12 +55,12 @@ function mapCard(card: any, userId: string) {
     title: card.title,
     description: card.subtitle,
     type: isPersonal ? "PERSONAL" : "CLINICAL",
-    status: isPersonal ? "NEEDS_REVIEW" : "LEGACY_IMPORTED",
+    status: isPersonal ? "NEEDS_REVIEW" : internal.status,
     visibility: isPersonal ? "PRIVATE" : "PUBLIC",
-    sourceStatus: "NOT_CHECKED",
+    sourceStatus: isPersonal ? "NOT_CHECKED" : internal.sourceStatus,
     environment: card.environment,
     audience: card.audience,
-    tags: card.tags,
+    tags: isPersonal ? card.tags : internal.publicTags,
     updatedAt: card.updatedAt,
     updatedByName: card.updatedByName,
     updatedByEmail: card.updatedByEmail,
@@ -81,8 +99,8 @@ function mapCard(card: any, userId: string) {
   };
 }
 
-async function getOwnedPersonalCard(slug: string, userId: string) {
-  const card = await prisma.clinicalCard.findUnique({
+async function getCard(slug: string) {
+  return prisma.clinicalCard.findUnique({
     where: { slug },
     include: {
       sections: { orderBy: { order: "asc" } },
@@ -91,43 +109,27 @@ async function getOwnedPersonalCard(slug: string, userId: string) {
       revisions: { orderBy: { createdAt: "desc" }, take: 5 },
     },
   });
+}
 
-  if (!card || !card.isPublished || card.environment !== "personal" || card.updatedByUserId !== userId) {
-    return null;
-  }
-
-  return card;
+function canEditCard(card: any, userId: string, isAdmin: boolean) {
+  if (!card || !card.isPublished) return false;
+  if (card.environment === "personal") return card.updatedByUserId === userId;
+  return isAdmin;
 }
 
 export async function GET(_req: Request, { params }: { params: { slug: string } }) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const userId = String((session.user as any).id || "");
+    const card = await getCard(params.slug);
 
-    const card = await prisma.clinicalCard.findUnique({
-      where: { slug: params.slug },
-      include: {
-        sections: { orderBy: { order: "asc" } },
-        fields: { orderBy: { order: "asc" } },
-        rules: { orderBy: { priority: "asc" } },
-        revisions: { orderBy: { createdAt: "desc" }, take: 5 },
-      },
-    });
-
-    if (!card || !card.isPublished) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
-    }
+    if (!card || !card.isPublished) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     const isPersonal = card.environment === "personal";
     const isOwner = isPersonal && card.updatedByUserId === userId;
-
-    if (isPersonal && !isOwner) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
-    }
+    if (isPersonal && !isOwner) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     return NextResponse.json(mapCard(card, userId));
   } catch (error) {
@@ -139,66 +141,60 @@ export async function GET(_req: Request, { params }: { params: { slug: string } 
 export async function PUT(req: Request, { params }: { params: { slug: string } }) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const userId = String((session.user as any).id || "");
-    const existing = await getOwnedPersonalCard(params.slug, userId);
+    const isAdmin = (session.user as any).role === "ADMIN";
+    const existing = await getCard(params.slug);
 
-    if (!existing) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
-    }
+    if (!canEditCard(existing, userId, isAdmin)) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
+    const isPersonal = existing!.environment === "personal";
     const body = await req.json();
     const title = typeof body?.title === "string" ? body.title.trim() : "";
     const description = typeof body?.description === "string" ? body.description.trim() : null;
     const tags = Array.isArray(body?.tags) ? body.tags.filter((tag: any) => typeof tag === "string") : [];
     const sections = Array.isArray(body?.sections) ? body.sections : [];
+    const status = typeof body?.status === "string" ? body.status : "NEEDS_REVIEW";
+    const sourceStatus = typeof body?.sourceStatus === "string" ? body.sourceStatus : "NOT_CHECKED";
+    const environment = isPersonal ? "personal" : (typeof body?.environment === "string" ? body.environment : existing!.environment);
+    const audience = isPersonal ? "private" : (typeof body?.audience === "string" ? body.audience : existing!.audience);
 
-    if (!title) {
-      return NextResponse.json({ error: "Otsikko puuttuu" }, { status: 400 });
-    }
-
-    if (sections.length === 0) {
-      return NextResponse.json({ error: "Sisältö puuttuu" }, { status: 400 });
-    }
+    if (!title) return NextResponse.json({ error: "Otsikko puuttuu" }, { status: 400 });
+    if (sections.length === 0) return NextResponse.json({ error: "Sisältö puuttuu" }, { status: 400 });
 
     const updated = await prisma.$transaction(async (tx) => {
-      await tx.clinicalSection.deleteMany({ where: { cardId: existing.id } });
-      await tx.clinicalField.deleteMany({ where: { cardId: existing.id } });
-      await tx.clinicalRule.deleteMany({ where: { cardId: existing.id } });
+      await tx.clinicalSection.deleteMany({ where: { cardId: existing!.id } });
+      await tx.clinicalField.deleteMany({ where: { cardId: existing!.id } });
+      await tx.clinicalRule.deleteMany({ where: { cardId: existing!.id } });
 
       return tx.clinicalCard.update({
-        where: { id: existing.id },
+        where: { id: existing!.id },
         data: {
           title,
           subtitle: description,
-          tags,
+          tags: isPersonal ? tags : withInternalTags(tags, status, sourceStatus),
+          environment,
+          audience,
           updatedByUserId: userId,
           updatedByEmail: session.user.email || null,
           updatedByName: (session.user as any).name || session.user.email || null,
           sections: {
             create: sections.map((section: any, index: number) => ({
-              key:
-                typeof section.key === "string" && section.key.trim()
-                  ? normalizeSlug(section.key).replace(/-/g, "_")
-                  : `section_${index + 1}`,
-              title:
-                typeof section.title === "string" && section.title.trim()
-                  ? section.title.trim()
-                  : `Osio ${index + 1}`,
+              key: typeof section.key === "string" && section.key.trim() ? normalizeSlug(section.key).replace(/-/g, "_") : `section_${index + 1}`,
+              title: typeof section.title === "string" && section.title.trim() ? section.title.trim() : `Osio ${index + 1}`,
               content: typeof section.content === "string" ? section.content : "",
               order: Number.isFinite(Number(section.order)) ? Number(section.order) : (index + 1) * 10,
+              highlightCallout: typeof section.highlightCallout === "string" ? section.highlightCallout : null,
             })),
           },
           revisions: {
             create: {
-              action: "update_personal_note",
+              action: isPersonal ? "update_personal_note" : "update_clinical_card",
               editorUserId: userId,
               editorEmail: session.user.email || null,
               editorName: (session.user as any).name || session.user.email || null,
-              summary: "Oma muistilappu päivitetty Pikaohjeet v2 -näkymästä",
+              summary: isPersonal ? "Oma muistilappu päivitetty Pikaohjeet v2 -näkymästä" : "Kliininen pikaohje päivitetty Pikaohjeet v2 -näkymästä",
               payload: body,
             },
           },
@@ -222,28 +218,26 @@ export async function PUT(req: Request, { params }: { params: { slug: string } }
 export async function DELETE(_req: Request, { params }: { params: { slug: string } }) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const userId = String((session.user as any).id || "");
-    const existing = await getOwnedPersonalCard(params.slug, userId);
+    const isAdmin = (session.user as any).role === "ADMIN";
+    const existing = await getCard(params.slug);
 
-    if (!existing) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
-    }
+    if (!canEditCard(existing, userId, isAdmin)) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    const isPersonal = existing!.environment === "personal";
 
     await prisma.clinicalCard.update({
-      where: { id: existing.id },
+      where: { id: existing!.id },
       data: {
         isPublished: false,
         revisions: {
           create: {
-            action: "archive_personal_note",
+            action: isPersonal ? "archive_personal_note" : "archive_clinical_card",
             editorUserId: userId,
             editorEmail: session.user.email || null,
             editorName: (session.user as any).name || session.user.email || null,
-            summary: "Oma muistilappu arkistoitu Pikaohjeet v2 -näkymästä",
+            summary: isPersonal ? "Oma muistilappu arkistoitu Pikaohjeet v2 -näkymästä" : "Kliininen pikaohje arkistoitu Pikaohjeet v2 -näkymästä",
           },
         },
       },
