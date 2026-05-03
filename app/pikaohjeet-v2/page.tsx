@@ -78,6 +78,7 @@ const ui = {
     review: "Vaatii tarkistuksen",
     newNote: "Uusi muistilappu",
     aiClean: "Siisti AI:lla",
+    saveRaw: "Tallenna ilman AI:ta",
     saveDraft: "Tallenna muistilapuksi",
     saved: "Tallennettu",
     rawText: "Liitä oma muistilappu tähän",
@@ -108,6 +109,7 @@ const ui = {
     review: "Требуют проверки",
     newNote: "Новая заметка",
     aiClean: "Причесать через AI",
+    saveRaw: "Сохранить без AI",
     saveDraft: "Сохранить как заметку",
     saved: "Сохранено",
     rawText: "Вставь свою заметку сюда",
@@ -138,6 +140,7 @@ const ui = {
     review: "Needs review",
     newNote: "New note",
     aiClean: "Clean with AI",
+    saveRaw: "Save without AI",
     saveDraft: "Save as note",
     saved: "Saved",
     rawText: "Paste your note here",
@@ -179,6 +182,29 @@ function sectionTone(kind: string) {
   if (kind === "ACTIONS") return "border-emerald-100 bg-emerald-50/60";
   if (kind === "COPY_TEXT") return "border-violet-100 bg-violet-50/60";
   return "border-slate-100 bg-white";
+}
+
+function makePlainNoteDraft(title: string, rawText: string): DraftCard {
+  const cleanTitle = title.trim() || rawText.trim().split(/\r?\n/).find(Boolean)?.slice(0, 80) || "Oma muistilappu";
+
+  return {
+    title: cleanTitle,
+    description: "Oma muistilappu",
+    type: "PERSONAL",
+    status: "NEEDS_REVIEW",
+    visibility: "PRIVATE",
+    sourceStatus: "NOT_CHECKED",
+    tags: [],
+    sections: [
+      {
+        key: "muistilappu",
+        title: "Muistilappu",
+        content: rawText.trim(),
+        order: 10,
+        kind: "TEXT",
+      },
+    ],
+  };
 }
 
 export default function PikaohjeetV2Page() {
@@ -270,14 +296,16 @@ export default function PikaohjeetV2Page() {
     }
   };
 
-  const saveDraft = async () => {
-    if (!draftCard) return;
+  const saveDraft = async (draft?: DraftCard) => {
+    const cardToSave = draft || draftCard;
+    if (!cardToSave) return;
+
     setSavingDraft(true);
     try {
       const res = await fetch("/api/pikaohjeet-v2", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(draftCard),
+        body: JSON.stringify(cardToSave),
       });
       const saved = await res.json();
       if (!res.ok) throw new Error(saved?.error || "Tallennusvirhe");
@@ -293,6 +321,11 @@ export default function PikaohjeetV2Page() {
     } finally {
       setSavingDraft(false);
     }
+  };
+
+  const saveRawNote = async () => {
+    if (!noteText.trim()) return;
+    await saveDraft(makePlainNoteDraft(noteTitle, noteText));
   };
 
   const handleCopy = async (key: string, text: string) => {
@@ -393,7 +426,7 @@ export default function PikaohjeetV2Page() {
                     {visibleCard.description && <p className="mt-2 max-w-3xl text-sm font-semibold leading-relaxed text-slate-500">{visibleCard.description}</p>}
                     {visibleCard.tags?.length > 0 && <div className="mt-4 flex flex-wrap gap-2">{visibleCard.tags.map((tag) => <span key={tag} className="rounded-xl bg-slate-100 px-3 py-1 text-[10px] font-black text-slate-500">#{tag}</span>)}</div>}
                   </div>
-                  {draftCard && <button onClick={saveDraft} disabled={savingDraft} className="flex items-center gap-2 rounded-2xl bg-emerald-600 px-5 py-3 text-xs font-black uppercase tracking-wide text-white shadow-lg shadow-emerald-100 transition hover:bg-emerald-700 disabled:opacity-50">{savingDraft ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />} {dict.saveDraft}</button>}
+                  {draftCard && <button onClick={() => saveDraft()} disabled={savingDraft} className="flex items-center gap-2 rounded-2xl bg-emerald-600 px-5 py-3 text-xs font-black uppercase tracking-wide text-white shadow-lg shadow-emerald-100 transition hover:bg-emerald-700 disabled:opacity-50">{savingDraft ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />} {dict.saveDraft}</button>}
                 </div>
               </div>
 
@@ -455,11 +488,16 @@ export default function PikaohjeetV2Page() {
             </div>
             <footer className="border-t border-slate-100 p-6">
               {!draftCard ? (
-                <button onClick={cleanNote} disabled={cleaning || !noteText.trim()} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 py-4 text-xs font-black uppercase tracking-wide text-white shadow-lg shadow-blue-100 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">
-                  {cleaning ? <Loader2 className="animate-spin" size={16} /> : <Sparkles size={16} />} {dict.aiClean}
-                </button>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <button onClick={saveRawNote} disabled={savingDraft || !noteText.trim()} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 py-4 text-xs font-black uppercase tracking-wide text-white shadow-lg shadow-emerald-100 transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50">
+                    {savingDraft ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />} {dict.saveRaw}
+                  </button>
+                  <button onClick={cleanNote} disabled={cleaning || !noteText.trim()} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 py-4 text-xs font-black uppercase tracking-wide text-white shadow-lg shadow-blue-100 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">
+                    {cleaning ? <Loader2 className="animate-spin" size={16} /> : <Sparkles size={16} />} {dict.aiClean}
+                  </button>
+                </div>
               ) : (
-                <button onClick={saveDraft} disabled={savingDraft} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 py-4 text-xs font-black uppercase tracking-wide text-white shadow-lg shadow-emerald-100 transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50">
+                <button onClick={() => saveDraft()} disabled={savingDraft} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 py-4 text-xs font-black uppercase tracking-wide text-white shadow-lg shadow-emerald-100 transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50">
                   {savingDraft ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />} {dict.saveDraft}
                 </button>
               )}
