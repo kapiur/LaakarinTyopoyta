@@ -28,7 +28,7 @@ type PikaohjeSection = {
   title: string;
   content: string;
   order: number;
-  kind: "TEXT" | "WARNING" | "CRITERIA" | "ACTIONS" | "COPY_TEXT" | "SOURCES" | string;
+  kind: string;
 };
 
 type PikaohjeListItem = {
@@ -49,27 +49,9 @@ type PikaohjeDetail = PikaohjeListItem & {
   environment?: string;
   audience?: string;
   sections: PikaohjeSection[];
-  fields: Array<{
-    id: string;
-    key: string;
-    label: string;
-    type: string;
-    unit?: string | null;
-    placeholder?: string | null;
-    options: string[];
-    order: number;
-  }>;
-  rules: Array<{
-    id: string;
-    groupId?: string | null;
-    fieldKey: string;
-    operator: string;
-    value: string;
-    highlightSectionKey?: string | null;
-    addHint?: string | null;
-    priority: number;
-  }>;
-  sources: Array<{ title: string; url?: string | null; type?: string; verified?: boolean }>;
+  fields: unknown[];
+  rules: unknown[];
+  sources: unknown[];
 };
 
 type DraftCard = {
@@ -107,13 +89,13 @@ const ui = {
     sourceUnchecked: "Ei lähdetarkistettu",
     sourceChecked: "Lähde tarkistettu",
     private: "Vain minä",
-    public: "Yhteinen",
     select: "Valitse kortti listasta",
     noCards: "Ei hakutuloksia",
     copy: "Kopioi",
     copied: "Kopioitu",
     warning: "Huomio",
     openOld: "Avaa vanha Pikaohjeet",
+    draftReady: "AI-luonnos valmis. Tarkista sisältö ja tallenna, jos se on sopiva.",
   },
   ru: {
     title: "Pikaohjeet v2",
@@ -137,13 +119,13 @@ const ui = {
     sourceUnchecked: "Источники не проверены",
     sourceChecked: "Источник проверен",
     private: "Только я",
-    public: "Общая",
     select: "Выберите карточку из списка",
     noCards: "Нет результатов",
     copy: "Копировать",
     copied: "Скопировано",
     warning: "Внимание",
     openOld: "Открыть старый Pikaohjeet",
+    draftReady: "AI-черновик готов. Проверь содержание и сохрани, если всё подходит.",
   },
   en: {
     title: "Pikaohjeet v2",
@@ -167,13 +149,13 @@ const ui = {
     sourceUnchecked: "Sources not checked",
     sourceChecked: "Source checked",
     private: "Only me",
-    public: "Shared",
     select: "Select a card from the list",
     noCards: "No results",
     copy: "Copy",
     copied: "Copied",
     warning: "Warning",
     openOld: "Open old Pikaohjeet",
+    draftReady: "AI draft is ready. Review it and save it if it looks right.",
   },
 };
 
@@ -281,7 +263,6 @@ export default function PikaohjeetV2Page() {
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "AI error");
       setDraftCard(data);
-      setShowNoteDrawer(false);
     } catch (error: any) {
       alert(error?.message || "AI error");
     } finally {
@@ -301,6 +282,9 @@ export default function PikaohjeetV2Page() {
       const saved = await res.json();
       if (!res.ok) throw new Error(saved?.error || "Tallennusvirhe");
       setDraftCard(null);
+      setShowNoteDrawer(false);
+      setNoteTitle("");
+      setNoteText("");
       await loadCards(saved.slug);
       setSaveOk(true);
       setTimeout(() => setSaveOk(false), 1800);
@@ -430,7 +414,59 @@ export default function PikaohjeetV2Page() {
         </section>
       </main>
 
-      {showNoteDrawer && <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/50 backdrop-blur-sm"><div className="flex h-full w-full max-w-2xl flex-col bg-white shadow-2xl"><header className="flex items-center justify-between border-b border-slate-100 p-6"><div><h2 className="text-xl font-black text-slate-900">{dict.newNote}</h2><p className="text-xs font-bold text-slate-400">{dict.notSaved}</p></div><button onClick={() => setShowNoteDrawer(false)} className="rounded-full p-2 text-slate-400 hover:bg-slate-100"><X size={22} /></button></header><div className="flex-1 overflow-y-auto p-6"><div className="space-y-5"><div><label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">{dict.noteTitle}</label><input value={noteTitle} onChange={(event) => setNoteTitle(event.target.value)} className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm font-bold outline-none focus:border-blue-200 focus:bg-white focus:ring-4 focus:ring-blue-500/10" /></div><div><label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">{dict.rawText}</label><textarea value={noteText} onChange={(event) => setNoteText(event.target.value)} placeholder={dict.rawPlaceholder} className="min-h-[360px] w-full rounded-[1.5rem] border border-slate-200 bg-slate-50 p-5 text-sm font-semibold leading-relaxed outline-none focus:border-blue-200 focus:bg-white focus:ring-4 focus:ring-blue-500/10" /></div></div></div><footer className="border-t border-slate-100 p-6"><button onClick={cleanNote} disabled={cleaning || !noteText.trim()} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 py-4 text-xs font-black uppercase tracking-wide text-white shadow-lg shadow-blue-100 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">{cleaning ? <Loader2 className="animate-spin" size={16} /> : <Sparkles size={16} />} {dict.aiClean}</button></footer></div></div>}
+      {showNoteDrawer && (
+        <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/50 backdrop-blur-sm">
+          <div className="flex h-full w-full max-w-2xl flex-col bg-white shadow-2xl">
+            <header className="flex items-center justify-between border-b border-slate-100 p-6">
+              <div>
+                <h2 className="text-xl font-black text-slate-900">{draftCard ? dict.draft : dict.newNote}</h2>
+                <p className="text-xs font-bold text-slate-400">{draftCard ? dict.draftReady : dict.notSaved}</p>
+              </div>
+              <button onClick={() => setShowNoteDrawer(false)} className="rounded-full p-2 text-slate-400 hover:bg-slate-100"><X size={22} /></button>
+            </header>
+            <div className="flex-1 overflow-y-auto p-6">
+              {!draftCard ? (
+                <div className="space-y-5">
+                  <div>
+                    <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">{dict.noteTitle}</label>
+                    <input value={noteTitle} onChange={(event) => setNoteTitle(event.target.value)} className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm font-bold outline-none focus:border-blue-200 focus:bg-white focus:ring-4 focus:ring-blue-500/10" />
+                  </div>
+                  <div>
+                    <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">{dict.rawText}</label>
+                    <textarea value={noteText} onChange={(event) => setNoteText(event.target.value)} placeholder={dict.rawPlaceholder} className="min-h-[360px] w-full rounded-[1.5rem] border border-slate-200 bg-slate-50 p-5 text-sm font-semibold leading-relaxed outline-none focus:border-blue-200 focus:bg-white focus:ring-4 focus:ring-blue-500/10" />
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="rounded-2xl border border-amber-100 bg-amber-50 p-4 text-xs font-bold text-amber-900">{dict.notSaved}</div>
+                  <div className="rounded-[1.5rem] border border-slate-100 bg-white p-5 shadow-sm">
+                    <h3 className="text-2xl font-black text-slate-900">{draftCard.title}</h3>
+                    {draftCard.description && <p className="mt-2 text-sm font-semibold text-slate-500">{draftCard.description}</p>}
+                    {draftCard.tags?.length > 0 && <div className="mt-3 flex flex-wrap gap-2">{draftCard.tags.map((tag) => <span key={tag} className="rounded-xl bg-slate-100 px-3 py-1 text-[10px] font-black text-slate-500">#{tag}</span>)}</div>}
+                  </div>
+                  {[...(draftCard.sections || [])].sort((a, b) => a.order - b.order).map((section) => (
+                    <article key={section.key} className={cn("rounded-[1.5rem] border p-5", sectionTone(section.kind))}>
+                      <h4 className="mb-3 text-xs font-black uppercase tracking-wide text-slate-800">{section.title}</h4>
+                      <div className="prose prose-slate max-w-none text-sm font-semibold leading-relaxed"><ReactMarkdown>{section.content}</ReactMarkdown></div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </div>
+            <footer className="border-t border-slate-100 p-6">
+              {!draftCard ? (
+                <button onClick={cleanNote} disabled={cleaning || !noteText.trim()} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 py-4 text-xs font-black uppercase tracking-wide text-white shadow-lg shadow-blue-100 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">
+                  {cleaning ? <Loader2 className="animate-spin" size={16} /> : <Sparkles size={16} />} {dict.aiClean}
+                </button>
+              ) : (
+                <button onClick={saveDraft} disabled={savingDraft} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 py-4 text-xs font-black uppercase tracking-wide text-white shadow-lg shadow-emerald-100 transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50">
+                  {savingDraft ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />} {dict.saveDraft}
+                </button>
+              )}
+            </footer>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
