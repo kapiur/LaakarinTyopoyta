@@ -92,11 +92,22 @@ export async function POST(req: Request) {
     }
 
     const userId = String((session.user as any).id || "");
+    const isAdmin = (session.user as any).role === "ADMIN";
     const body = await req.json();
+    const requestedType = body?.type === "CLINICAL" ? "CLINICAL" : "PERSONAL";
+
+    if (requestedType === "CLINICAL" && !isAdmin) {
+      return NextResponse.json({ error: "Admin only" }, { status: 403 });
+    }
+
     const title = typeof body?.title === "string" ? body.title.trim() : "";
     const description = typeof body?.description === "string" ? body.description.trim() : null;
     const sections = Array.isArray(body?.sections) ? body.sections : [];
+    const fields = Array.isArray(body?.fields) ? body.fields : [];
+    const rules = Array.isArray(body?.rules) ? body.rules : [];
     const tags = Array.isArray(body?.tags) ? body.tags.filter((tag: any) => typeof tag === "string") : [];
+    const environment = requestedType === "CLINICAL" ? (typeof body?.environment === "string" ? body.environment : "terveysasema") : "personal";
+    const audience = requestedType === "CLINICAL" ? (typeof body?.audience === "string" ? body.audience : "aikuinen") : "private";
 
     if (!title) {
       return NextResponse.json({ error: "Otsikko puuttuu" }, { status: 400 });
@@ -106,7 +117,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Sisältö puuttuu" }, { status: 400 });
     }
 
-    const baseSlug = normalizeSlug(title);
+    const slugInput = typeof body?.slugSuggestion === "string" && body.slugSuggestion.trim() ? body.slugSuggestion : title;
+    const baseSlug = normalizeSlug(slugInput);
     let slug = baseSlug;
     let counter = 1;
 
@@ -120,8 +132,8 @@ export async function POST(req: Request) {
         title,
         slug,
         subtitle: description,
-        environment: "personal",
-        audience: "private",
+        environment,
+        audience,
         tags,
         isPublished: true,
         updatedByUserId: userId,
@@ -133,15 +145,28 @@ export async function POST(req: Request) {
             title: typeof section.title === "string" && section.title.trim() ? section.title.trim() : `Osio ${index + 1}`,
             content: typeof section.content === "string" ? section.content : "",
             order: Number.isFinite(Number(section.order)) ? Number(section.order) : (index + 1) * 10,
+            highlightCallout: typeof section.highlightCallout === "string" ? section.highlightCallout : null,
           })),
+        },
+        fields: {
+          create: requestedType === "CLINICAL" ? fields.map((field: any, index: number) => ({
+            key: typeof field.key === "string" && field.key.trim() ? normalizeSlug(field.key).replace(/-/g, "_") : `field_${index + 1}`,
+            label: typeof field.label === "string" && field.label.trim() ? field.label.trim() : `Kenttä ${index + 1}`,
+            type: typeof field.type === "string" && field.type.trim() ? field.type.trim() : "text",
+            unit: typeof field.unit === "string" ? field.unit : null,
+            placeholder: typeof field.placeholder === "string" ? field.placeholder : null,
+            options: Array.isArray(field.options) ? field.options.filter((item: any) => typeof item === "string") : [],
+            order: Number.isFinite(Number(field.order)) ? Number(field.order) : (index + 1) * 10,
+            isUniversal: Boolean(field.isUniversal),
+          })) : [],
         },
         revisions: {
           create: {
-            action: "create_personal_note",
+            action: requestedType === "CLINICAL" ? "create_clinical_card" : "create_personal_note",
             editorUserId: userId,
             editorEmail: session.user.email || null,
             editorName: (session.user as any).name || session.user.email || null,
-            summary: "Oma muistilappu luotu Pikaohjeet v2 -näkymästä",
+            summary: requestedType === "CLINICAL" ? "Kliininen pikaohje luotu Pikaohjeet v2 -näkymästä" : "Oma muistilappu luotu Pikaohjeet v2 -näkymästä",
             payload: body,
           },
         },
@@ -150,6 +175,10 @@ export async function POST(req: Request) {
         sections: { select: { id: true } },
       },
     });
+
+    if (requestedType === "CLINICAL" && rules.length > 0) {
+      // Rule creation is intentionally postponed until field/section validation UI is ready.
+    }
 
     return NextResponse.json(mapCard(created, userId), { status: 201 });
   } catch (error: any) {
