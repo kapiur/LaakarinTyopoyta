@@ -5,6 +5,8 @@ import { authOptions } from "../../../../../lib/auth";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const CURRENT_MODEL = "gpt-5.4";
+const MAX_MATERIAL_CHARS = 120000;
+const MAX_SOURCE_CHARS = 60000;
 
 function tryParseJson(content: string) {
   try {
@@ -30,7 +32,18 @@ export async function POST(req: Request) {
     const sourceText = typeof body?.sourceText === "string" ? body.sourceText.trim() : "";
 
     if (!rawText) return NextResponse.json({ error: "Materiaali puuttuu" }, { status: 400 });
-    if (rawText.length > 30000) return NextResponse.json({ error: "Materiaali on liian pitkä" }, { status: 400 });
+    if (rawText.length > MAX_MATERIAL_CHARS) {
+      return NextResponse.json(
+        { error: `Materiaali on liian pitkä. Enimmäispituus on ${MAX_MATERIAL_CHARS} merkkiä. Lyhennä materiaalia tai jaa se osiin.` },
+        { status: 400 }
+      );
+    }
+    if (sourceText.length > MAX_SOURCE_CHARS) {
+      return NextResponse.json(
+        { error: `Lähdeteksti on liian pitkä. Enimmäispituus on ${MAX_SOURCE_CHARS} merkkiä.` },
+        { status: 400 }
+      );
+    }
 
     const systemPrompt = `
 Olet dr.kapustin.fi-sivuston kliininen AI-editori.
