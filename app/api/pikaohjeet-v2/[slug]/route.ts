@@ -20,6 +20,8 @@ export async function GET(_req: Request, { params }: { params: { slug: string } 
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const userId = String((session.user as any).id || "");
+
     const card = await prisma.clinicalCard.findUnique({
       where: { slug: params.slug },
       include: {
@@ -34,15 +36,22 @@ export async function GET(_req: Request, { params }: { params: { slug: string } 
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
+    const isPersonal = card.environment === "personal";
+    const isOwner = isPersonal && card.updatedByUserId === userId;
+
+    if (isPersonal && !isOwner) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
     return NextResponse.json({
       id: String(card.id),
       legacyId: card.id,
       slug: card.slug,
       title: card.title,
       description: card.subtitle,
-      type: "CLINICAL",
-      status: "LEGACY_IMPORTED",
-      visibility: "PUBLIC",
+      type: isPersonal ? "PERSONAL" : "CLINICAL",
+      status: isPersonal ? "NEEDS_REVIEW" : "LEGACY_IMPORTED",
+      visibility: isPersonal ? "PRIVATE" : "PUBLIC",
       sourceStatus: "NOT_CHECKED",
       environment: card.environment,
       audience: card.audience,
