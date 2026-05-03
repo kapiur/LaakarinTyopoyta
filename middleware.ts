@@ -5,5 +5,5 @@ export default function middleware() {
 }
 
 export const config = {
-  matcher: [],
+  matcher: ["/__middleware_disabled__/:path*"],
 };
