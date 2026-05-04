@@ -12,28 +12,30 @@ function normalizeEmail(input: string) {
   return input.trim().toLowerCase();
 }
 
-function splitPersonalTags(tags: string[] = []) {
-  const sharedWith = tags
-    .filter((tag) => tag.startsWith("_share:"))
-    .map((tag) => normalizeEmail(tag.replace("_share:", "")))
-    .filter(Boolean);
+function splitSystemTags(tags: string[] = [], userEmail = "") {
+  const normalizedEmail = normalizeEmail(userEmail);
+  const sharedWith = tags.filter((tag) => tag.startsWith("_share:")).map((tag) => normalizeEmail(tag.replace("_share:", ""))).filter(Boolean);
+  const favoritedBy = tags.filter((tag) => tag.startsWith("_fav:")).map((tag) => normalizeEmail(tag.replace("_fav:", ""))).filter(Boolean);
   return {
-    publicTags: tags.filter((tag) => !tag.startsWith("_share:")),
+    publicTags: tags.filter((tag) => !tag.startsWith("_share:") && !tag.startsWith("_fav:")),
     sharedWith: Array.from(new Set(sharedWith)),
+    favoritedBy: Array.from(new Set(favoritedBy)),
+    isFavorite: normalizedEmail ? favoritedBy.includes(normalizedEmail) : false,
   };
 }
 
 function withShareTags(tags: string[] = [], sharedWith: string[] = []) {
-  const publicTags = tags.filter((tag) => typeof tag === "string" && tag.trim() && !tag.startsWith("_share:")).map((tag) => tag.trim());
+  const existingFavTags = tags.filter((tag) => typeof tag === "string" && tag.startsWith("_fav:"));
+  const publicTags = tags.filter((tag) => typeof tag === "string" && tag.trim() && !tag.startsWith("_share:") && !tag.startsWith("_fav:")).map((tag) => tag.trim());
   const shareTags = Array.from(new Set(sharedWith.map(normalizeEmail).filter(Boolean))).map((email) => `_share:${email}`);
-  return [...publicTags, ...shareTags];
+  return [...publicTags, ...existingFavTags, ...shareTags];
 }
 
 function mapCard(card: any, userId: string, userEmail: string) {
   const isPersonal = card.environment === "personal";
-  const personal = splitPersonalTags(card.tags || []);
+  const system = splitSystemTags(card.tags || [], userEmail);
   const isOwner = isPersonal && card.updatedByUserId === userId;
-  const isSharedWithMe = isPersonal && personal.sharedWith.includes(userEmail);
+  const isSharedWithMe = isPersonal && system.sharedWith.includes(userEmail);
 
   return {
     id: String(card.id),
@@ -43,10 +45,11 @@ function mapCard(card: any, userId: string, userEmail: string) {
     description: card.subtitle,
     type: isPersonal ? "PERSONAL" : "CLINICAL",
     status: isPersonal ? "NEEDS_REVIEW" : "LEGACY_IMPORTED",
-    visibility: isPersonal ? (isOwner ? (personal.sharedWith.length ? "SHARED_BY_ME" : "PRIVATE") : "SHARED_WITH_ME") : "PUBLIC",
+    visibility: isPersonal ? (isOwner ? (system.sharedWith.length ? "SHARED_BY_ME" : "PRIVATE") : "SHARED_WITH_ME") : "PUBLIC",
     sourceStatus: "NOT_CHECKED",
-    tags: isPersonal ? personal.publicTags : card.tags,
-    sharedWith: isOwner ? personal.sharedWith : [],
+    tags: system.publicTags,
+    sharedWith: isOwner ? system.sharedWith : [],
+    isFavorite: system.isFavorite,
     canEdit: !isPersonal || isOwner,
     isOwner,
     isSharedWithMe,
@@ -104,7 +107,6 @@ export async function POST(req: Request) {
     const description = typeof body?.description === "string" ? body.description.trim() : null;
     const sections = Array.isArray(body?.sections) ? body.sections : [];
     const fields = Array.isArray(body?.fields) ? body.fields : [];
-    const rules = Array.isArray(body?.rules) ? body.rules : [];
     const tags = Array.isArray(body?.tags) ? body.tags.filter((tag: any) => typeof tag === "string") : [];
     const sharedWith = Array.isArray(body?.sharedWith) ? body.sharedWith.filter((email: any) => typeof email === "string") : [];
     const environment = requestedType === "CLINICAL" ? (typeof body?.environment === "string" ? body.environment : "terveysasema") : "personal";
@@ -122,7 +124,7 @@ export async function POST(req: Request) {
     const created = await prisma.clinicalCard.create({
       data: {
         title, slug, subtitle: description, environment, audience,
-        tags: requestedType === "PERSONAL" ? withShareTags(tags, sharedWith) : tags,
+        tags: requestedType === "PERSONAL" ? withShareTags(tags, sharedWith) : tags.filter((tag: string) => !tag.startsWith("_fav:") && !tag.startsWith("_share:")),
         isPublished: true,
         updatedByUserId: userId,
         updatedByEmail: session.user.email || null,
