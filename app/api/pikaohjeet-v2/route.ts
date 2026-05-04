@@ -83,7 +83,10 @@ export async function GET() {
       orderBy: [{ updatedAt: "desc" }, { title: "asc" }],
     });
 
-    return NextResponse.json(cards.map((card) => mapCard(card, userId, userEmail)));
+    const mapped = cards.map((card) => mapCard(card, userId, userEmail));
+    mapped.sort((a, b) => Number(Boolean(b.isFavorite)) - Number(Boolean(a.isFavorite)) || new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime() || a.title.localeCompare(b.title));
+
+    return NextResponse.json(mapped);
   } catch (error) {
     console.error("GET pikaohjeet-v2 error:", error);
     return NextResponse.json({ error: "Server error" }, { status: 500 });
