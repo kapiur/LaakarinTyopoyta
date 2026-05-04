@@ -2,7 +2,7 @@
 
 import { ReactNode } from "react";
 import { useSession } from "next-auth/react";
-import { BookOpen, HelpCircle, NotebookTabs, Settings2, Sparkles } from "lucide-react";
+import { BookOpen, HelpCircle, NotebookTabs, Settings2, Sparkles, Star } from "lucide-react";
 import { useI18n } from "../../lib/useI18n";
 
 type UiLang = "fi" | "ru" | "en";
@@ -10,6 +10,7 @@ type UiLang = "fi" | "ru" | "en";
 const ui = {
   fi: {
     main: "Pikaohjeet",
+    favorites: "Suosikit",
     notes: "Omat muistilaput",
     help: "Ohje",
     manager: "Clinical Manager",
@@ -17,6 +18,7 @@ const ui = {
   },
   ru: {
     main: "Pikaohjeet",
+    favorites: "Избранное",
     notes: "Мои заметки",
     help: "Инструкция",
     manager: "Clinical Manager",
@@ -24,6 +26,7 @@ const ui = {
   },
   en: {
     main: "Pikaohjeet",
+    favorites: "Favorites",
     notes: "My notes",
     help: "Help",
     manager: "Clinical Manager",
@@ -43,6 +46,9 @@ export default function PikaohjeetV2Layout({ children }: { children: ReactNode }
       <nav className="fixed bottom-5 right-5 z-40 flex max-w-[calc(100vw-2.5rem)] flex-wrap gap-2 rounded-[1.5rem] border border-slate-200 bg-white/95 p-2 shadow-2xl shadow-slate-200/60 backdrop-blur">
         <a href="/pikaohjeet-v2" className="inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-xs font-black uppercase tracking-wide text-slate-600 transition hover:bg-slate-100">
           <BookOpen size={15} /> {dict.main}
+        </a>
+        <a href="/pikaohjeet-v2/suosikit" className="inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-xs font-black uppercase tracking-wide text-amber-700 transition hover:bg-amber-50">
+          <Star size={15} /> {dict.favorites}
         </a>
         <a href="/pikaohjeet-v2/muistilaput" className="inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-xs font-black uppercase tracking-wide text-slate-600 transition hover:bg-slate-100">
           <NotebookTabs size={15} /> {dict.notes}
