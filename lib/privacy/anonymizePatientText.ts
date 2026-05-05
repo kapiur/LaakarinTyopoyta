@@ -36,9 +36,12 @@ const HETU_PATTERN = /\b\d{2}(?:0[1-9]|1[0-2])\d{2}[-+A]\d{3}[0-9A-Z]?\b/g;
 const DATE_PATTERN = /\b\d{1,2}\.\d{1,2}\.\d{2,4}\b/g;
 const PHONE_PATTERN = /(?<!\d)(?:\+358|0)\s?(?:4\d|[1-9]\d?)\s?(?:\d\s?){5,8}(?!\d)/g;
 const EMAIL_PATTERN = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
-const PERSON_CONTEXT_PATTERN = /\b(?:potilas|nimi|name|syntynyt|synt\.|s\.|dob|henkilötunnus|hetu|vaimo|puoliso|aviopuoliso|mies|nainen|tyttö|poika|lapsi|äiti|isä|tytär|veli|sisko|sisar|omainen|lähiomainen|huoltaja)\b/i;
+const STAFF_CONTEXT_WORDS = 'lääkäri|laakari|hoitaja|sairaanhoitaja|terveydenhoitaja|lähihoitaja|lahihoitaja|fysioterapeutti|fysioterapeuti|toimintaterapeutti|puheterapeutti|psykologi|psykiatri|sosiaalityöntekijä|sosiaalityontekija|ravitsemusterapeutti|farmaseutti|proviisori|hammaslääkäri|hammaslaakari|suuhygienisti|kätilö|katilo|ensihoitaja|laboratoriohoitaja|röntgenhoitaja|rontgenhoitaja|ammattilainen|ammattihenkilö|ammattihenkilo';
+const PERSON_CONTEXT_PATTERN = new RegExp(`\\b(?:potilas|nimi|name|syntynyt|synt\\.|s\\.|dob|henkilötunnus|hetu|vaimo|puoliso|aviopuoliso|mies|nainen|tyttö|poika|lapsi|äiti|isä|tytär|veli|sisko|sisar|omainen|lähiomainen|huoltaja|${STAFF_CONTEXT_WORDS})\\b`, 'i');
 const RELATIVE_CONTEXT_WORD_PATTERN = /^(?:vaimo|puoliso|aviopuoliso|äiti|isä|tytär|veli|sisko|sisar|omainen|lähiomainen|huoltaja)$/i;
 const DEMOGRAPHIC_CONTEXT_WORD_PATTERN = /^(?:mies|nainen|tyttö|poika|lapsi)$/i;
+const STAFF_CONTEXT_WORD_PATTERN = new RegExp(`^(?:${STAFF_CONTEXT_WORDS})$`, 'i');
+const STAFF_NAME_PATTERN = new RegExp(`\\b(?:${STAFF_CONTEXT_WORDS})\\s+([A-ZÅÄÖI][A-Za-zÅÄÖåäö'’-]+(?:\\s+[A-ZÅÄÖI][A-Za-zÅÄÖåäö'’-]+)+)\\b`, 'gi');
 const NAME_TOKEN = "[A-ZÅÄÖI][A-Za-zÅÄÖåäö'’-]+";
 const BARE_NAME_PATTERN = new RegExp(`\\b${NAME_TOKEN}(?:\\s+${NAME_TOKEN})+\\b`, 'g');
 
@@ -145,6 +148,21 @@ function collectPatternMatches(text: string): InternalFinding[] {
   return findings;
 }
 
+function collectStaffNames(text: string): InternalFinding[] {
+  const findings: InternalFinding[] = [];
+  const regex = new RegExp(STAFF_NAME_PATTERN.source, STAFF_NAME_PATTERN.flags);
+  let match: RegExpExecArray | null;
+
+  while ((match = regex.exec(text)) !== null) {
+    const value = match[0];
+    const start = match.index;
+    if (isLikelyOrganizationOrTerm(value)) continue;
+    findings.push(createFinding('explicitName', value, 'ammattilainen [NAME]', start));
+  }
+
+  return findings;
+}
+
 function collectBareDatesNearIdentifiers(text: string): InternalFinding[] {
   const findings: InternalFinding[] = [];
   const regex = new RegExp(DATE_PATTERN.source, DATE_PATTERN.flags);
@@ -179,9 +197,15 @@ function collectBareNamesNearIdentifiers(text: string): InternalFinding[] {
     const [firstWord, ...remainingWords] = value.split(/\s+/);
     const isRelativeWord = remainingWords.length > 0 && RELATIVE_CONTEXT_WORD_PATTERN.test(firstWord);
     const isDemographicWord = remainingWords.length > 0 && DEMOGRAPHIC_CONTEXT_WORD_PATTERN.test(firstWord);
+    const isStaffWord = remainingWords.length > 0 && STAFF_CONTEXT_WORD_PATTERN.test(firstWord);
 
     if (isRelativeWord) {
       findings.push(createFinding('explicitName', value, 'omainen [NAME]', start));
+      continue;
+    }
+
+    if (isStaffWord) {
+      findings.push(createFinding('explicitName', value, 'ammattilainen [NAME]', start));
       continue;
     }
 
@@ -201,6 +225,7 @@ function collectBareNamesNearIdentifiers(text: string): InternalFinding[] {
 function collectMatches(text: string): InternalFinding[] {
   const findings = [
     ...collectPatternMatches(text),
+    ...collectStaffNames(text),
     ...collectBareDatesNearIdentifiers(text),
     ...collectBareNamesNearIdentifiers(text),
   ];
