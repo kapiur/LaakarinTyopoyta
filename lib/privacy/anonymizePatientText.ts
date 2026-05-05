@@ -86,16 +86,20 @@ function createFinding(type: PatientDataFindingType, value: string, replacement:
   };
 }
 
+function regexMatches(pattern: RegExp, value: string) {
+  return new RegExp(pattern.source, pattern.flags.replace('g', '')).test(value);
+}
+
 function hasNearbyIdentifier(text: string, start: number, end: number) {
   const windowStart = Math.max(0, start - 80);
   const windowEnd = Math.min(text.length, end + 80);
   const nearby = text.slice(windowStart, windowEnd);
 
   return (
-    HETU_PATTERN.test(nearby) ||
-    PHONE_PATTERN.test(nearby) ||
-    EMAIL_PATTERN.test(nearby) ||
-    DATE_PATTERN.test(nearby) ||
+    regexMatches(HETU_PATTERN, nearby) ||
+    regexMatches(PHONE_PATTERN, nearby) ||
+    regexMatches(EMAIL_PATTERN, nearby) ||
+    regexMatches(DATE_PATTERN, nearby) ||
     /\b(potilas|nimi|name|syntynyt|synt\.|s\.|dob|henkilötunnus|hetu)\b/i.test(nearby)
   );
 }
