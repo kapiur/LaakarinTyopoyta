@@ -37,7 +37,8 @@ const DATE_PATTERN = /\b\d{1,2}\.\d{1,2}\.\d{2,4}\b/g;
 const PHONE_PATTERN = /(?<!\d)(?:\+358|0)\s?(?:4\d|[1-9]\d?)\s?(?:\d\s?){5,8}(?!\d)/g;
 const EMAIL_PATTERN = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
 const PERSON_CONTEXT_PATTERN = /\b(?:potilas|nimi|name|syntynyt|synt\.|s\.|dob|henkilötunnus|hetu|vaimo|puoliso|aviopuoliso|mies|nainen|tyttö|poika|lapsi|äiti|isä|tytär|veli|sisko|sisar|omainen|lähiomainen|huoltaja)\b/i;
-const RELATION_CONTEXT_WORD_PATTERN = /^(?:vaimo|puoliso|aviopuoliso|mies|nainen|tyttö|poika|lapsi|äiti|isä|tytär|veli|sisko|sisar|omainen|lähiomainen|huoltaja)$/i;
+const RELATIVE_CONTEXT_WORD_PATTERN = /^(?:vaimo|puoliso|aviopuoliso|äiti|isä|tytär|veli|sisko|sisar|omainen|lähiomainen|huoltaja)$/i;
+const DEMOGRAPHIC_CONTEXT_WORD_PATTERN = /^(?:mies|nainen|tyttö|poika|lapsi)$/i;
 const NAME_TOKEN = "[A-ZÅÄÖI][A-Za-zÅÄÖåäö'’-]+";
 const BARE_NAME_PATTERN = new RegExp(`\\b${NAME_TOKEN}(?:\\s+${NAME_TOKEN})+\\b`, 'g');
 
@@ -176,10 +177,13 @@ function collectBareNamesNearIdentifiers(text: string): InternalFinding[] {
     if (!hasNearbyIdentifier(text, start, end)) continue;
 
     const [firstWord, ...remainingWords] = value.split(/\s+/);
-    if (remainingWords.length > 0 && RELATION_CONTEXT_WORD_PATTERN.test(firstWord)) {
+    const isRelativeWord = remainingWords.length > 0 && RELATIVE_CONTEXT_WORD_PATTERN.test(firstWord);
+    const isDemographicWord = remainingWords.length > 0 && DEMOGRAPHIC_CONTEXT_WORD_PATTERN.test(firstWord);
+
+    if (isRelativeWord || isDemographicWord) {
       const nameValue = remainingWords.join(' ');
       const nameStart = start + firstWord.length + value.slice(firstWord.length).search(/\S/);
-      findings.push(createFinding('explicitName', nameValue, '[NAME]', nameStart));
+      findings.push(createFinding('explicitName', nameValue, isRelativeWord ? 'omainen [NAME]' : '[NAME]', nameStart));
       continue;
     }
 
