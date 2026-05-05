@@ -8,10 +8,14 @@ type TestCase = {
 };
 
 const syntheticHetu = '13' + '1052' + '-' + '308T';
+const syntheticShortHetu = '10' + '1180' + '-' + '287';
 const syntheticEmail = 'patient.name' + '@' + 'example.com';
 const syntheticPhone = '+358' + ' 40 ' + '123 ' + '4567';
+const syntheticLocalPhone = '045' + '117' + '4031';
 const syntheticDob = '13' + '.10' + '.1952';
+const syntheticBareDob = '10' + '.11' + '.1980';
 const syntheticName = 'Matti' + ' ' + 'Meikalainen';
+const syntheticNameFromUserExample = 'Iurii' + ' ' + 'Kapustin';
 const syntheticAddress = 'Esimerkkikatu' + ' ' + '12 A';
 
 const cases: TestCase[] = [
@@ -20,6 +24,12 @@ const cases: TestCase[] = [
     input: `Potilaan henkilötunnus on ${syntheticHetu} ja asia koskee kontrollia.`,
     expectedFragments: ['[HETU]'],
     forbiddenFragments: [syntheticHetu],
+  },
+  {
+    name: 'Short Finnish identity-like code is redacted',
+    input: `Potilaan henkilötunnus on ${syntheticShortHetu} ja asia koskee kontrollia.`,
+    expectedFragments: ['[HETU]'],
+    forbiddenFragments: [syntheticShortHetu],
   },
   {
     name: 'Email is redacted',
@@ -44,6 +54,12 @@ const cases: TestCase[] = [
     input: `Potilas: ${syntheticName}. Oireena huimaus.`,
     expectedFragments: ['Potilas: [NAME]'],
     forbiddenFragments: [syntheticName],
+  },
+  {
+    name: 'Bare name and bare date near identifiers are redacted',
+    input: `${syntheticNameFromUserExample} ${syntheticShortHetu} ${syntheticBareDob} ${syntheticLocalPhone}`,
+    expectedFragments: ['[NAME]', '[HETU]', '[DATE_OF_BIRTH]', '[PHONE]'],
+    forbiddenFragments: [syntheticNameFromUserExample, syntheticShortHetu, syntheticBareDob, syntheticLocalPhone],
   },
   {
     name: 'Street address is redacted',
