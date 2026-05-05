@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { OpenAI } from "openai";
 import { authOptions } from "../../../../../lib/auth";
+import { anonymizePatientText, mergeAnonymizationResults } from "../../../../../lib/privacy/anonymizePatientText";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const CURRENT_MODEL = "gpt-5.4";
@@ -20,6 +21,22 @@ function tryParseJson(content: string) {
   }
 }
 
+function anonymizeJsonLikeValue(value: unknown): { value: unknown; anonymization: ReturnType<typeof anonymizePatientText> } {
+  if (typeof value === "string") {
+    const result = anonymizePatientText(value);
+    return { value: result.sanitizedText, anonymization: result };
+  }
+
+  const serialized = JSON.stringify(value ?? null);
+  const result = anonymizePatientText(serialized);
+
+  try {
+    return { value: JSON.parse(result.sanitizedText), anonymization: result };
+  } catch {
+    return { value: result.sanitizedText, anonymization: result };
+  }
+}
+
 export async function POST(req: Request) {
   try {
     const session = await getServerSession(authOptions);
@@ -33,7 +50,24 @@ export async function POST(req: Request) {
 
     if (materialSummaries.length === 0) return NextResponse.json({ error: "Yhteenvedot puuttuvat" }, { status: 400 });
 
-    const payload = JSON.stringify({ topic, materialSummaries, sourceSummaries, meta });
+    const anonymizedTopic = anonymizePatientText(topic);
+    const anonymizedMaterialSummaries = anonymizeJsonLikeValue(materialSummaries);
+    const anonymizedSourceSummaries = anonymizeJsonLikeValue(sourceSummaries);
+    const anonymizedMeta = anonymizeJsonLikeValue(meta);
+    const anonymization = mergeAnonymizationResults([
+      anonymizedTopic,
+      anonymizedMaterialSummaries.anonymization,
+      anonymizedSourceSummaries.anonymization,
+      anonymizedMeta.anonymization,
+    ]);
+
+    const payload = JSON.stringify({
+      topic: anonymizedTopic.sanitizedText,
+      materialSummaries: anonymizedMaterialSummaries.value,
+      sourceSummaries: anonymizedSourceSummaries.value,
+      meta: anonymizedMeta.value,
+    });
+
     if (payload.length > MAX_SUMMARY_JSON_CHARS) {
       return NextResponse.json({ error: "Yhteenvetojen määrä on liian suuri. Jaa materiaali kahdeksi kortiksi." }, { status: 400 });
     }
@@ -99,7 +133,14 @@ PALAUTA VAIN validi JSON:
 
     const content = response.choices[0]?.message?.content || "";
     const parsed = tryParseJson(content);
-    return NextResponse.json({ ...parsed, meta: { ...(parsed.meta || {}), processingMode: "client_chunked_two_pass", ...meta } });
+    return NextResponse.json({
+      ...parsed,
+      meta: { ...(parsed.meta || {}), processingMode: "client_chunked_two_pass", ...meta },
+      privacy: {
+        anonymized: anonymization.hasFindings,
+        findingTypes: anonymization.findingTypes,
+      },
+    });
   } catch (error: any) {
     console.error("pikaohjeet-v2 synthesize-clinical-card error:", error);
     return NextResponse.json({ error: "Pikaohjeen koostaminen epäonnistui", details: error?.message || "Unknown error" }, { status: 500 });
