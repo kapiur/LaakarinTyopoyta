@@ -1,18 +1,9 @@
-export { default } from "next-auth/middleware";
+import { NextResponse } from "next/server";
 
-export const config = { 
-  // Список путей, которые будут защищены паролем
-  matcher: [
-    "/",
-    "/templates/:path*",
-    "/ai-tools/:path*",
-    "/pikaohjeet/:path*",
-    "/links/:path*",
-    "/medicines/:path*",
-    "/calculators/:path*",
-    "/settings/:path*",
-    "/admin/:path*",
-    "/profile/:path*",
-    "/api/chat/:path*", // Защищаем и AI чат тоже
-  ] 
+export default function middleware() {
+  return NextResponse.next();
+}
+
+export const config = {
+  matcher: ["/__middleware_disabled__/:path*"],
 };

@@ -28,7 +28,7 @@ export default function Sidebar() {
     { href: "/", label: t("sidebar.home"), icon: LayoutDashboard },
     { href: "/malli", label: t("sidebar.templates"), icon: FileText },
     { href: "/ai-tools", label: t("sidebar.aiTools"), icon: Bot },
-    { href: "/pikaohjeet", label: t("sidebar.quickGuides"), icon: Zap },
+    { href: "/pikaohjeet-v2", label: t("sidebar.quickGuides"), icon: Zap },
     { href: "/links", label: t("sidebar.links"), icon: LinkIcon },
     { href: "/medicines", label: t("sidebar.medicines"), icon: Pill },
     { href: "/calculators", label: t("sidebar.calculators"), icon: Calculator },
