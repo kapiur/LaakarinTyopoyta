@@ -165,7 +165,7 @@ function collectStaffNames(text: string): InternalFinding[] {
 
     const value = text.slice(roleStart, roleEnd + nameMatch[0].length);
     if (isLikelyOrganizationOrTerm(value)) continue;
-    findings.push(createFinding('explicitName', value, 'ammattilainen [NAME]', roleStart));
+    findings.push(createFinding('explicitName', value, 'Ammattilainen [NAME]', roleStart));
   }
 
   return findings;
@@ -208,12 +208,12 @@ function collectBareNamesNearIdentifiers(text: string): InternalFinding[] {
     const isStaffWord = remainingWords.length > 0 && STAFF_CONTEXT_WORD_PATTERN.test(firstWord);
 
     if (isRelativeWord) {
-      findings.push(createFinding('explicitName', value, 'omainen [NAME]', start));
+      findings.push(createFinding('explicitName', value, 'Omainen [NAME]', start));
       continue;
     }
 
     if (isStaffWord) {
-      findings.push(createFinding('explicitName', value, 'ammattilainen [NAME]', start));
+      findings.push(createFinding('explicitName', value, 'Ammattilainen [NAME]', start));
       continue;
     }
 

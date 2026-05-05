@@ -3,9 +3,11 @@
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { ArrowDown, ArrowLeft, ArrowUp, CheckCircle2, Loader2, Plus, Save, Sparkles, AlertTriangle, X } from "lucide-react";
+import PrivacyNotice from "../../../components/PrivacyNotice";
 import { useI18n } from "../../../lib/useI18n";
 
 type UiLang = "fi" | "ru" | "en";
+type PrivacyInfo = { anonymized?: boolean; findingTypes?: string[] } | null;
 type Section = { key: string; title: string; content: string; kind: string; order: number };
 type Draft = { title: string; slugSuggestion?: string; description?: string; type: "CLINICAL"; status: string; visibility: string; sourceStatus: string; environment?: string; audience?: string; tags: string[]; sections: Section[]; fields?: unknown[]; rules?: unknown[]; sources?: Array<{ title: string; url?: string; type?: string; verified?: boolean }>; warnings?: string[]; meta?: Record<string, unknown> };
 type ChunkSummary = Record<string, unknown>;
@@ -31,6 +33,7 @@ const ui = {
 function sectionTone(kind: string) { if (kind === "WARNING") return "border-amber-100 bg-amber-50/70"; if (kind === "CRITERIA") return "border-blue-100 bg-blue-50/60"; if (kind === "ACTIONS") return "border-emerald-100 bg-emerald-50/60"; if (kind === "COPY_TEXT") return "border-violet-100 bg-violet-50/60"; return "border-slate-100 bg-white"; }
 function makeSection(index: number): Section { return { key: `section_${Date.now()}_${index}`, title: `Osio ${index + 1}`, content: "", order: (index + 1) * 10, kind: "TEXT" }; }
 function normalizeSectionOrders(sections: Section[]) { return sections.map((section, index) => ({ ...section, order: (index + 1) * 10 })); }
+function mergePrivacyInfo(items: PrivacyInfo[]): PrivacyInfo { const findingTypes = Array.from(new Set(items.flatMap((item) => item?.findingTypes || []))); return { anonymized: findingTypes.length > 0 || items.some((item) => item?.anonymized), findingTypes }; }
 
 function splitText(text: string, targetChars = CHUNK_TARGET_CHARS, overlapChars = CHUNK_OVERLAP_CHARS) {
   const clean = text.replace(/\r\n/g, "\n").trim();
@@ -69,6 +72,7 @@ export default function ClinicalBuilderPage() {
   const [rawText, setRawText] = useState("");
   const [sourceText, setSourceText] = useState("");
   const [draft, setDraft] = useState<Draft | null>(null);
+  const [privacyInfo, setPrivacyInfo] = useState<PrivacyInfo>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savedSlug, setSavedSlug] = useState<string | null>(null);
@@ -78,13 +82,15 @@ export default function ClinicalBuilderPage() {
   async function createDraft() {
     if (!rawText.trim()) return;
     if (rawText.length > HARD_MATERIAL_MAX_CHARS || sourceText.length > HARD_SOURCE_MAX_CHARS) { alert(dict.tooLong); return; }
-    setLoading(true); setSavedSlug(null); setDraft(null); setProgressCount({ done: 0, total: 0 });
+    setLoading(true); setSavedSlug(null); setDraft(null); setPrivacyInfo(null); setProgressCount({ done: 0, total: 0 });
     try {
       if (rawText.length + sourceText.length <= DIRECT_MODE_MAX_CHARS) {
         setProgress(dict.direct);
         const data = await postJson("/api/pikaohjeet-v2/ai/create-clinical-card", { topic, rawText, sourceText });
+        setPrivacyInfo(data.privacy || null);
         setDraft({ ...data, sections: normalizeSectionOrders(data.sections || []) });
       } else {
+        const privacyItems: PrivacyInfo[] = [];
         const materialChunks = splitText(rawText);
         const sourceChunks = sourceText.trim() ? splitText(sourceText) : [];
         const allChunks = [
@@ -97,11 +103,12 @@ export default function ClinicalBuilderPage() {
         for (let i = 0; i < allChunks.length; i += 3) {
           const batch = allChunks.slice(i, i + 3);
           const results = await Promise.all(batch.map((item) => postJson("/api/pikaohjeet-v2/ai/extract-clinical-chunk", { topic, ...item })));
-          results.forEach((result, offset) => { if (batch[offset].isSource) sourceSummaries.push(result); else materialSummaries.push(result); });
+          results.forEach((result, offset) => { if (result.privacy) privacyItems.push(result.privacy); if (batch[offset].isSource) sourceSummaries.push(result); else materialSummaries.push(result); });
           setProgressCount((prev) => ({ ...prev, done: Math.min(prev.total, prev.done + batch.length) }));
         }
         setProgress(dict.synthesizing);
         const data = await postJson("/api/pikaohjeet-v2/ai/synthesize-clinical-card", { topic, materialSummaries, sourceSummaries, meta: { materialChunks: materialChunks.length, sourceChunks: sourceChunks.length, originalMaterialChars: rawText.length, originalSourceChars: sourceText.length } });
+        setPrivacyInfo(mergePrivacyInfo([...privacyItems, data.privacy || null]));
         setDraft({ ...data, sections: normalizeSectionOrders(data.sections || []) });
       }
     } catch (error: any) { alert(error?.message || "AI error"); }
@@ -119,6 +126,7 @@ export default function ClinicalBuilderPage() {
       <header className="rounded-[2rem] border border-slate-100 bg-white px-7 py-5 shadow-sm"><a href="/pikaohjeet-v2" className="mb-3 inline-flex items-center gap-2 text-xs font-black uppercase tracking-wide text-slate-400 hover:text-blue-600"><ArrowLeft size={14} /> {dict.back}</a><div className="flex flex-wrap items-start justify-between gap-4"><div><h1 className="text-2xl font-black tracking-tight text-slate-900">{dict.title}</h1><p className="text-xs font-bold text-slate-400">{dict.subtitle}</p></div><div className="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-xs font-bold text-amber-900">{dict.adminNote}</div></div></header>
       <main className="grid flex-1 grid-cols-12 gap-5">
         <section className="col-span-5 space-y-4 rounded-[2rem] border border-slate-100 bg-white p-6 shadow-sm">
+          <PrivacyNotice privacy={privacyInfo} />
           <div><label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">{dict.topic}</label><input value={topic} onChange={(e) => setTopic(e.target.value)} className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm font-bold outline-none focus:border-blue-200 focus:bg-white focus:ring-4 focus:ring-blue-500/10" /></div>
           <div><label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">{dict.material} · {rawText.length}</label><textarea value={rawText} onChange={(e) => setRawText(e.target.value)} placeholder={dict.materialPlaceholder} className="min-h-[360px] w-full rounded-[1.5rem] border border-slate-200 bg-slate-50 p-5 text-sm font-semibold leading-relaxed outline-none focus:border-blue-200 focus:bg-white focus:ring-4 focus:ring-blue-500/10" /></div>
           <div><label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">{dict.source} · {sourceText.length}</label><textarea value={sourceText} onChange={(e) => setSourceText(e.target.value)} placeholder={dict.sourcePlaceholder} className="min-h-[180px] w-full rounded-[1.5rem] border border-slate-200 bg-slate-50 p-5 text-sm font-semibold leading-relaxed outline-none focus:border-blue-200 focus:bg-white focus:ring-4 focus:ring-blue-500/10" /></div>

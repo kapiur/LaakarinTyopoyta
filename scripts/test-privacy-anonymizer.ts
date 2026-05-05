@@ -65,15 +65,15 @@ const cases: TestCase[] = [
     forbiddenFragments: [syntheticNameFromUserExample, syntheticShortHetu, syntheticBareDob, syntheticLocalPhone],
   },
   {
-    name: 'Relative words are normalized to generic omainen before redacted name',
+    name: 'Relative words are normalized to generic Omainen before redacted name',
     input: `Vaimo ${syntheticSpouseName} soitti. Tyttö kertoo oireista.`,
-    expectedFragments: ['omainen [NAME]', 'Tyttö kertoo oireista'],
+    expectedFragments: ['Omainen [NAME]', 'Tyttö kertoo oireista'],
     forbiddenFragments: [syntheticSpouseName, 'Vaimo '],
   },
   {
     name: 'Healthcare staff names are normalized to generic professional',
     input: `Lääkäri ${syntheticStaffName} arvioi tilanteen. Fysioterapeutti ${syntheticPhysioName} suositteli harjoitteita.`,
-    expectedFragments: ['ammattilainen [NAME] arvioi tilanteen', 'ammattilainen [NAME] suositteli harjoitteita'],
+    expectedFragments: ['Ammattilainen [NAME] arvioi tilanteen', 'Ammattilainen [NAME] suositteli harjoitteita'],
     forbiddenFragments: [syntheticStaffName, syntheticPhysioName, 'Lääkäri ', 'Fysioterapeutti '],
   },
   {
