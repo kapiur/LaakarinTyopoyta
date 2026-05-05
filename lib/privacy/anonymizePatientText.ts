@@ -41,8 +41,9 @@ const PERSON_CONTEXT_PATTERN = new RegExp(`\\b(?:potilas|nimi|name|syntynyt|synt
 const RELATIVE_CONTEXT_WORD_PATTERN = /^(?:vaimo|puoliso|aviopuoliso|äiti|isä|tytär|veli|sisko|sisar|omainen|lähiomainen|huoltaja)$/i;
 const DEMOGRAPHIC_CONTEXT_WORD_PATTERN = /^(?:mies|nainen|tyttö|poika|lapsi)$/i;
 const STAFF_CONTEXT_WORD_PATTERN = new RegExp(`^(?:${STAFF_CONTEXT_WORDS})$`, 'i');
-const STAFF_NAME_PATTERN = new RegExp(`\\b(?:${STAFF_CONTEXT_WORDS})\\s+([A-ZÅÄÖI][A-Za-zÅÄÖåäö'’-]+(?:\\s+[A-ZÅÄÖI][A-Za-zÅÄÖåäö'’-]+)+)\\b`, 'gi');
 const NAME_TOKEN = "[A-ZÅÄÖI][A-Za-zÅÄÖåäö'’-]+";
+const NAME_SEQUENCE = `${NAME_TOKEN}(?:\\s+${NAME_TOKEN}){1,3}`;
+const STAFF_NAME_PATTERN = new RegExp(`\\b(?:${STAFF_CONTEXT_WORDS})\\s+${NAME_SEQUENCE}\\b`, 'gi');
 const BARE_NAME_PATTERN = new RegExp(`\\b${NAME_TOKEN}(?:\\s+${NAME_TOKEN})+\\b`, 'g');
 
 const NON_PERSON_NAME_PATTERNS = [
