@@ -19,5 +19,6 @@ export const config = {
     "/api/ai-tools/:path*",
     "/api/profile/:path*",
     "/api/admin/:path*",
+    "/api/pikaohjeet-v2/:path*",
   ],
 };
