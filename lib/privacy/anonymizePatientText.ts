@@ -31,21 +31,28 @@ type PatternRule = {
   pattern: RegExp;
 };
 
+const HETU_PATTERN = /\b\d{2}(?:0[1-9]|1[0-2])\d{2}[-+A]\d{3}[0-9A-Z]?\b/g;
+const DATE_PATTERN = /\b\d{1,2}\.\d{1,2}\.\d{2,4}\b/g;
+const PHONE_PATTERN = /(?<!\d)(?:\+358|0)\s?(?:4\d|[1-9]\d?)\s?(?:\d\s?){5,8}(?!\d)/g;
+const EMAIL_PATTERN = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
+const NAME_TOKEN = "[A-ZÅÄÖI][A-Za-zÅÄÖåäö'’-]+";
+const BARE_NAME_PATTERN = new RegExp(`\\b${NAME_TOKEN}(?:\\s+${NAME_TOKEN}){1,3}\\b`, 'g');
+
 const PATTERN_RULES: PatternRule[] = [
   {
     type: 'hetu',
     replacement: '[HETU]',
-    pattern: /\b\d{2}(?:0[1-9]|1[0-2])\d{2}[-+A]\d{3}[0-9A-Z]\b/g,
+    pattern: HETU_PATTERN,
   },
   {
     type: 'email',
     replacement: '[EMAIL]',
-    pattern: /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi,
+    pattern: EMAIL_PATTERN,
   },
   {
     type: 'phone',
     replacement: '[PHONE]',
-    pattern: /(?<!\d)(?:\+358|0)\s?(?:4\d|[1-9]\d?)\s?(?:\d\s?){5,8}(?!\d)/g,
+    pattern: PHONE_PATTERN,
   },
   {
     type: 'dateOfBirth',
@@ -60,7 +67,7 @@ const PATTERN_RULES: PatternRule[] = [
   {
     type: 'explicitName',
     replacement: '$1 [NAME]',
-    pattern: /\b(potilas|nimi|name)\s*:?\s*[A-ZÅÄÖ][A-Za-zÅÄÖåäö'’-]+(?:\s+[A-ZÅÄÖ][A-Za-zÅÄÖåäö'’-]+){1,3}\b/g,
+    pattern: /\b(potilas|nimi|name)\s*:?\s*[A-ZÅÄÖI][A-Za-zÅÄÖåäö'’-]+(?:\s+[A-ZÅÄÖI][A-Za-zÅÄÖåäö'’-]+){1,3}\b/g,
   },
   {
     type: 'address',
@@ -69,7 +76,31 @@ const PATTERN_RULES: PatternRule[] = [
   },
 ];
 
-function collectMatches(text: string): InternalFinding[] {
+function createFinding(type: PatientDataFindingType, value: string, replacement: string, start: number): InternalFinding {
+  return {
+    type,
+    value,
+    replacement,
+    start,
+    end: start + value.length,
+  };
+}
+
+function hasNearbyIdentifier(text: string, start: number, end: number) {
+  const windowStart = Math.max(0, start - 80);
+  const windowEnd = Math.min(text.length, end + 80);
+  const nearby = text.slice(windowStart, windowEnd);
+
+  return (
+    HETU_PATTERN.test(nearby) ||
+    PHONE_PATTERN.test(nearby) ||
+    EMAIL_PATTERN.test(nearby) ||
+    DATE_PATTERN.test(nearby) ||
+    /\b(potilas|nimi|name|syntynyt|synt\.|s\.|dob|henkilötunnus|hetu)\b/i.test(nearby)
+  );
+}
+
+function collectPatternMatches(text: string): InternalFinding[] {
   const findings: InternalFinding[] = [];
 
   for (const rule of PATTERN_RULES) {
@@ -79,20 +110,59 @@ function collectMatches(text: string): InternalFinding[] {
     while ((match = regex.exec(text)) !== null) {
       const value = match[0];
       const start = match.index;
-      const end = start + value.length;
 
       if (!value.trim()) continue;
 
       const replacement = value.replace(rule.pattern, rule.replacement);
-      findings.push({
-        type: rule.type,
-        value,
-        replacement,
-        start,
-        end,
-      });
+      findings.push(createFinding(rule.type, value, replacement, start));
     }
   }
+
+  return findings;
+}
+
+function collectBareDatesNearIdentifiers(text: string): InternalFinding[] {
+  const findings: InternalFinding[] = [];
+  const regex = new RegExp(DATE_PATTERN.source, DATE_PATTERN.flags);
+  let match: RegExpExecArray | null;
+
+  while ((match = regex.exec(text)) !== null) {
+    const value = match[0];
+    const start = match.index;
+    const end = start + value.length;
+
+    if (hasNearbyIdentifier(text, start, end)) {
+      findings.push(createFinding('dateOfBirth', value, '[DATE_OF_BIRTH]', start));
+    }
+  }
+
+  return findings;
+}
+
+function collectBareNamesNearIdentifiers(text: string): InternalFinding[] {
+  const findings: InternalFinding[] = [];
+  const regex = new RegExp(BARE_NAME_PATTERN.source, BARE_NAME_PATTERN.flags);
+  let match: RegExpExecArray | null;
+
+  while ((match = regex.exec(text)) !== null) {
+    const value = match[0];
+    const start = match.index;
+    const end = start + value.length;
+
+    if (hasNearbyIdentifier(text, start, end)) {
+      findings.push(createFinding('explicitName', value, '[NAME]', start));
+    }
+  }
+
+  return findings;
+}
+
+function collectMatches(text: string): InternalFinding[] {
+  const findings = [
+    ...collectPatternMatches(text),
+    ...collectBareDatesNearIdentifiers(text),
+    ...collectBareNamesNearIdentifiers(text),
+  ];
 
   return findings.sort((a, b) => {
     if (a.start !== b.start) return a.start - b.start;
