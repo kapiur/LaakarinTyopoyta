@@ -17,6 +17,18 @@ const openai = new OpenAI({
 // Используем стандартную версию 5.4, так как она наиболее универсальна
 const CURRENT_MODEL = 'gpt-5.4';
 
+const PRIVACY_PLACEHOLDER_SYSTEM_PROMPT = `
+Privacy placeholders such as [NAME], [HETU], [DATE_OF_BIRTH], [PHONE], [EMAIL], [ADDRESS], [PATIENT_ID], [PROFESSIONAL_NAME] and similar bracketed markers are internal server-side privacy markers.
+Do not mention, explain, analyze, repeat or give advice about these placeholders or about anonymization.
+Do not tell the user that the text was anonymized or sanitized.
+Use the already sanitized text normally and complete the user's actual task.
+If a placeholder appears inside source text, treat it as a generic person/detail and produce a natural clinical or administrative formulation when possible.
+`;
+
+function withPrivacyInstruction(systemPrompt: string) {
+  return `${PRIVACY_PLACEHOLDER_SYSTEM_PROMPT}\n\n${systemPrompt}`;
+}
+
 async function getUserToolPrompt(mode: string, userId: number) {
   const tool = await prisma.aiTool.findFirst({
     where: {
@@ -78,15 +90,15 @@ export async function POST(req: Request) {
     // 1. ПРИОРИТЕТ: Кастомный промпт
     if (customPrompt && text) {
       finalMessages = [
-        { role: 'system', content: anonymizedCustomPrompt.sanitizedText },
-        { role: 'user', content: anonymizedText.sanitizedText }
+        { role: 'system', content: withPrivacyInstruction(anonymizedCustomPrompt.sanitizedText) },
+        { role: 'user', content: anonymizedText.sanitizedText },
       ];
     }
     // 2. ВТОРОЙ ПРИОРИТЕТ: Стандартный текстовый инструментарий
     else if (text && mode && DEFAULT_AI_TOOL_PROMPTS[mode as keyof typeof DEFAULT_AI_TOOL_PROMPTS]) {
       finalMessages = [
-        { role: 'system', content: DEFAULT_AI_TOOL_PROMPTS[mode as keyof typeof DEFAULT_AI_TOOL_PROMPTS] },
-        { role: 'user', content: anonymizedText.sanitizedText }
+        { role: 'system', content: withPrivacyInstruction(DEFAULT_AI_TOOL_PROMPTS[mode as keyof typeof DEFAULT_AI_TOOL_PROMPTS]) },
+        { role: 'user', content: anonymizedText.sanitizedText },
       ];
     }
     // 3. ТРЕТИЙ ПРИОРИТЕТ: Пользовательский AI-инструмент из базы
@@ -98,8 +110,8 @@ export async function POST(req: Request) {
       }
 
       finalMessages = [
-        { role: 'system', content: userToolPrompt },
-        { role: 'user', content: anonymizedText.sanitizedText }
+        { role: 'system', content: withPrivacyInstruction(userToolPrompt) },
+        { role: 'user', content: anonymizedText.sanitizedText },
       ];
     }
     // 4. ЧЕТВЕРТЫЙ ПРИОРИТЕТ: Стандартный чат
@@ -114,9 +126,9 @@ export async function POST(req: Request) {
       });
 
       if (lastMessage.toLowerCase().startsWith('malli:')) {
-        finalMessages = [{ role: 'system', content: SYSTEM_PROMPT_MALLI }, ...sanitizedMessages];
+        finalMessages = [{ role: 'system', content: withPrivacyInstruction(SYSTEM_PROMPT_MALLI) }, ...sanitizedMessages];
       } else {
-        finalMessages = [{ role: 'system', content: SYSTEM_PROMPT_MEDICAL }, ...sanitizedMessages];
+        finalMessages = [{ role: 'system', content: withPrivacyInstruction(SYSTEM_PROMPT_MEDICAL) }, ...sanitizedMessages];
       }
     } else {
       return NextResponse.json({ error: 'Puuttuvat tiedot' }, { status: 400 });
@@ -138,10 +150,10 @@ export async function POST(req: Request) {
       },
     });
   } catch (error: any) {
-    console.error("AI Error:", error.message || error);
+    console.error('AI Error:', error.message || error);
     return NextResponse.json({
       error: 'AI-palvelinvirhe',
-      details: error.message
+      details: error.message,
     }, { status: 500 });
   }
 }
