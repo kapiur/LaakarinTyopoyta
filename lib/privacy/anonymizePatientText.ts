@@ -31,12 +31,25 @@ type PatternRule = {
   pattern: RegExp;
 };
 
+const CONTEXT_WINDOW_CHARS = 120;
 const HETU_PATTERN = /\b\d{2}(?:0[1-9]|1[0-2])\d{2}[-+A]\d{3}[0-9A-Z]?\b/g;
 const DATE_PATTERN = /\b\d{1,2}\.\d{1,2}\.\d{2,4}\b/g;
 const PHONE_PATTERN = /(?<!\d)(?:\+358|0)\s?(?:4\d|[1-9]\d?)\s?(?:\d\s?){5,8}(?!\d)/g;
 const EMAIL_PATTERN = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
 const NAME_TOKEN = "[A-ZÅÄÖI][A-Za-zÅÄÖåäö'’-]+";
-const BARE_NAME_PATTERN = new RegExp(`\\b${NAME_TOKEN}(?:\\s+${NAME_TOKEN}){1,3}\\b`, 'g');
+const BARE_NAME_PATTERN = new RegExp(`\\b${NAME_TOKEN}(?:\\s+${NAME_TOKEN})+\\b`, 'g');
+
+const NON_PERSON_NAME_PATTERNS = [
+  /\bKeski\s+Uudenmaan\b/i,
+  /\bKeski\s+Uusimaa\b/i,
+  /\bHyvinkään\s+Sairaala\b/i,
+  /\bHyvinkään\s+Sairaalassa\b/i,
+  /\bMäntsälän\s+Terveyskeskus\b/i,
+  /\bNurmijärven\s+Terveyskeskus\b/i,
+  /\bKäypä\s+Hoito\b/i,
+  /\bHUS\s+[A-ZÅÄÖ][A-Za-zÅÄÖåäö'’-]+\b/,
+  /\bKeusote\s+[A-ZÅÄÖ][A-Za-zÅÄÖåäö'’-]+\b/,
+];
 
 const PATTERN_RULES: PatternRule[] = [
   {
@@ -67,7 +80,7 @@ const PATTERN_RULES: PatternRule[] = [
   {
     type: 'explicitName',
     replacement: '$1 [NAME]',
-    pattern: /\b(potilas|nimi|name)\s*:?\s*[A-ZÅÄÖI][A-Za-zÅÄÖåäö'’-]+(?:\s+[A-ZÅÄÖI][A-Za-zÅÄÖåäö'’-]+){1,3}\b/g,
+    pattern: /\b(potilas|nimi|name)\s*:?\s*[A-ZÅÄÖI][A-Za-zÅÄÖåäö'’-]+(?:\s+[A-ZÅÄÖI][A-Za-zÅÄÖåäö'’-]+)+\b/g,
   },
   {
     type: 'address',
@@ -90,9 +103,13 @@ function regexMatches(pattern: RegExp, value: string) {
   return new RegExp(pattern.source, pattern.flags.replace('g', '')).test(value);
 }
 
+function isLikelyOrganizationOrTerm(value: string) {
+  return NON_PERSON_NAME_PATTERNS.some((pattern) => pattern.test(value));
+}
+
 function hasNearbyIdentifier(text: string, start: number, end: number) {
-  const windowStart = Math.max(0, start - 80);
-  const windowEnd = Math.min(text.length, end + 80);
+  const windowStart = Math.max(0, start - CONTEXT_WINDOW_CHARS);
+  const windowEnd = Math.min(text.length, end + CONTEXT_WINDOW_CHARS);
   const nearby = text.slice(windowStart, windowEnd);
 
   return (
@@ -152,6 +169,8 @@ function collectBareNamesNearIdentifiers(text: string): InternalFinding[] {
     const value = match[0];
     const start = match.index;
     const end = start + value.length;
+
+    if (isLikelyOrganizationOrTerm(value)) continue;
 
     if (hasNearbyIdentifier(text, start, end)) {
       findings.push(createFinding('explicitName', value, '[NAME]', start));
