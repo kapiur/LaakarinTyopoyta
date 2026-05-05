@@ -1,9 +1,23 @@
-import { NextResponse } from "next/server";
-
-export default function middleware() {
-  return NextResponse.next();
-}
+export { default } from "next-auth/middleware";
 
 export const config = {
-  matcher: ["/__middleware_disabled__/:path*"],
+  // Список путей, которые должны быть доступны только после входа в систему.
+  matcher: [
+    "/",
+    "/malli/:path*",
+    "/templates/:path*",
+    "/ai-tools/:path*",
+    "/pikaohjeet/:path*",
+    "/links/:path*",
+    "/medicines/:path*",
+    "/calculators/:path*",
+    "/settings/:path*",
+    "/admin/:path*",
+    "/profile/:path*",
+    "/api/chat/:path*",
+    "/api/templates/:path*",
+    "/api/ai-tools/:path*",
+    "/api/profile/:path*",
+    "/api/admin/:path*",
+  ],
 };
