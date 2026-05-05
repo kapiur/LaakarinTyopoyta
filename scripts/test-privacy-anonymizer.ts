@@ -15,6 +15,7 @@ const syntheticLocalPhone = '045' + '117' + '4031';
 const syntheticDob = '13' + '.10' + '.1952';
 const syntheticBareDob = '10' + '.11' + '.1980';
 const syntheticName = 'Matti' + ' ' + 'Meikalainen';
+const syntheticSpouseName = 'Anna' + ' ' + 'Virtanen';
 const syntheticNameFromUserExample = 'Iurii' + ' ' + 'Kapustin';
 const syntheticAddress = 'Esimerkkikatu' + ' ' + '12 A';
 
@@ -60,6 +61,12 @@ const cases: TestCase[] = [
     input: `${syntheticNameFromUserExample} ${syntheticShortHetu} ${syntheticBareDob} ${syntheticLocalPhone}`,
     expectedFragments: ['[NAME]', '[HETU]', '[DATE_OF_BIRTH]', '[PHONE]'],
     forbiddenFragments: [syntheticNameFromUserExample, syntheticShortHetu, syntheticBareDob, syntheticLocalPhone],
+  },
+  {
+    name: 'Family and demographic words create person-name context',
+    input: `Vaimo ${syntheticSpouseName} soitti. Tyttö kertoo oireista.`,
+    expectedFragments: ['Vaimo [NAME]'],
+    forbiddenFragments: [syntheticSpouseName],
   },
   {
     name: 'Allowlisted organization-like names are not redacted as person names',
