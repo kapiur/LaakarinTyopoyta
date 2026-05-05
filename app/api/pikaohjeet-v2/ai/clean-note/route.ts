@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { OpenAI } from "openai";
 import { authOptions } from "../../../../../lib/auth";
+import { anonymizePatientText, mergeAnonymizationResults } from "../../../../../lib/privacy/anonymizePatientText";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -41,6 +42,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Teksti on liian pitkä tähän toimintoon" }, { status: 400 });
     }
 
+    const anonymizedTitle = anonymizePatientText(title);
+    const anonymizedRawText = anonymizePatientText(rawText);
+    const anonymization = mergeAnonymizationResults([anonymizedTitle, anonymizedRawText]);
+
     const systemPrompt = `
 Olet dr.kapustin.fi-sivuston AI-avustaja. Tehtäväsi on siistiä lääkärin oma muistilappu kliinisesti käyttökelpoiseen muotoon.
 
@@ -76,7 +81,10 @@ PALAUTA VAIN validi JSON tällä rakenteella:
         { role: "system", content: systemPrompt },
         {
           role: "user",
-          content: JSON.stringify({ title, rawText }),
+          content: JSON.stringify({
+            title: anonymizedTitle.sanitizedText,
+            rawText: anonymizedRawText.sanitizedText,
+          }),
         },
       ],
     });
@@ -84,7 +92,13 @@ PALAUTA VAIN validi JSON tällä rakenteella:
     const content = response.choices[0]?.message?.content || "";
     const parsed = tryParseJson(content);
 
-    return NextResponse.json(parsed);
+    return NextResponse.json({
+      ...parsed,
+      privacy: {
+        anonymized: anonymization.hasFindings,
+        findingTypes: anonymization.findingTypes,
+      },
+    });
   } catch (error: any) {
     console.error("pikaohjeet-v2 clean-note error:", error);
     return NextResponse.json(
