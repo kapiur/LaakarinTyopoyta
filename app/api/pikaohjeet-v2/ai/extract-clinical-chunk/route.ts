@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { OpenAI } from "openai";
 import { authOptions } from "../../../../../lib/auth";
+import { anonymizePatientText, mergeAnonymizationResults } from "../../../../../lib/privacy/anonymizePatientText";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const CURRENT_MODEL = "gpt-5.4";
@@ -37,6 +38,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: `Fragmentti on liian pitkä. Enimmäispituus on ${MAX_CHUNK_CHARS} merkkiä.` }, { status: 400 });
     }
 
+    const anonymizedTopic = anonymizePatientText(topic);
+    const anonymizedChunk = anonymizePatientText(chunk);
+    const anonymization = mergeAnonymizationResults([anonymizedTopic, anonymizedChunk]);
+
     const systemPrompt = `
 Olet kliininen tekstin tiivistäjä. Poimi annetusta fragmentista vain asiat, joista on hyötyä Terveysasema-lääkärin nopeassa Pikaohjeessa.
 
@@ -60,13 +65,28 @@ Palauta tiivis suomenkielinen JSON:
       temperature: 0,
       messages: [
         { role: "system", content: systemPrompt },
-        { role: "user", content: JSON.stringify({ topic, chunk, index, total, isSource }) },
+        {
+          role: "user",
+          content: JSON.stringify({
+            topic: anonymizedTopic.sanitizedText,
+            chunk: anonymizedChunk.sanitizedText,
+            index,
+            total,
+            isSource,
+          }),
+        },
       ],
     });
 
     const content = response.choices[0]?.message?.content || "";
     const parsed = tryParseJson(content);
-    return NextResponse.json(parsed);
+    return NextResponse.json({
+      ...parsed,
+      privacy: {
+        anonymized: anonymization.hasFindings,
+        findingTypes: anonymization.findingTypes,
+      },
+    });
   } catch (error: any) {
     console.error("pikaohjeet-v2 extract-clinical-chunk error:", error);
     return NextResponse.json({ error: "Fragmentin AI-käsittely epäonnistui", details: error?.message || "Unknown error" }, { status: 500 });
