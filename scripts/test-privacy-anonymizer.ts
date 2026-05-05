@@ -16,6 +16,8 @@ const syntheticDob = '13' + '.10' + '.1952';
 const syntheticBareDob = '10' + '.11' + '.1980';
 const syntheticName = 'Matti' + ' ' + 'Meikalainen';
 const syntheticSpouseName = 'Anna' + ' ' + 'Virtanen';
+const syntheticStaffName = 'Laura' + ' ' + 'Laaksonen';
+const syntheticPhysioName = 'Pekka' + ' ' + 'Korhonen';
 const syntheticNameFromUserExample = 'Iurii' + ' ' + 'Kapustin';
 const syntheticAddress = 'Esimerkkikatu' + ' ' + '12 A';
 
@@ -67,6 +69,12 @@ const cases: TestCase[] = [
     input: `Vaimo ${syntheticSpouseName} soitti. Tyttö kertoo oireista.`,
     expectedFragments: ['omainen [NAME]', 'Tyttö kertoo oireista'],
     forbiddenFragments: [syntheticSpouseName, 'Vaimo '],
+  },
+  {
+    name: 'Healthcare staff names are normalized to generic professional',
+    input: `Lääkäri ${syntheticStaffName} arvioi tilanteen. Fysioterapeutti ${syntheticPhysioName} suositteli harjoitteita.`,
+    expectedFragments: ['ammattilainen [NAME] arvioi tilanteen', 'ammattilainen [NAME] suositteli harjoitteita'],
+    forbiddenFragments: [syntheticStaffName, syntheticPhysioName, 'Lääkäri ', 'Fysioterapeutti '],
   },
   {
     name: 'Allowlisted organization-like names are not redacted as person names',
