@@ -36,10 +36,15 @@ const HETU_PATTERN = /\b\d{2}(?:0[1-9]|1[0-2])\d{2}[-+A]\d{3}[0-9A-Z]?\b/g;
 const DATE_PATTERN = /\b\d{1,2}\.\d{1,2}\.\d{2,4}\b/g;
 const PHONE_PATTERN = /(?<!\d)(?:\+358|0)\s?(?:4\d|[1-9]\d?)\s?(?:\d\s?){5,8}(?!\d)/g;
 const EMAIL_PATTERN = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
-const PERSON_CONTEXT_PATTERN = /\b(?:potilas|nimi|name|syntynyt|synt\.|s\.|dob|henkilötunnus|hetu|vaimo|puoliso|aviopuoliso|mies|nainen|tyttö|poika|lapsi|äiti|isä|tytär|veli|sisko|sisar|omainen|lähiomainen|huoltaja)\b/i;
+const STAFF_CONTEXT_WORDS = 'lääkäri|laakari|hoitaja|sairaanhoitaja|terveydenhoitaja|lähihoitaja|lahihoitaja|fysioterapeutti|fysioterapeuti|toimintaterapeutti|puheterapeutti|psykologi|psykiatri|sosiaalityöntekijä|sosiaalityontekija|ravitsemusterapeutti|farmaseutti|proviisori|hammaslääkäri|hammaslaakari|suuhygienisti|kätilö|katilo|ensihoitaja|laboratoriohoitaja|röntgenhoitaja|rontgenhoitaja|ammattilainen|ammattihenkilö|ammattihenkilo';
+const PERSON_CONTEXT_PATTERN = new RegExp(`\\b(?:potilas|nimi|name|syntynyt|synt\\.|s\\.|dob|henkilötunnus|hetu|vaimo|puoliso|aviopuoliso|mies|nainen|tyttö|poika|lapsi|äiti|isä|tytär|veli|sisko|sisar|omainen|lähiomainen|huoltaja|${STAFF_CONTEXT_WORDS})\\b`, 'i');
 const RELATIVE_CONTEXT_WORD_PATTERN = /^(?:vaimo|puoliso|aviopuoliso|äiti|isä|tytär|veli|sisko|sisar|omainen|lähiomainen|huoltaja)$/i;
 const DEMOGRAPHIC_CONTEXT_WORD_PATTERN = /^(?:mies|nainen|tyttö|poika|lapsi)$/i;
+const STAFF_CONTEXT_WORD_PATTERN = new RegExp(`^(?:${STAFF_CONTEXT_WORDS})$`, 'i');
+const STAFF_ROLE_PATTERN = new RegExp(`\\b(?:${STAFF_CONTEXT_WORDS})\\b`, 'gi');
 const NAME_TOKEN = "[A-ZÅÄÖI][A-Za-zÅÄÖåäö'’-]+";
+const NAME_SEQUENCE = `${NAME_TOKEN}(?:\\s+${NAME_TOKEN}){1,3}`;
+const NAME_AFTER_ROLE_PATTERN = new RegExp(`^\\s+${NAME_SEQUENCE}\\b`);
 const BARE_NAME_PATTERN = new RegExp(`\\b${NAME_TOKEN}(?:\\s+${NAME_TOKEN})+\\b`, 'g');
 
 const NON_PERSON_NAME_PATTERNS = [
@@ -145,6 +150,27 @@ function collectPatternMatches(text: string): InternalFinding[] {
   return findings;
 }
 
+function collectStaffNames(text: string): InternalFinding[] {
+  const findings: InternalFinding[] = [];
+  const roleRegex = new RegExp(STAFF_ROLE_PATTERN.source, STAFF_ROLE_PATTERN.flags);
+  let match: RegExpExecArray | null;
+
+  while ((match = roleRegex.exec(text)) !== null) {
+    const roleStart = match.index;
+    const roleEnd = roleStart + match[0].length;
+    const afterRole = text.slice(roleEnd);
+    const nameMatch = NAME_AFTER_ROLE_PATTERN.exec(afterRole);
+
+    if (!nameMatch) continue;
+
+    const value = text.slice(roleStart, roleEnd + nameMatch[0].length);
+    if (isLikelyOrganizationOrTerm(value)) continue;
+    findings.push(createFinding('explicitName', value, 'ammattilainen [NAME]', roleStart));
+  }
+
+  return findings;
+}
+
 function collectBareDatesNearIdentifiers(text: string): InternalFinding[] {
   const findings: InternalFinding[] = [];
   const regex = new RegExp(DATE_PATTERN.source, DATE_PATTERN.flags);
@@ -179,9 +205,15 @@ function collectBareNamesNearIdentifiers(text: string): InternalFinding[] {
     const [firstWord, ...remainingWords] = value.split(/\s+/);
     const isRelativeWord = remainingWords.length > 0 && RELATIVE_CONTEXT_WORD_PATTERN.test(firstWord);
     const isDemographicWord = remainingWords.length > 0 && DEMOGRAPHIC_CONTEXT_WORD_PATTERN.test(firstWord);
+    const isStaffWord = remainingWords.length > 0 && STAFF_CONTEXT_WORD_PATTERN.test(firstWord);
 
     if (isRelativeWord) {
       findings.push(createFinding('explicitName', value, 'omainen [NAME]', start));
+      continue;
+    }
+
+    if (isStaffWord) {
+      findings.push(createFinding('explicitName', value, 'ammattilainen [NAME]', start));
       continue;
     }
 
@@ -201,6 +233,7 @@ function collectBareNamesNearIdentifiers(text: string): InternalFinding[] {
 function collectMatches(text: string): InternalFinding[] {
   const findings = [
     ...collectPatternMatches(text),
+    ...collectStaffNames(text),
     ...collectBareDatesNearIdentifiers(text),
     ...collectBareNamesNearIdentifiers(text),
   ];
