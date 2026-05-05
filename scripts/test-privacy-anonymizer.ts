@@ -62,6 +62,12 @@ const cases: TestCase[] = [
     forbiddenFragments: [syntheticNameFromUserExample, syntheticShortHetu, syntheticBareDob, syntheticLocalPhone],
   },
   {
+    name: 'Allowlisted organization-like names are not redacted as person names',
+    input: `Käypä Hoito ja Keski Uudenmaan hyvinvointialue. Potilas synt. ${syntheticDob}, puhelin ${syntheticLocalPhone}.`,
+    expectedFragments: ['Käypä Hoito', 'Keski Uudenmaan', '[DATE_OF_BIRTH]', '[PHONE]'],
+    forbiddenFragments: [syntheticDob, syntheticLocalPhone],
+  },
+  {
     name: 'Street address is redacted',
     input: `Osoite on ${syntheticAddress}. Potilas asuu yksin.`,
     expectedFragments: ['[ADDRESS]'],
