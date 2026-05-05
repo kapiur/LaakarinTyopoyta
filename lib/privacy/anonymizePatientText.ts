@@ -36,6 +36,7 @@ const HETU_PATTERN = /\b\d{2}(?:0[1-9]|1[0-2])\d{2}[-+A]\d{3}[0-9A-Z]?\b/g;
 const DATE_PATTERN = /\b\d{1,2}\.\d{1,2}\.\d{2,4}\b/g;
 const PHONE_PATTERN = /(?<!\d)(?:\+358|0)\s?(?:4\d|[1-9]\d?)\s?(?:\d\s?){5,8}(?!\d)/g;
 const EMAIL_PATTERN = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
+const PERSON_CONTEXT_PATTERN = /\b(?:potilas|nimi|name|syntynyt|synt\.|s\.|dob|henkilötunnus|hetu|vaimo|puoliso|aviopuoliso|mies|nainen|tyttö|poika|lapsi|äiti|isä|tytär|veli|sisko|sisar|omainen|lähiomainen|huoltaja)\b/i;
 const NAME_TOKEN = "[A-ZÅÄÖI][A-Za-zÅÄÖåäö'’-]+";
 const BARE_NAME_PATTERN = new RegExp(`\\b${NAME_TOKEN}(?:\\s+${NAME_TOKEN})+\\b`, 'g');
 
@@ -117,7 +118,7 @@ function hasNearbyIdentifier(text: string, start: number, end: number) {
     regexMatches(PHONE_PATTERN, nearby) ||
     regexMatches(EMAIL_PATTERN, nearby) ||
     regexMatches(DATE_PATTERN, nearby) ||
-    /\b(potilas|nimi|name|syntynyt|synt\.|s\.|dob|henkilötunnus|hetu)\b/i.test(nearby)
+    PERSON_CONTEXT_PATTERN.test(nearby)
   );
 }
 
