@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { OpenAI } from "openai";
 import { authOptions } from "../../../../../lib/auth";
+import { anonymizePatientText, mergeAnonymizationResults } from "../../../../../lib/privacy/anonymizePatientText";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const CURRENT_MODEL = "gpt-5.4";
@@ -241,12 +242,31 @@ export async function POST(req: Request) {
       );
     }
 
-    const totalInputLength = rawText.length + sourceText.length;
-    const parsed = totalInputLength <= DIRECT_MODE_MAX_CHARS
-      ? await createClinicalDraftDirect({ topic, rawText, sourceText })
-      : await createClinicalDraftChunked({ topic, rawText, sourceText });
+    const anonymizedTopic = anonymizePatientText(topic);
+    const anonymizedRawText = anonymizePatientText(rawText);
+    const anonymizedSourceText = anonymizePatientText(sourceText);
+    const anonymization = mergeAnonymizationResults([anonymizedTopic, anonymizedRawText, anonymizedSourceText]);
 
-    return NextResponse.json(parsed);
+    const totalInputLength = anonymizedRawText.sanitizedText.length + anonymizedSourceText.sanitizedText.length;
+    const parsed = totalInputLength <= DIRECT_MODE_MAX_CHARS
+      ? await createClinicalDraftDirect({
+          topic: anonymizedTopic.sanitizedText,
+          rawText: anonymizedRawText.sanitizedText,
+          sourceText: anonymizedSourceText.sanitizedText,
+        })
+      : await createClinicalDraftChunked({
+          topic: anonymizedTopic.sanitizedText,
+          rawText: anonymizedRawText.sanitizedText,
+          sourceText: anonymizedSourceText.sanitizedText,
+        });
+
+    return NextResponse.json({
+      ...parsed,
+      privacy: {
+        anonymized: anonymization.hasFindings,
+        findingTypes: anonymization.findingTypes,
+      },
+    });
   } catch (error: any) {
     console.error("pikaohjeet-v2 create-clinical-card error:", error);
     return NextResponse.json({ error: "AI-käsittely epäonnistui", details: error?.message || "Unknown error" }, { status: 500 });
