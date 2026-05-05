@@ -16,14 +16,7 @@ const openai = new OpenAI({
 // Используем стандартную версию 5.4, так как она наиболее универсальна
 const CURRENT_MODEL = 'gpt-5.4';
 
-async function getUserToolPrompt(mode: string) {
-  const session = await getServerSession(authOptions);
-  const userId = Number((session?.user as any)?.id);
-
-  if (!Number.isFinite(userId)) {
-    return null;
-  }
-
+async function getUserToolPrompt(mode: string, userId: number) {
   const tool = await prisma.aiTool.findFirst({
     where: {
       key: mode,
@@ -41,6 +34,13 @@ async function getUserToolPrompt(mode: string) {
 
 export async function POST(req: Request) {
   try {
+    const session = await getServerSession(authOptions);
+    const userId = Number((session?.user as any)?.id);
+
+    if (!Number.isFinite(userId)) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const body = await req.json();
     const { messages, text, mode, customPrompt } = body;
 
@@ -62,7 +62,7 @@ export async function POST(req: Request) {
     }
     // 3. ТРЕТИЙ ПРИОРИТЕТ: Пользовательский AI-инструмент из базы
     else if (text && mode) {
-      const userToolPrompt = await getUserToolPrompt(mode);
+      const userToolPrompt = await getUserToolPrompt(mode, userId);
 
       if (!userToolPrompt) {
         return NextResponse.json({ error: 'AI-työkalua ei löytynyt' }, { status: 404 });
