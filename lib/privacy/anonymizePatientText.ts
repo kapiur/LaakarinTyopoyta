@@ -180,10 +180,15 @@ function collectBareNamesNearIdentifiers(text: string): InternalFinding[] {
     const isRelativeWord = remainingWords.length > 0 && RELATIVE_CONTEXT_WORD_PATTERN.test(firstWord);
     const isDemographicWord = remainingWords.length > 0 && DEMOGRAPHIC_CONTEXT_WORD_PATTERN.test(firstWord);
 
-    if (isRelativeWord || isDemographicWord) {
+    if (isRelativeWord) {
+      findings.push(createFinding('explicitName', value, 'omainen [NAME]', start));
+      continue;
+    }
+
+    if (isDemographicWord) {
       const nameValue = remainingWords.join(' ');
       const nameStart = start + firstWord.length + value.slice(firstWord.length).search(/\S/);
-      findings.push(createFinding('explicitName', nameValue, isRelativeWord ? 'omainen [NAME]' : '[NAME]', nameStart));
+      findings.push(createFinding('explicitName', nameValue, '[NAME]', nameStart));
       continue;
     }
 
