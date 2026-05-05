@@ -63,10 +63,10 @@ const cases: TestCase[] = [
     forbiddenFragments: [syntheticNameFromUserExample, syntheticShortHetu, syntheticBareDob, syntheticLocalPhone],
   },
   {
-    name: 'Family and demographic words create person-name context',
+    name: 'Relative words are normalized to generic omainen before redacted name',
     input: `Vaimo ${syntheticSpouseName} soitti. Tyttö kertoo oireista.`,
-    expectedFragments: ['Vaimo [NAME]'],
-    forbiddenFragments: [syntheticSpouseName],
+    expectedFragments: ['omainen [NAME]', 'Tyttö kertoo oireista'],
+    forbiddenFragments: [syntheticSpouseName, 'Vaimo '],
   },
   {
     name: 'Allowlisted organization-like names are not redacted as person names',
