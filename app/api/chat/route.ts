@@ -25,8 +25,21 @@ Use the already sanitized text normally and complete the user's actual task.
 If a placeholder appears inside source text, treat it as a generic person/detail and produce a natural clinical or administrative formulation when possible.
 `;
 
+const MAIN_CHAT_CLINICAL_AUDIENCE_PROMPT = `
+This chat is intended exclusively for physicians and other healthcare professionals using the system during clinical work.
+Do not answer as if the user were a patient, layperson, family member or general consumer unless the user explicitly asks you to draft patient-facing instructions.
+Assume the user needs clinical decision support, documentation support or practical workflow support in the Finnish healthcare context.
+Use professional medical terminology and give concise, clinically actionable answers suitable for a doctor at a health centre, urgent care, ward or similar setting.
+When useful, structure the answer around differential diagnosis, key history, focused status, investigations, treatment, follow-up, red flags and referral/consultation thresholds.
+If patient-facing counselling is relevant, separate it clearly under a heading such as "Potilaalle annettava ohje" rather than making the whole answer patient-directed.
+`;
+
 function withPrivacyInstruction(systemPrompt: string) {
   return `${PRIVACY_PLACEHOLDER_SYSTEM_PROMPT}\n\n${systemPrompt}`;
+}
+
+function withMainChatClinicalAudience(systemPrompt: string) {
+  return `${MAIN_CHAT_CLINICAL_AUDIENCE_PROMPT}\n\n${systemPrompt}`;
 }
 
 async function getUserToolPrompt(mode: string, userId: number) {
@@ -128,7 +141,7 @@ export async function POST(req: Request) {
       if (lastMessage.toLowerCase().startsWith('malli:')) {
         finalMessages = [{ role: 'system', content: withPrivacyInstruction(SYSTEM_PROMPT_MALLI) }, ...sanitizedMessages];
       } else {
-        finalMessages = [{ role: 'system', content: withPrivacyInstruction(SYSTEM_PROMPT_MEDICAL) }, ...sanitizedMessages];
+        finalMessages = [{ role: 'system', content: withPrivacyInstruction(withMainChatClinicalAudience(SYSTEM_PROMPT_MEDICAL)) }, ...sanitizedMessages];
       }
     } else {
       return NextResponse.json({ error: 'Puuttuvat tiedot' }, { status: 400 });
