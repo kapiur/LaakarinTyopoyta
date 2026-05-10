@@ -59,6 +59,7 @@ export default function AiToolsPage() {
   const [status, setStatus] = useState("");
 
   const isEditing = Boolean(form.id);
+  const hasCurrentPrompt = Boolean(form.prompt.trim());
   const selectedTool = useMemo(() => tools.find((tool) => tool.id === form.id) ?? null, [tools, form.id]);
 
   const loadTools = async () => {
@@ -325,6 +326,9 @@ export default function AiToolsPage() {
                 <p className="text-sm text-slate-600 mt-1">
                   {t("aiTools.promptAssistantDescription")}
                 </p>
+                <p className="text-xs text-blue-700 bg-white/70 border border-blue-100 rounded-xl px-3 py-2 mt-3">
+                  {hasCurrentPrompt ? t("aiTools.promptAssistantEditNotice") : t("aiTools.promptAssistantCreateNotice")}
+                </p>
               </div>
 
               <textarea
@@ -340,7 +344,7 @@ export default function AiToolsPage() {
                 className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-black disabled:opacity-50 shadow-sm"
               >
                 {isAssistantLoading ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
-                {t("aiTools.createOrImprovePrompt")}
+                {hasCurrentPrompt ? t("aiTools.improveCurrentPrompt") : t("aiTools.createPrompt")}
               </button>
             </div>
 
