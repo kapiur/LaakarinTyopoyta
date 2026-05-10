@@ -10,7 +10,7 @@ const openai = new OpenAI({
 const CURRENT_MODEL = 'gpt-5.4';
 
 const PROMPT_ASSISTANT_SYSTEM_PROMPT = `
-Olet asiantuntija, joka laatii turvallisia ja käytännöllisiä system prompt -ohjeita lääkärin AI-työkaluja varten Suomen terveydenhuollon kontekstissa.
+Olet asiantuntija, joka laatii ja muokkaa turvallisia ja käytännöllisiä system prompt -ohjeita lääkärin AI-työkaluja varten Suomen terveydenhuollon kontekstissa.
 
 Käyttäjän kuvaus voi olla millä tahansa kielellä, esimerkiksi venäjäksi, suomeksi, englanniksi tai muulla kielellä. Ymmärrä käyttäjän tarkoitus riippumatta kuvauskielestä. Lopullinen tallennettava system prompt on kuitenkin kirjoitettava aina suomeksi.
 
@@ -29,7 +29,24 @@ Käyttäjän konteksti:
 - ellei käyttäjä nimenomaisesti pyydä muuta, tulevan työkalun tuotoksen tulee olla suomeksi.
 
 Tehtävä:
-Luo tai paranna käyttäjän kuvauksen perusteella ammattimainen system prompt käyttäjän AI-painiketta varten.
+Luo uusi system prompt tai muokkaa olemassa olevaa system promptia käyttäjän kuvauksen perusteella. Noudata tarkasti erillistä toimintatilaa: CREATE_NEW_PROMPT tai EDIT_EXISTING_PROMPT.
+
+Toimintatila CREATE_NEW_PROMPT:
+- Käytä tätä vain, jos nykyistä promptia ei ole annettu tai se on tyhjä.
+- Luo tällöin kokonainen, käyttövalmis system prompt käyttäjän kuvauksen perusteella.
+- Rakenna prompt selkeästi ja lisää tarvittavat turvallisuus-, anonymisointi- ja kliiniset säännöt.
+
+Toimintatila EDIT_EXISTING_PROMPT:
+- Käytä tätä aina, jos nykyinen prompt on annettu.
+- Nykyinen prompt on ensisijainen pohjateksti ja sen rakenne, tarkoitus, tyyli ja olemassa olevat säännöt pitää säilyttää.
+- Älä kirjoita promptia alusta uudelleen.
+- Älä korvaa nykyistä promptia kokonaan uudella versiolla.
+- Tee vain käyttäjän ohjeen vaatimat muutokset, täydennykset tai tarkennukset.
+- Lisää uudet ohjeet loogiseen kohtaan nykyistä promptia.
+- Muuta olemassa olevaa sääntöä vain, jos käyttäjän uusi ohje selvästi koskee juuri sitä sääntöä tai on sen kanssa ristiriidassa.
+- Poista olemassa olevia sääntöjä vain, jos käyttäjä nimenomaisesti pyytää poistamista.
+- Säilytä työkalun alkuperäinen käyttötarkoitus, ellei käyttäjä nimenomaisesti pyydä muuttamaan sitä.
+- Jos käyttäjän ohje on pieni lisäys, palautetun promptin tulee olla nykyinen prompt täydennettynä, ei kokonaan uudelleen jäsennelty prompt.
 
 Vastaussäännöt:
 - Palauta vain valmis system prompt. Älä kirjoita selityksiä ennen promptia tai sen jälkeen.
@@ -41,7 +58,7 @@ Vastaussäännöt:
 - Promptissa tulee olla vaatimus säilyttää käyttäjän oma kirjoitustyyli mahdollisimman hyvin: lauserakenteet, sanavalinnat, kliininen sanasto, tekstin tiiviys, otsikointi, asioiden esittämisjärjestys ja käyttäjän tyypillinen potilaskertomustyyli.
 - Promptissa tulee ohjeistaa, että AI korjaa ja jäsentää tekstiä vain siinä määrin kuin tehtävä vaatii, mutta ei saa tehdä tekstistä tarpeettoman geneeristä tai muuttaa kirjoittajan ääntä.
 - Promptissa tulee olla vaatimus kirjoittaa kliinisesti hyödyllisesti, selkeästi ja suomeksi, ellei työkalun käyttötarkoitus nimenomaisesti vaadi muuta kieltä.
-- Jos käyttäjä pyytää parantamaan olemassa olevaa promptia, säilytä sen ydintarkoitus mutta lisää puuttuvat turvallisuus-, anonymisointi-, kirjoitustyylin säilyttämis- ja kliiniset säännöt.
+- Jos käyttäjä pyytää parantamaan olemassa olevaa promptia, säilytä sen ydintarkoitus mutta lisää vain tarvittavat puuttuvat turvallisuus-, anonymisointi-, kirjoitustyylin säilyttämis- ja kliiniset säännöt.
 `;
 
 export async function POST(req: Request) {
@@ -55,19 +72,25 @@ export async function POST(req: Request) {
     const body = await req.json();
     const description = typeof body.description === 'string' ? body.description.trim() : '';
     const currentPrompt = typeof body.currentPrompt === 'string' ? body.currentPrompt.trim() : '';
+    const mode = currentPrompt ? 'EDIT_EXISTING_PROMPT' : 'CREATE_NEW_PROMPT';
 
     if (!description && !currentPrompt) {
       return NextResponse.json({ error: 'description or currentPrompt is required' }, { status: 400 });
     }
 
     const userContent = [
-      description ? `Käyttäjän kuvaus uudesta tai muutettavasta työkalusta. Kuvaus voi olla millä tahansa kielellä, mutta lopullinen system prompt pitää kirjoittaa suomeksi. Huomioi erityisesti käyttäjän oman kirjoitustyylin säilyttäminen, jos tehtävä liittyy tekstin muokkaamiseen tai kliinisen tekstin kirjoittamiseen:\n${description}` : '',
-      currentPrompt ? `Nykyinen prompt, jota pitää parantaa. Palauta parannettu versio suomeksi ja lisää tarvittaessa ohjeet käyttäjän kirjoitustyylin, lauserakenteiden ja sanaston säilyttämisestä:\n${currentPrompt}` : '',
+      `Toimintatila: ${mode}`,
+      description
+        ? `Käyttäjän ohje. Ohje voi olla millä tahansa kielellä, mutta valmis system prompt pitää palauttaa suomeksi:\n${description}`
+        : 'Käyttäjä ei antanut erillistä muutosohjetta. Jos nykyinen prompt on annettu, tee vain varovainen turvallisuus- ja selkeysparannus säilyttäen nykyinen rakenne.',
+      currentPrompt
+        ? `Nykyinen prompt. Tämä on ensisijainen pohjateksti. Säilytä sen rakenne, tarkoitus, tyyli ja olemassa olevat säännöt. Älä kirjoita sitä alusta uudelleen, vaan muuta vain käyttäjän ohjeen kannalta tarpeelliset kohdat:\n${currentPrompt}`
+        : '',
     ].filter(Boolean).join('\n\n');
 
     const response = await openai.chat.completions.create({
       model: CURRENT_MODEL,
-      temperature: 0.2,
+      temperature: 0.1,
       messages: [
         { role: 'system', content: PROMPT_ASSISTANT_SYSTEM_PROMPT },
         { role: 'user', content: userContent },
@@ -76,6 +99,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       prompt: response.choices[0].message.content ?? '',
+      mode,
     });
   } catch (error: any) {
     console.error('Prompt assistant error:', error.message || error);
