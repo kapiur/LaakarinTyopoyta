@@ -11,7 +11,10 @@ import { prisma } from '../../../lib/prisma';
 import { anonymizePatientText, mergeAnonymizationResults } from '../../../lib/privacy/anonymizePatientText';
 import {
   buildUserAiProfileInstruction,
+  defaultProfileModeForTool,
+  normalizeAiProfileMode,
   withUserAiProfileInstruction,
+  type AiProfileMode,
   type UserAiProfileRecord,
 } from '../../../lib/ai/userAiProfile';
 
@@ -19,7 +22,6 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// Используем стандартную версию 5.4, так как она наиболее универсальна
 const CURRENT_MODEL = 'gpt-5.4';
 
 const PRIVACY_PLACEHOLDER_SYSTEM_PROMPT = `
@@ -47,7 +49,12 @@ function withMainChatClinicalAudience(systemPrompt: string) {
   return `${MAIN_CHAT_CLINICAL_AUDIENCE_PROMPT}\n\n${systemPrompt}`;
 }
 
-async function getUserToolPrompt(mode: string, userId: number) {
+function applyProfile(systemPrompt: string, profile: UserAiProfileRecord | null, profileMode: AiProfileMode) {
+  const profileInstruction = buildUserAiProfileInstruction(profile, profileMode);
+  return withUserAiProfileInstruction(systemPrompt, profileInstruction);
+}
+
+async function getUserTool(mode: string, userId: number) {
   const tool = await prisma.aiTool.findFirst({
     where: {
       key: mode,
@@ -57,10 +64,17 @@ async function getUserToolPrompt(mode: string, userId: number) {
     },
     select: {
       prompt: true,
+      useUserAiProfile: true,
+      profileMode: true,
     },
   });
 
-  return tool?.prompt ?? null;
+  if (!tool) return null;
+
+  return {
+    prompt: tool.prompt,
+    profileMode: tool.useUserAiProfile === false ? 'none' as AiProfileMode : normalizeAiProfileMode(tool.profileMode),
+  };
 }
 
 async function getUserAiProfile(userId: number) {
@@ -77,7 +91,6 @@ async function getUserAiProfile(userId: number) {
 
     return rows[0] ?? null;
   } catch (error) {
-    // The profile table may not exist before migration deployment. AI must continue working without personalization.
     console.error('AI profile loading failed:', error);
     return null;
   }
@@ -117,7 +130,6 @@ export async function POST(req: Request) {
     const { messages, text, mode, customPrompt } = body;
     const inputAnonymizationResults: ReturnType<typeof anonymizePatientText>[] = [];
     const userAiProfile = await getUserAiProfile(userId);
-    const profileInstruction = buildUserAiProfileInstruction(userAiProfile);
 
     const anonymizedText = anonymizePatientText(text, { mode: 'chat' });
     inputAnonymizationResults.push(anonymizedText);
@@ -127,37 +139,34 @@ export async function POST(req: Request) {
 
     let finalMessages: any[] = [];
 
-    // 1. ПРИОРИТЕТ: Кастомный промпт
     if (customPrompt && text) {
       finalMessages = [
-        { role: 'system', content: withPrivacyInstruction(withUserAiProfileInstruction(anonymizedCustomPrompt.sanitizedText, profileInstruction)) },
+        { role: 'system', content: withPrivacyInstruction(applyProfile(anonymizedCustomPrompt.sanitizedText, userAiProfile, 'full')) },
         { role: 'user', content: anonymizedText.sanitizedText },
       ];
     }
-    // 2. ВТОРОЙ ПРИОРИТЕТ: Стандартный текстовый инструментарий
     else if (text && mode && DEFAULT_AI_TOOL_PROMPTS[mode as keyof typeof DEFAULT_AI_TOOL_PROMPTS]) {
+      const defaultMode = defaultProfileModeForTool(mode);
       finalMessages = [
-        { role: 'system', content: withPrivacyInstruction(withUserAiProfileInstruction(DEFAULT_AI_TOOL_PROMPTS[mode as keyof typeof DEFAULT_AI_TOOL_PROMPTS], profileInstruction)) },
+        { role: 'system', content: withPrivacyInstruction(applyProfile(DEFAULT_AI_TOOL_PROMPTS[mode as keyof typeof DEFAULT_AI_TOOL_PROMPTS], userAiProfile, defaultMode)) },
         { role: 'user', content: anonymizedText.sanitizedText },
       ];
     }
-    // 3. ТРЕТИЙ ПРИОРИТЕТ: Пользовательский AI-инструмент из базы
     else if (text && mode) {
-      const userToolPrompt = await getUserToolPrompt(mode, userId);
+      const userTool = await getUserTool(mode, userId);
 
-      if (!userToolPrompt) {
+      if (!userTool) {
         return NextResponse.json({ error: 'AI-työkalua ei löytynyt' }, { status: 404 });
       }
 
-      const anonymizedUserToolPrompt = anonymizePatientText(userToolPrompt, { mode: 'storage' });
+      const anonymizedUserToolPrompt = anonymizePatientText(userTool.prompt, { mode: 'storage' });
       inputAnonymizationResults.push(anonymizedUserToolPrompt);
 
       finalMessages = [
-        { role: 'system', content: withPrivacyInstruction(withUserAiProfileInstruction(anonymizedUserToolPrompt.sanitizedText, profileInstruction)) },
+        { role: 'system', content: withPrivacyInstruction(applyProfile(anonymizedUserToolPrompt.sanitizedText, userAiProfile, userTool.profileMode)) },
         { role: 'user', content: anonymizedText.sanitizedText },
       ];
     }
-    // 4. ЧЕТВЕРТЫЙ ПРИОРИТЕТ: Стандартный чат
     else if (messages && messages.length > 0) {
       const { sanitizedMessages, anonymization } = anonymizeMessages(messages);
       const lastMessage = sanitizedMessages[sanitizedMessages.length - 1].content;
@@ -169,9 +178,9 @@ export async function POST(req: Request) {
       });
 
       if (lastMessage.toLowerCase().startsWith('malli:')) {
-        finalMessages = [{ role: 'system', content: withPrivacyInstruction(withUserAiProfileInstruction(SYSTEM_PROMPT_MALLI, profileInstruction)) }, ...sanitizedMessages];
+        finalMessages = [{ role: 'system', content: withPrivacyInstruction(applyProfile(SYSTEM_PROMPT_MALLI, userAiProfile, 'styleOnly')) }, ...sanitizedMessages];
       } else {
-        finalMessages = [{ role: 'system', content: withPrivacyInstruction(withUserAiProfileInstruction(withMainChatClinicalAudience(SYSTEM_PROMPT_MEDICAL), profileInstruction)) }, ...sanitizedMessages];
+        finalMessages = [{ role: 'system', content: withPrivacyInstruction(applyProfile(withMainChatClinicalAudience(SYSTEM_PROMPT_MEDICAL), userAiProfile, 'full')) }, ...sanitizedMessages];
       }
     } else {
       return NextResponse.json({ error: 'Puuttuvat tiedot' }, { status: 400 });
@@ -180,7 +189,7 @@ export async function POST(req: Request) {
     const response = await openai.chat.completions.create({
       model: CURRENT_MODEL,
       messages: finalMessages,
-      temperature: 0, // Установил 0 для максимальной точности в лабах
+      temperature: 0,
     });
 
     const anonymization = mergeAnonymizationResults(inputAnonymizationResults);
