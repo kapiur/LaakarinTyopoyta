@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { DEFAULT_AI_TOOL_METADATA } from '../../../lib/ai/toolMetadata';
@@ -6,6 +7,21 @@ import { prisma } from '../../../lib/prisma';
 import { normalizeAiProfileMode } from '../../../lib/ai/userAiProfile';
 
 const ALLOWED_ICONS = new Set(['FileText', 'ListChecks', 'Languages', 'Scissors', 'FlaskConical']);
+
+type AiToolRow = {
+  id: string;
+  key: string;
+  label: string;
+  description: string | null;
+  icon: string | null;
+  prompt: string;
+  isActive: boolean;
+  order: number;
+  useUserAiProfile?: boolean;
+  profileMode?: string;
+  createdAt: Date;
+  updatedAt: Date;
+};
 
 function slugifyKey(value: string) {
   return value
@@ -26,21 +42,17 @@ function getUserId(session: unknown) {
   return Number.isFinite(userId) ? userId : null;
 }
 
-function selectManageFields() {
-  return {
-    id: true,
-    key: true,
-    label: true,
-    description: true,
-    icon: true,
-    prompt: true,
-    isActive: true,
-    order: true,
-    useUserAiProfile: true,
-    profileMode: true,
-    createdAt: true,
-    updatedAt: true,
-  } as const;
+async function getManageTools(userId: number) {
+  return prisma.$queryRaw<AiToolRow[]>`
+    SELECT
+      "id", "key", "label", "description", "icon", "prompt", "isActive", "order",
+      COALESCE("useUserAiProfile", true) AS "useUserAiProfile",
+      COALESCE("profileMode", 'full') AS "profileMode",
+      "createdAt", "updatedAt"
+    FROM "AiTool"
+    WHERE "scope" = 'USER' AND "userId" = ${userId}
+    ORDER BY "isActive" DESC, "order" ASC, "createdAt" ASC
+  `;
 }
 
 export async function GET(req: Request) {
@@ -51,44 +63,18 @@ export async function GET(req: Request) {
     const view = searchParams.get('view');
 
     if (view === 'manage') {
-      if (!userId) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-      }
-
-      const tools = await prisma.aiTool.findMany({
-        where: {
-          scope: 'USER',
-          userId,
-        },
-        orderBy: [
-          { isActive: 'desc' },
-          { order: 'asc' },
-          { createdAt: 'asc' },
-        ],
-        select: selectManageFields(),
-      });
-
+      if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      const tools = await getManageTools(userId);
       return NextResponse.json({ tools });
     }
 
     const userTools = userId
-      ? await prisma.aiTool.findMany({
-          where: {
-            scope: 'USER',
-            userId,
-            isActive: true,
-          },
-          orderBy: [
-            { order: 'asc' },
-            { createdAt: 'asc' },
-          ],
-          select: {
-            key: true,
-            label: true,
-            description: true,
-            icon: true,
-          },
-        })
+      ? await prisma.$queryRaw<Array<{ key: string; label: string; description: string | null; icon: string | null }>>`
+          SELECT "key", "label", "description", "icon"
+          FROM "AiTool"
+          WHERE "scope" = 'USER' AND "userId" = ${userId} AND "isActive" = true
+          ORDER BY "order" ASC, "createdAt" ASC
+        `
       : [];
 
     return NextResponse.json({
@@ -104,10 +90,7 @@ export async function GET(req: Request) {
     });
   } catch (error) {
     console.error('AI tools API error:', error);
-
-    return NextResponse.json({
-      tools: DEFAULT_AI_TOOL_METADATA,
-    });
+    return NextResponse.json({ tools: DEFAULT_AI_TOOL_METADATA });
   }
 }
 
@@ -116,9 +99,7 @@ export async function POST(req: Request) {
     const session = await getServerSession(authOptions);
     const userId = getUserId(session);
 
-    if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const body = await req.json();
     const label = typeof body.label === 'string' ? body.label.trim() : '';
@@ -130,41 +111,32 @@ export async function POST(req: Request) {
     const useUserAiProfile = typeof body.useUserAiProfile === 'boolean' ? body.useUserAiProfile : true;
     const profileMode = normalizeAiProfileMode(body.profileMode);
 
-    if (!label) {
-      return NextResponse.json({ error: 'label is required' }, { status: 400 });
-    }
-
-    if (!prompt) {
-      return NextResponse.json({ error: 'prompt is required' }, { status: 400 });
-    }
+    if (!label) return NextResponse.json({ error: 'label is required' }, { status: 400 });
+    if (!prompt) return NextResponse.json({ error: 'prompt is required' }, { status: 400 });
 
     const baseKey = makeUserToolKey(userId, rawKey);
     let key = baseKey;
     let suffix = 2;
 
-    while (await prisma.aiTool.findFirst({ where: { userId, key } })) {
+    while ((await prisma.aiTool.findFirst({ where: { userId, key }, select: { id: true } }))) {
       key = `${baseKey}-${suffix}`;
       suffix += 1;
     }
 
-    const tool = await prisma.aiTool.create({
-      data: {
-        key,
-        label,
-        description,
-        icon,
-        prompt,
-        scope: 'USER',
-        userId,
-        isActive: true,
-        order,
-        useUserAiProfile,
-        profileMode,
-      },
-      select: selectManageFields(),
-    });
+    const id = randomUUID();
+    const rows = await prisma.$queryRaw<AiToolRow[]>`
+      INSERT INTO "AiTool" (
+        "id", "key", "label", "description", "icon", "prompt", "scope", "userId", "isActive", "order",
+        "useUserAiProfile", "profileMode", "createdAt", "updatedAt"
+      ) VALUES (
+        ${id}, ${key}, ${label}, ${description}, ${icon}, ${prompt}, 'USER', ${userId}, true, ${order},
+        ${useUserAiProfile}, ${profileMode}, NOW(), NOW()
+      ) RETURNING
+        "id", "key", "label", "description", "icon", "prompt", "isActive", "order",
+        "useUserAiProfile", "profileMode", "createdAt", "updatedAt"
+    `;
 
-    return NextResponse.json({ tool }, { status: 201 });
+    return NextResponse.json({ tool: rows[0] }, { status: 201 });
   } catch (error) {
     console.error('Create AI tool error:', error);
     return NextResponse.json({ error: 'AI tool creation failed' }, { status: 500 });
