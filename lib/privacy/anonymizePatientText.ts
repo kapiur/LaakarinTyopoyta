@@ -135,7 +135,6 @@ function hasNearbyIdentifier(text: string, start: number, end: number, strict = 
     regexMatches(HETU_PATTERN, nearby) ||
     regexMatches(PHONE_PATTERN, nearby) ||
     regexMatches(EMAIL_PATTERN, nearby) ||
-    regexMatches(DATE_PATTERN, nearby) ||
     PERSON_CONTEXT_PATTERN.test(nearby)
   );
 }
