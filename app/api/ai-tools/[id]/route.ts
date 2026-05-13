@@ -12,108 +12,92 @@ type RouteContext = {
   };
 };
 
+type AiToolRow = {
+  id: string;
+  key: string;
+  label: string;
+  description: string | null;
+  icon: string | null;
+  prompt: string;
+  isActive: boolean;
+  order: number;
+  useUserAiProfile: boolean;
+  profileMode: string;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
 function getUserId(session: unknown) {
   const userId = Number((session as any)?.user?.id);
   return Number.isFinite(userId) ? userId : null;
 }
 
-const selectToolFields = {
-  id: true,
-  key: true,
-  label: true,
-  description: true,
-  icon: true,
-  prompt: true,
-  isActive: true,
-  order: true,
-  useUserAiProfile: true,
-  profileMode: true,
-  createdAt: true,
-  updatedAt: true,
-} as const;
+async function findUserTool(id: string, userId: number) {
+  const rows = await prisma.$queryRaw<Array<{ id: string }>>`
+    SELECT "id" FROM "AiTool"
+    WHERE "id" = ${id} AND "userId" = ${userId} AND "scope" = 'USER'
+    LIMIT 1
+  `;
+
+  return rows[0] ?? null;
+}
 
 export async function PATCH(req: Request, { params }: RouteContext) {
   try {
     const session = await getServerSession(authOptions);
     const userId = getUserId(session);
 
-    if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const existingTool = await prisma.aiTool.findFirst({
-      where: {
-        id: params.id,
-        userId,
-        scope: 'USER',
-      },
-    });
-
-    if (!existingTool) {
-      return NextResponse.json({ error: 'AI tool not found' }, { status: 404 });
-    }
+    const existingTool = await findUserTool(params.id, userId);
+    if (!existingTool) return NextResponse.json({ error: 'AI tool not found' }, { status: 404 });
 
     const body = await req.json();
-    const data: {
-      label?: string;
-      description?: string;
-      icon?: string;
-      prompt?: string;
-      isActive?: boolean;
-      order?: number;
-      useUserAiProfile?: boolean;
-      profileMode?: string;
-    } = {};
+    const currentRows = await prisma.$queryRaw<AiToolRow[]>`
+      SELECT
+        "id", "key", "label", "description", "icon", "prompt", "isActive", "order",
+        COALESCE("useUserAiProfile", true) AS "useUserAiProfile",
+        COALESCE("profileMode", 'full') AS "profileMode",
+        "createdAt", "updatedAt"
+      FROM "AiTool"
+      WHERE "id" = ${existingTool.id}
+      LIMIT 1
+    `;
+    const current = currentRows[0];
 
-    if (typeof body.label === 'string') {
-      const label = body.label.trim();
-      if (!label) {
-        return NextResponse.json({ error: 'label cannot be empty' }, { status: 400 });
-      }
-      data.label = label;
-    }
+    const label = typeof body.label === 'string' ? body.label.trim() : current.label;
+    if (!label) return NextResponse.json({ error: 'label cannot be empty' }, { status: 400 });
 
-    if (typeof body.description === 'string') {
-      data.description = body.description.trim();
-    }
+    const description = typeof body.description === 'string' ? body.description.trim() : current.description;
+    const icon = typeof body.icon === 'string' ? (ALLOWED_ICONS.has(body.icon) ? body.icon : 'FileText') : current.icon;
 
-    if (typeof body.icon === 'string') {
-      data.icon = ALLOWED_ICONS.has(body.icon) ? body.icon : 'FileText';
-    }
+    const prompt = typeof body.prompt === 'string' ? body.prompt.trim() : current.prompt;
+    if (!prompt) return NextResponse.json({ error: 'prompt cannot be empty' }, { status: 400 });
 
-    if (typeof body.prompt === 'string') {
-      const prompt = body.prompt.trim();
-      if (!prompt) {
-        return NextResponse.json({ error: 'prompt cannot be empty' }, { status: 400 });
-      }
-      data.prompt = prompt;
-    }
+    const isActive = typeof body.isActive === 'boolean' ? body.isActive : current.isActive;
+    const order = body.order !== undefined && Number.isFinite(Number(body.order)) ? Number(body.order) : current.order;
+    const useUserAiProfile = typeof body.useUserAiProfile === 'boolean' ? body.useUserAiProfile : current.useUserAiProfile;
+    const profileMode = body.profileMode !== undefined ? normalizeAiProfileMode(body.profileMode) : normalizeAiProfileMode(current.profileMode);
 
-    if (typeof body.isActive === 'boolean') {
-      data.isActive = body.isActive;
-    }
+    const rows = await prisma.$queryRaw<AiToolRow[]>`
+      UPDATE "AiTool"
+      SET
+        "label" = ${label},
+        "description" = ${description},
+        "icon" = ${icon},
+        "prompt" = ${prompt},
+        "isActive" = ${isActive},
+        "order" = ${order},
+        "useUserAiProfile" = ${useUserAiProfile},
+        "profileMode" = ${profileMode},
+        "updatedAt" = NOW()
+      WHERE "id" = ${existingTool.id}
+      RETURNING
+        "id", "key", "label", "description", "icon", "prompt", "isActive", "order",
+        "useUserAiProfile", "profileMode", "createdAt", "updatedAt"
+    `;
 
-    if (typeof body.useUserAiProfile === 'boolean') {
-      data.useUserAiProfile = body.useUserAiProfile;
-    }
-
-    if (body.profileMode !== undefined) {
-      data.profileMode = normalizeAiProfileMode(body.profileMode);
-    }
-
-    if (body.order !== undefined && Number.isFinite(Number(body.order))) {
-      data.order = Number(body.order);
-    }
-
-    const tool = await prisma.aiTool.update({
-      where: {
-        id: existingTool.id,
-      },
-      data,
-      select: selectToolFields,
-    });
-
-    return NextResponse.json({ tool });
+    return NextResponse.json({ tool: rows[0] });
   } catch (error) {
     console.error('Update AI tool error:', error);
     return NextResponse.json({ error: 'AI tool update failed' }, { status: 500 });
@@ -125,27 +109,14 @@ export async function DELETE(_req: Request, { params }: RouteContext) {
     const session = await getServerSession(authOptions);
     const userId = getUserId(session);
 
-    if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const existingTool = await prisma.aiTool.findFirst({
-      where: {
-        id: params.id,
-        userId,
-        scope: 'USER',
-      },
-    });
+    const existingTool = await findUserTool(params.id, userId);
+    if (!existingTool) return NextResponse.json({ error: 'AI tool not found' }, { status: 404 });
 
-    if (!existingTool) {
-      return NextResponse.json({ error: 'AI tool not found' }, { status: 404 });
-    }
-
-    await prisma.aiTool.delete({
-      where: {
-        id: existingTool.id,
-      },
-    });
+    await prisma.$executeRaw`
+      DELETE FROM "AiTool" WHERE "id" = ${existingTool.id}
+    `;
 
     return NextResponse.json({ ok: true });
   } catch (error) {
