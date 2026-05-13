@@ -29,6 +29,7 @@ import {
 } from '../../../lib/templates';
 import TemplateFieldControl from '../../../components/templates/TemplateFieldControl';
 import TemplateSnippetBuilder from '../../../components/templates/TemplateSnippetBuilder';
+import TemplateAiPolishModal from '../../../components/templates/TemplateAiPolishModal';
 import { useI18n } from '../../../lib/useI18n';
 
 const emptyForm: TemplateFormData = {
@@ -180,9 +181,12 @@ const malliCopy = {
   },
 } as const;
 
+type UiLanguage = keyof typeof malliCopy;
+
 export default function TemplatesRedesignPage() {
   const { language } = useI18n();
-  const c = malliCopy[language] ?? malliCopy.fi;
+  const uiLanguage: UiLanguage = language === 'ru' || language === 'en' || language === 'fi' ? language : 'fi';
+  const c = malliCopy[uiLanguage];
   const [categories, setCategories] = useState<TemplateCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeCategoryId, setActiveCategoryId] = useState<number | null>(null);
@@ -193,6 +197,7 @@ export default function TemplatesRedesignPage() {
   const [showHelp, setShowHelp] = useState(false);
   const [showEditor, setShowEditor] = useState(false);
   const [showSectionManager, setShowSectionManager] = useState(false);
+  const [showAiPolish, setShowAiPolish] = useState(false);
   const [formData, setFormData] = useState<TemplateFormData>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -285,6 +290,19 @@ export default function TemplatesRedesignPage() {
       categoryName: categories.find((category) => category.id === selectedTemplate.categoryId)?.name || activeCategory?.name || '',
       author: selectedTemplate.author || 'Doc',
     });
+    setShowEditor(true);
+  };
+
+  const applyAiPolishSuggestion = (templateText: string) => {
+    if (!selectedTemplate) return;
+    setFormData({
+      id: selectedTemplate.id,
+      title: selectedTemplate.title,
+      content: templateText,
+      categoryName: categories.find((category) => category.id === selectedTemplate.categoryId)?.name || activeCategory?.name || '',
+      author: selectedTemplate.author || 'Doc',
+    });
+    setShowAiPolish(false);
     setShowEditor(true);
   };
 
@@ -528,7 +546,7 @@ export default function TemplatesRedesignPage() {
             <div className="p-5 border-b border-blue-50 bg-white/70 flex items-center justify-between">
               <div><div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{c.result}</div><div className="font-black text-slate-800">{selectedTemplate?.title || c.noTemplate}</div></div>
               <div className="flex items-center gap-2">
-                <button type="button" className="px-4 py-2.5 rounded-xl bg-white text-blue-600 ring-1 ring-blue-100 text-[10px] font-black uppercase tracking-widest hover:bg-blue-50 flex items-center gap-2"><Sparkles size={13} /> {c.aiPolish}</button>
+                <button type="button" onClick={() => selectedTemplate && setShowAiPolish(true)} disabled={!selectedTemplate} className="px-4 py-2.5 rounded-xl bg-white text-blue-600 ring-1 ring-blue-100 text-[10px] font-black uppercase tracking-widest hover:bg-blue-50 disabled:opacity-40 flex items-center gap-2"><Sparkles size={13} /> {c.aiPolish}</button>
                 <button type="button" onClick={copyResult} disabled={!finalText} className="px-4 py-2.5 rounded-xl bg-white text-emerald-600 ring-1 ring-emerald-100 text-[10px] font-black uppercase tracking-widest hover:bg-emerald-50 disabled:opacity-50 flex items-center gap-2"><ClipboardCopy size={13} /> {copied ? c.copied : c.copy}</button>
               </div>
             </div>
@@ -616,6 +634,15 @@ export default function TemplatesRedesignPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {showAiPolish && selectedTemplate && (
+        <TemplateAiPolishModal
+          template={selectedTemplate}
+          uiLanguage={uiLanguage}
+          onClose={() => setShowAiPolish(false)}
+          onApply={applyAiPolishSuggestion}
+        />
       )}
 
       {showHelp && (
