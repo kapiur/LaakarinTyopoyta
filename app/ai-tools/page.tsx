@@ -18,6 +18,7 @@ import {
 import { useI18n } from "../../lib/useI18n";
 
 type ProfileMode = "none" | "styleOnly" | "workContextOnly" | "full";
+type UiLang = "fi" | "ru" | "en";
 
 type AiTool = {
   id: string;
@@ -42,12 +43,43 @@ const iconOptions = [
   { value: "FlaskConical", label: "FlaskConical", icon: FlaskConical },
 ];
 
-const profileModeOptions: { value: ProfileMode; label: string; description: string }[] = [
-  { value: "full", label: "Full", description: "Työrooli + kirjoitustyyli" },
-  { value: "styleOnly", label: "Style only", description: "Vain kirjoitustyyli ja rakenne" },
-  { value: "workContextOnly", label: "Work context", description: "Vain työrooli ja kliininen ympäristö" },
-  { value: "none", label: "Off", description: "Ei käytetä AI-profiilia" },
-];
+const profileModeTexts = {
+  fi: {
+    useProfile: "Käytä käyttäjän AI-profiilia tässä työkalussa",
+    modeLabel: "AI-profiilin käyttötila",
+    help: "Full sopii esim. loppuarvioihin ja lähetteisiin. Style only sopii tekstin korjaukseen. Off sopii labroihin ja hyvin tarkkoihin formaatteihin.",
+    modes: {
+      full: { label: "Full", description: "Työrooli + kirjoitustyyli" },
+      styleOnly: { label: "Style only", description: "Vain kirjoitustyyli ja rakenne" },
+      workContextOnly: { label: "Work context", description: "Vain työrooli ja kliininen ympäristö" },
+      none: { label: "Off", description: "Ei käytetä AI-profiilia" },
+    },
+  },
+  ru: {
+    useProfile: "Использовать AI-профиль пользователя в этом инструменте",
+    modeLabel: "Режим использования AI-профиля",
+    help: "Full подходит для loppuarvio и направлений. Style only подходит для исправления текста. Off подходит для лабораторий и строгих форматов.",
+    modes: {
+      full: { label: "Full", description: "Рабочая роль + стиль письма" },
+      styleOnly: { label: "Style only", description: "Только стиль письма и структура" },
+      workContextOnly: { label: "Work context", description: "Только рабочая роль и клиническая среда" },
+      none: { label: "Off", description: "AI-профиль не используется" },
+    },
+  },
+  en: {
+    useProfile: "Use the user's AI profile in this tool",
+    modeLabel: "AI profile mode",
+    help: "Full is suitable for discharge summaries and referrals. Style only is suitable for text correction. Off is suitable for labs and strict formats.",
+    modes: {
+      full: { label: "Full", description: "Work role + writing style" },
+      styleOnly: { label: "Style only", description: "Only writing style and structure" },
+      workContextOnly: { label: "Work context", description: "Only work role and clinical environment" },
+      none: { label: "Off", description: "AI profile is not used" },
+    },
+  },
+};
+
+const profileModeValues: ProfileMode[] = ["full", "styleOnly", "workContextOnly", "none"];
 
 const emptyForm = {
   id: "",
@@ -62,7 +94,9 @@ const emptyForm = {
 };
 
 export default function AiToolsPage() {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
+  const lang: UiLang = ["fi", "ru", "en"].includes(language as UiLang) ? (language as UiLang) : "fi";
+  const profileI18n = profileModeTexts[lang];
   const [tools, setTools] = useState<AiTool[]>([]);
   const [form, setForm] = useState(emptyForm);
   const [idea, setIdea] = useState("");
@@ -205,10 +239,7 @@ export default function AiToolsPage() {
       const response = await fetch("/api/ai-tools/prompt-assistant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          description: idea,
-          currentPrompt: form.prompt,
-        }),
+        body: JSON.stringify({ description: idea, currentPrompt: form.prompt }),
       });
 
       if (!response.ok) throw new Error(t("aiTools.assistantFailed"));
@@ -299,18 +330,19 @@ export default function AiToolsPage() {
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3">
               <label className="flex items-center gap-2 text-sm font-bold text-slate-700">
                 <input type="checkbox" checked={form.useUserAiProfile} onChange={(e) => setForm((prev) => ({ ...prev, useUserAiProfile: e.target.checked, profileMode: e.target.checked ? prev.profileMode : "none" }))} />
-                Käytä käyttäjän AI-profiilia tässä työkalussa
+                {profileI18n.useProfile}
               </label>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <label className="space-y-1">
-                  <span className="text-xs font-bold text-slate-500 uppercase">AI-profiilin käyttötila</span>
+                  <span className="text-xs font-bold text-slate-500 uppercase">{profileI18n.modeLabel}</span>
                   <select disabled={!form.useUserAiProfile} value={form.useUserAiProfile ? form.profileMode : "none"} onChange={(e) => setForm((prev) => ({ ...prev, profileMode: e.target.value as ProfileMode }))} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300 disabled:bg-slate-100 disabled:text-slate-400">
-                    {profileModeOptions.map((option) => <option key={option.value} value={option.value}>{option.label} — {option.description}</option>)}
+                    {profileModeValues.map((value) => {
+                      const option = profileI18n.modes[value];
+                      return <option key={value} value={value}>{option.label} — {option.description}</option>;
+                    })}
                   </select>
                 </label>
-                <div className="text-xs text-slate-500 leading-relaxed bg-white border border-slate-100 rounded-xl p-3">
-                  Full sopii esim. loppuarvioihin ja lähetteisiin. Style only sopii tekstin korjaukseen. Off sopii labroihin ja hyvin tarkkoihin formaatteihin.
-                </div>
+                <div className="text-xs text-slate-500 leading-relaxed bg-white border border-slate-100 rounded-xl p-3">{profileI18n.help}</div>
               </div>
             </div>
 
