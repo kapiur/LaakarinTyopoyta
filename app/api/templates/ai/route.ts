@@ -2,12 +2,16 @@ import { OpenAI } from 'openai';
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '../../../../lib/auth';
+import { prisma } from '../../../../lib/prisma';
 import { getTemplateFields, validateTemplate } from '../../../../lib/templates';
+import { anonymizePatientText, mergeAnonymizationResults } from '../../../../lib/privacy/anonymizePatientText';
+import {
+  buildUserAiProfileInstruction,
+  withUserAiProfileInstruction,
+  type UserAiProfileRecord,
+} from '../../../../lib/ai/userAiProfile';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const CURRENT_MODEL = 'gpt-5.4';
 
 const TRUSTED_MEDICAL_DOMAINS = [
@@ -78,6 +82,10 @@ type TemplateAiResponse = {
     errors: string[];
     warnings: string[];
   };
+  privacy?: {
+    anonymized: boolean;
+    findingTypes: string[];
+  };
 };
 
 function isMode(value: unknown): value is TemplateAiMode {
@@ -110,10 +118,26 @@ function safeJsonParse(raw: string) {
     return JSON.parse(raw);
   } catch {
     const match = raw.match(/```json\s*([\s\S]*?)```/i) || raw.match(/```\s*([\s\S]*?)```/i);
-    if (match?.[1]) {
-      return JSON.parse(match[1]);
-    }
+    if (match?.[1]) return JSON.parse(match[1]);
     throw new Error(`AI response was not valid JSON: ${truncateForError(raw)}`);
+  }
+}
+
+async function getUserAiProfile(userId: number) {
+  try {
+    const rows = await prisma.$queryRaw<UserAiProfileRecord[]>`
+      SELECT
+        "role", "specialty", "workplace", "experienceLevel", "defaultClinicalContext",
+        "preferredStructure", "detailLevel", "writingStyle", "permanentInstructions",
+        "avoidInstructions", "styleSummary", "useProfileByDefault"
+      FROM "UserAiProfile"
+      WHERE "userId" = ${userId}
+      LIMIT 1
+    `;
+    return rows[0] ?? null;
+  } catch (error) {
+    console.error('Template AI profile loading failed:', error);
+    return null;
   }
 }
 
@@ -129,6 +153,8 @@ Critical rules:
 - Do not save anything. You only return a suggestion.
 - Do not invent patient facts.
 - Do not diagnose the patient.
+- Do not mention anonymization, privacy placeholders or server-side sanitization in the response.
+- If the input contains privacy placeholders such as [NAME], [HETU], [DATE], [PHONE], [EMAIL], treat them as generic anonymized details and do not explain them.
 - Do not include guideline citations inside templateText. Sources must be returned separately in usedSources.
 - Technical field names must use lowercase Latin letters, numbers and underscore only: /^[a-z0-9_]+$/.
 - Prefer concise Finnish clinical wording suitable for potilaskertomus.
@@ -169,36 +195,65 @@ Return this JSON shape:
   "warnings": []
 }`;
 
+  if (mode === 'improve_template' || mode === 'transform_instruction') {
+    return `${basePrompt}
+
+Additional rules for editing an existing template:
+- If currentTemplate is provided, preserve the existing template as much as possible.
+- Do not rewrite the entire template unless the user explicitly asks for a full rewrite.
+- Apply only the requested change or improvement.
+- Preserve existing field names, options and showIf logic unless the user asks to change them or they are clearly invalid.
+- Preserve the user's Finnish clinical writing style and structure when possible.
+- If the user instruction is vague, make the smallest safe improvement and explain it briefly in summary.
+- Return the full updated templateText, not a diff.`;
+  }
+
+  if (mode === 'create_from_sample') {
+    return `${basePrompt}
+
+Additional rules for creating a template from a sample:
+- Convert the sample into a reusable interactive Finnish template.
+- Replace case-specific facts with suitable fields.
+- Do not preserve any patient-identifying details.
+- Preserve clinically useful structure and writing style.
+- Prefer practical fields that a physician can fill quickly.`;
+  }
+
   if (mode !== 'create_base_template_from_topic') return basePrompt;
 
   return `${basePrompt}
 
 Additional rules for mode create_base_template_from_topic:
 - This mode creates a base clinical documentation template from a topic.
-- Work like the existing main medical AI chat: base the clinical content primarily on trusted Finnish and European medical recommendations.
+- Base the clinical content primarily on trusted Finnish and European medical recommendations.
 - Prioritize: Käypä hoito, Terveyskirjasto / Duodecim, THL, Fimea, HUS / official Finnish wellbeing service county instructions, and European professional guidelines when applicable.
 - Sources are NOT expected to contain ready-made templates.
 - Use trusted recommendations as the clinical evidence/checklist basis for deciding what the physician should ask, examine, assess and document.
 - Do not use non-medical, commercial, marketing, patient forum, blog or social media sources.
 - Do not copy source text. Convert source-based clinical requirements into a practical Finnish primary-care template.
-- Before writing templateText, internally derive a clinical checklist:
-  1) relevant anamnesis and symptom characterization,
-  2) duration, severity and functional impact,
-  3) risk factors and medication/context factors,
-  4) status/examination items that should be documented,
-  5) red flags / hälytysmerkit that must not be missed,
-  6) findings that should trigger conditional additional fields,
-  7) indications for further investigations/referral/follow-up when supported by trusted sources,
-  8) practical assessment and plan fields for Finnish primary care.
+- Internally derive a clinical checklist: anamnesis, symptom characterization, duration, severity, functional impact, risk factors, medication/context factors, status, red flags, investigations/referral/follow-up and practical plan fields.
 - Convert that checklist into an interactive Lääkärin Työpöytä template using radio/select/multiselect/checkbox/date/number/textarea and showIf rules.
 - Include ordinary normal-findings options and abnormal findings options where clinically useful.
-- Use conditional fields to avoid clutter: detailed textarea fields should appear only when a relevant symptom/finding/red flag is selected.
-- The final templateText must be usable directly as a Finnish physician note template; it should not be merely a list of recommendations.
-- The template should usually include sections or content for: Tulosyy, Esitiedot/anamneesi, Oireen kuvaus, Riskitekijät/context, Status, Hälytysmerkit, Arvio, Suunnitelma.
-- If the topic is an examination-only template, emphasize status/examination fields but still include brief indication and relevant red flags.
-- If you are unsure about exact source attribution, do not fabricate links. In usedSources, list only reliable source names/URLs you are confident about.
-- Do not include links in templateText. Put sources only in usedSources.
-- In summary, briefly explain which clinical dimensions were included and why, in the requested UI language if possible.`;
+- Use conditional fields to avoid clutter.
+- The final templateText must be usable directly as a Finnish physician note template.
+- The template should usually include: Tulosyy, Esitiedot/anamneesi, Oireen kuvaus, Riskitekijät/context, Status, Hälytysmerkit, Arvio, Suunnitelma.
+- Do not include links in templateText. Put sources only in usedSources.`;
+}
+
+function sanitizeRequest(body: TemplateAiRequest) {
+  const sample = anonymizePatientText(body.sampleText || '', { mode: 'profileSample' });
+  const selected = anonymizePatientText(body.selectedText || '', { mode: 'profileSample' });
+  const instruction = anonymizePatientText(body.userInstruction || '', { mode: 'chat' });
+
+  return {
+    body: {
+      ...body,
+      sampleText: sample.sanitizedText,
+      selectedText: selected.sanitizedText,
+      userInstruction: instruction.sanitizedText,
+    },
+    anonymization: mergeAnonymizationResults([sample, selected, instruction]),
+  };
 }
 
 function buildUserPayload(body: TemplateAiRequest) {
@@ -214,7 +269,7 @@ function buildUserPayload(body: TemplateAiRequest) {
     allowedSources: Array.isArray(body.allowedSources) ? body.allowedSources : [],
     allowGeneralTechnicalSkeleton: Boolean(body.allowGeneralTechnicalSkeleton),
     trustedDomains: TRUSTED_MEDICAL_DOMAINS,
-    expectedWorkflow: 'Derive a clinical checklist from trusted Finnish/European medical recommendations, then convert that checklist into an interactive Finnish template. Do not search for ready-made templates.',
+    expectedWorkflow: 'Create or improve an interactive Finnish clinical template. For existing templates, preserve current structure and only apply the requested changes unless a full rewrite is explicitly requested.',
   });
 }
 
@@ -242,6 +297,7 @@ function normalizeAiResponse(
   parsed: any,
   mode: TemplateAiMode,
   fallbackSources: AllowedSource[],
+  privacy?: { anonymized: boolean; findingTypes: string[] },
 ): TemplateAiResponse {
   const templateText = typeof parsed?.templateText === 'string' ? parsed.templateText : '';
   const validation = validateTemplate(templateText);
@@ -268,86 +324,70 @@ function normalizeAiResponse(
     fields,
     usedSources: filteredSources,
     limitations,
-    warnings: [
-      ...warnings,
-      ...validation.warnings.map((issue) => issue.message),
-    ],
+    warnings: [...warnings, ...validation.warnings.map((issue) => issue.message)],
     validation: {
       ok: validation.ok,
       errors: validation.errors.map((issue) => issue.message),
       warnings: validation.warnings.map((issue) => issue.message),
     },
+    privacy,
   };
 }
 
 function validateRequest(body: TemplateAiRequest) {
   if (!isMode(body.mode)) return 'Invalid or missing mode.';
-
-  if (body.mode === 'create_from_sample' && !body.sampleText?.trim()) {
-    return 'sampleText is required for create_from_sample.';
-  }
-
-  if (body.mode === 'transform_instruction' && !body.userInstruction?.trim()) {
-    return 'userInstruction is required for transform_instruction.';
-  }
-
-  if (body.mode === 'improve_template' && !body.currentTemplate?.trim()) {
-    return 'currentTemplate is required for improve_template.';
-  }
-
-  if (body.mode === 'validate_and_explain' && !body.currentTemplate?.trim()) {
-    return 'currentTemplate is required for validate_and_explain.';
-  }
-
-  if (body.mode === 'create_base_template_from_topic' && !body.topic?.trim()) {
-    return 'topic is required for create_base_template_from_topic.';
-  }
-
+  if (body.mode === 'create_from_sample' && !body.sampleText?.trim()) return 'sampleText is required for create_from_sample.';
+  if (body.mode === 'transform_instruction' && !body.userInstruction?.trim()) return 'userInstruction is required for transform_instruction.';
+  if (body.mode === 'improve_template' && !body.currentTemplate?.trim()) return 'currentTemplate is required for improve_template.';
+  if (body.mode === 'validate_and_explain' && !body.currentTemplate?.trim()) return 'currentTemplate is required for validate_and_explain.';
+  if (body.mode === 'create_base_template_from_topic' && !body.topic?.trim()) return 'topic is required for create_base_template_from_topic.';
   return null;
 }
 
-async function runTemplateAiCompletion(body: TemplateAiRequest) {
+async function runTemplateAiCompletion(body: TemplateAiRequest, profileInstruction: string, privacy?: { anonymized: boolean; findingTypes: string[] }) {
+  const systemPrompt = withUserAiProfileInstruction(buildSystemPrompt(body.mode as TemplateAiMode), profileInstruction);
   const response = await openai.chat.completions.create({
     model: CURRENT_MODEL,
     temperature: 0,
     response_format: { type: 'json_object' },
     messages: [
-      { role: 'system', content: buildSystemPrompt(body.mode as TemplateAiMode) },
+      { role: 'system', content: systemPrompt },
       { role: 'user', content: buildUserPayload(body) },
     ],
   });
 
   const raw = response.choices[0]?.message?.content || '{}';
   const parsed = safeJsonParse(raw);
-  return normalizeAiResponse(parsed, body.mode as TemplateAiMode, []);
+  return normalizeAiResponse(parsed, body.mode as TemplateAiMode, [], privacy);
 }
 
 export async function POST(req: Request) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return jsonError('Unauthorized', 401);
-    }
+    const userId = Number((session?.user as any)?.id);
+    if (!Number.isFinite(userId)) return jsonError('Unauthorized', 401);
+    if (!process.env.OPENAI_API_KEY) return jsonError('OPENAI_API_KEY is not configured.', 500);
 
-    if (!process.env.OPENAI_API_KEY) {
-      return jsonError('OPENAI_API_KEY is not configured.', 500);
-    }
+    const originalBody = await req.json() as TemplateAiRequest;
+    const requestError = validateRequest(originalBody);
+    if (requestError || !isMode(originalBody.mode)) return jsonError(requestError || 'Invalid mode.', 400);
 
-    const body = await req.json() as TemplateAiRequest;
-    const requestError = validateRequest(body);
-    if (requestError || !isMode(body.mode)) {
-      return jsonError(requestError || 'Invalid mode.', 400);
-    }
+    const { body, anonymization } = sanitizeRequest(originalBody);
+    const profile = await getUserAiProfile(userId);
+    const profileInstruction = buildUserAiProfileInstruction(profile, 'styleOnly');
+    const privacy = {
+      anonymized: anonymization.hasFindings,
+      findingTypes: anonymization.findingTypes,
+    };
 
-    const normalized = await runTemplateAiCompletion(body);
+    const normalized = await runTemplateAiCompletion(body, profileInstruction, privacy);
     return NextResponse.json(normalized);
   } catch (error: any) {
     console.error('Template AI Error:', error?.message || error);
-    const mode = 'create_from_sample' as TemplateAiMode;
     const response: TemplateAiResponse = {
       ok: false,
       status: 'ai_error',
-      mode,
+      mode: 'create_from_sample',
       summary: 'AI assistant failed to process the request.',
       templateText: '',
       fields: [],
