@@ -9,6 +9,11 @@ import {
 import { authOptions } from '../../../lib/auth';
 import { prisma } from '../../../lib/prisma';
 import { anonymizePatientText, mergeAnonymizationResults } from '../../../lib/privacy/anonymizePatientText';
+import {
+  buildUserAiProfileInstruction,
+  withUserAiProfileInstruction,
+  type UserAiProfileRecord,
+} from '../../../lib/ai/userAiProfile';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -58,6 +63,26 @@ async function getUserToolPrompt(mode: string, userId: number) {
   return tool?.prompt ?? null;
 }
 
+async function getUserAiProfile(userId: number) {
+  try {
+    const rows = await prisma.$queryRaw<UserAiProfileRecord[]>`
+      SELECT
+        "role", "specialty", "workplace", "experienceLevel", "defaultClinicalContext",
+        "preferredStructure", "detailLevel", "writingStyle", "permanentInstructions",
+        "avoidInstructions", "styleSummary", "useProfileByDefault"
+      FROM "UserAiProfile"
+      WHERE "userId" = ${userId}
+      LIMIT 1
+    `;
+
+    return rows[0] ?? null;
+  } catch (error) {
+    // The profile table may not exist before migration deployment. AI must continue working without personalization.
+    console.error('AI profile loading failed:', error);
+    return null;
+  }
+}
+
 function anonymizeMessages(messages: any[]) {
   const anonymizationResults: ReturnType<typeof anonymizePatientText>[] = [];
 
@@ -91,6 +116,8 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { messages, text, mode, customPrompt } = body;
     const inputAnonymizationResults: ReturnType<typeof anonymizePatientText>[] = [];
+    const userAiProfile = await getUserAiProfile(userId);
+    const profileInstruction = buildUserAiProfileInstruction(userAiProfile);
 
     const anonymizedText = anonymizePatientText(text, { mode: 'chat' });
     inputAnonymizationResults.push(anonymizedText);
@@ -103,14 +130,14 @@ export async function POST(req: Request) {
     // 1. ПРИОРИТЕТ: Кастомный промпт
     if (customPrompt && text) {
       finalMessages = [
-        { role: 'system', content: withPrivacyInstruction(anonymizedCustomPrompt.sanitizedText) },
+        { role: 'system', content: withPrivacyInstruction(withUserAiProfileInstruction(anonymizedCustomPrompt.sanitizedText, profileInstruction)) },
         { role: 'user', content: anonymizedText.sanitizedText },
       ];
     }
     // 2. ВТОРОЙ ПРИОРИТЕТ: Стандартный текстовый инструментарий
     else if (text && mode && DEFAULT_AI_TOOL_PROMPTS[mode as keyof typeof DEFAULT_AI_TOOL_PROMPTS]) {
       finalMessages = [
-        { role: 'system', content: withPrivacyInstruction(DEFAULT_AI_TOOL_PROMPTS[mode as keyof typeof DEFAULT_AI_TOOL_PROMPTS]) },
+        { role: 'system', content: withPrivacyInstruction(withUserAiProfileInstruction(DEFAULT_AI_TOOL_PROMPTS[mode as keyof typeof DEFAULT_AI_TOOL_PROMPTS], profileInstruction)) },
         { role: 'user', content: anonymizedText.sanitizedText },
       ];
     }
@@ -126,7 +153,7 @@ export async function POST(req: Request) {
       inputAnonymizationResults.push(anonymizedUserToolPrompt);
 
       finalMessages = [
-        { role: 'system', content: withPrivacyInstruction(anonymizedUserToolPrompt.sanitizedText) },
+        { role: 'system', content: withPrivacyInstruction(withUserAiProfileInstruction(anonymizedUserToolPrompt.sanitizedText, profileInstruction)) },
         { role: 'user', content: anonymizedText.sanitizedText },
       ];
     }
@@ -142,9 +169,9 @@ export async function POST(req: Request) {
       });
 
       if (lastMessage.toLowerCase().startsWith('malli:')) {
-        finalMessages = [{ role: 'system', content: withPrivacyInstruction(SYSTEM_PROMPT_MALLI) }, ...sanitizedMessages];
+        finalMessages = [{ role: 'system', content: withPrivacyInstruction(withUserAiProfileInstruction(SYSTEM_PROMPT_MALLI, profileInstruction)) }, ...sanitizedMessages];
       } else {
-        finalMessages = [{ role: 'system', content: withPrivacyInstruction(withMainChatClinicalAudience(SYSTEM_PROMPT_MEDICAL)) }, ...sanitizedMessages];
+        finalMessages = [{ role: 'system', content: withPrivacyInstruction(withUserAiProfileInstruction(withMainChatClinicalAudience(SYSTEM_PROMPT_MEDICAL), profileInstruction)) }, ...sanitizedMessages];
       }
     } else {
       return NextResponse.json({ error: 'Puuttuvat tiedot' }, { status: 400 });
