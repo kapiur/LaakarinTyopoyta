@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { DEFAULT_AI_TOOL_METADATA } from '../../../lib/ai/toolMetadata';
 import { authOptions } from '../../../lib/auth';
 import { prisma } from '../../../lib/prisma';
+import { normalizeAiProfileMode } from '../../../lib/ai/userAiProfile';
 
 const ALLOWED_ICONS = new Set(['FileText', 'ListChecks', 'Languages', 'Scissors', 'FlaskConical']);
 
@@ -23,6 +24,23 @@ function makeUserToolKey(userId: number, rawKey: string) {
 function getUserId(session: unknown) {
   const userId = Number((session as any)?.user?.id);
   return Number.isFinite(userId) ? userId : null;
+}
+
+function selectManageFields() {
+  return {
+    id: true,
+    key: true,
+    label: true,
+    description: true,
+    icon: true,
+    prompt: true,
+    isActive: true,
+    order: true,
+    useUserAiProfile: true,
+    profileMode: true,
+    createdAt: true,
+    updatedAt: true,
+  } as const;
 }
 
 export async function GET(req: Request) {
@@ -47,18 +65,7 @@ export async function GET(req: Request) {
           { order: 'asc' },
           { createdAt: 'asc' },
         ],
-        select: {
-          id: true,
-          key: true,
-          label: true,
-          description: true,
-          icon: true,
-          prompt: true,
-          isActive: true,
-          order: true,
-          createdAt: true,
-          updatedAt: true,
-        },
+        select: selectManageFields(),
       });
 
       return NextResponse.json({ tools });
@@ -120,6 +127,8 @@ export async function POST(req: Request) {
     const icon = typeof body.icon === 'string' && ALLOWED_ICONS.has(body.icon) ? body.icon : 'FileText';
     const order = Number.isFinite(Number(body.order)) ? Number(body.order) : 100;
     const rawKey = typeof body.key === 'string' && body.key.trim() ? body.key : label;
+    const useUserAiProfile = typeof body.useUserAiProfile === 'boolean' ? body.useUserAiProfile : true;
+    const profileMode = normalizeAiProfileMode(body.profileMode);
 
     if (!label) {
       return NextResponse.json({ error: 'label is required' }, { status: 400 });
@@ -149,19 +158,10 @@ export async function POST(req: Request) {
         userId,
         isActive: true,
         order,
+        useUserAiProfile,
+        profileMode,
       },
-      select: {
-        id: true,
-        key: true,
-        label: true,
-        description: true,
-        icon: true,
-        prompt: true,
-        isActive: true,
-        order: true,
-        createdAt: true,
-        updatedAt: true,
-      },
+      select: selectManageFields(),
     });
 
     return NextResponse.json({ tool }, { status: 201 });
