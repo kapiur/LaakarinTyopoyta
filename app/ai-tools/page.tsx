@@ -17,6 +17,8 @@ import {
 } from "lucide-react";
 import { useI18n } from "../../lib/useI18n";
 
+type ProfileMode = "none" | "styleOnly" | "workContextOnly" | "full";
+
 type AiTool = {
   id: string;
   key: string;
@@ -26,6 +28,8 @@ type AiTool = {
   prompt: string;
   isActive: boolean;
   order: number;
+  useUserAiProfile?: boolean;
+  profileMode?: ProfileMode;
   createdAt: string;
   updatedAt: string;
 };
@@ -38,6 +42,13 @@ const iconOptions = [
   { value: "FlaskConical", label: "FlaskConical", icon: FlaskConical },
 ];
 
+const profileModeOptions: { value: ProfileMode; label: string; description: string }[] = [
+  { value: "full", label: "Full", description: "Työrooli + kirjoitustyyli" },
+  { value: "styleOnly", label: "Style only", description: "Vain kirjoitustyyli ja rakenne" },
+  { value: "workContextOnly", label: "Work context", description: "Vain työrooli ja kliininen ympäristö" },
+  { value: "none", label: "Off", description: "Ei käytetä AI-profiilia" },
+];
+
 const emptyForm = {
   id: "",
   label: "",
@@ -46,6 +57,8 @@ const emptyForm = {
   prompt: "",
   order: 100,
   isActive: true,
+  useUserAiProfile: true,
+  profileMode: "full" as ProfileMode,
 };
 
 export default function AiToolsPage() {
@@ -97,6 +110,8 @@ export default function AiToolsPage() {
       prompt: tool.prompt,
       order: tool.order,
       isActive: tool.isActive,
+      useUserAiProfile: tool.useUserAiProfile !== false,
+      profileMode: tool.profileMode ?? "full",
     });
     setIdea("");
     setStatus("");
@@ -119,6 +134,8 @@ export default function AiToolsPage() {
         prompt: form.prompt,
         order: form.order,
         isActive: form.isActive,
+        useUserAiProfile: form.useUserAiProfile,
+        profileMode: form.useUserAiProfile ? form.profileMode : "none",
       };
 
       const response = await fetch(isEditing ? `/api/ai-tools/${form.id}` : "/api/ai-tools", {
@@ -142,6 +159,8 @@ export default function AiToolsPage() {
           prompt: data.tool.prompt ?? form.prompt,
           order: data.tool.order ?? form.order,
           isActive: data.tool.isActive ?? form.isActive,
+          useUserAiProfile: data.tool.useUserAiProfile !== false,
+          profileMode: data.tool.profileMode ?? "full",
         });
       }
     } catch (error) {
@@ -216,14 +235,9 @@ export default function AiToolsPage() {
           <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
             <Bot className="text-blue-600" size={26} /> {t("aiTools.title")}
           </h1>
-          <p className="text-sm text-slate-500 mt-1 max-w-3xl">
-            {t("aiTools.subtitle")}
-          </p>
+          <p className="text-sm text-slate-500 mt-1 max-w-3xl">{t("aiTools.subtitle")}</p>
         </div>
-        <button
-          onClick={resetForm}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-bold hover:bg-blue-700 shadow-sm"
-        >
+        <button onClick={resetForm} className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-bold hover:bg-blue-700 shadow-sm">
           <Plus size={16} /> {t("aiTools.newTool")}
         </button>
       </div>
@@ -232,27 +246,15 @@ export default function AiToolsPage() {
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 space-y-3">
           <h2 className="font-bold text-slate-800">{t("aiTools.ownTools")}</h2>
           {isLoading ? (
-            <div className="flex items-center gap-2 text-sm text-slate-500 py-6">
-              <Loader2 size={16} className="animate-spin" /> {t("common.loading")}
-            </div>
+            <div className="flex items-center gap-2 text-sm text-slate-500 py-6"><Loader2 size={16} className="animate-spin" /> {t("common.loading")}</div>
           ) : tools.length === 0 ? (
-            <div className="text-sm text-slate-500 bg-slate-50 border border-dashed border-slate-200 rounded-xl p-4">
-              {t("aiTools.noTools")}
-            </div>
+            <div className="text-sm text-slate-500 bg-slate-50 border border-dashed border-slate-200 rounded-xl p-4">{t("aiTools.noTools")}</div>
           ) : (
             <div className="space-y-2">
               {tools.map((tool) => {
                 const ToolIcon = iconOptions.find((item) => item.value === tool.icon)?.icon ?? FileText;
                 return (
-                  <button
-                    key={tool.id}
-                    onClick={() => selectTool(tool)}
-                    className={`w-full text-left p-3 rounded-xl border transition-all ${
-                      selectedTool?.id === tool.id
-                        ? "border-blue-300 bg-blue-50 shadow-sm"
-                        : "border-slate-100 bg-slate-50 hover:bg-white hover:border-blue-200"
-                    }`}
-                  >
+                  <button key={tool.id} onClick={() => selectTool(tool)} className={`w-full text-left p-3 rounded-xl border transition-all ${selectedTool?.id === tool.id ? "border-blue-300 bg-blue-50 shadow-sm" : "border-slate-100 bg-slate-50 hover:bg-white hover:border-blue-200"}`}>
                     <div className="flex items-center gap-2">
                       <ToolIcon size={16} className={tool.isActive ? "text-blue-600" : "text-slate-400"} />
                       <span className="font-bold text-sm text-slate-800">{tool.label}</span>
@@ -269,16 +271,9 @@ export default function AiToolsPage() {
         <div className="xl:col-span-2 space-y-6">
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-4">
             <div className="flex items-center justify-between gap-3">
-              <h2 className="font-bold text-slate-800 flex items-center gap-2">
-                <IconPreview size={18} className="text-blue-600" /> {isEditing ? t("aiTools.editTool") : t("aiTools.createTool")}
-              </h2>
+              <h2 className="font-bold text-slate-800 flex items-center gap-2"><IconPreview size={18} className="text-blue-600" /> {isEditing ? t("aiTools.editTool") : t("aiTools.createTool")}</h2>
               <label className="flex items-center gap-2 text-sm font-medium text-slate-600">
-                <input
-                  type="checkbox"
-                  checked={form.isActive}
-                  onChange={(e) => setForm((prev) => ({ ...prev, isActive: e.target.checked }))}
-                  className="w-4 h-4"
-                />
+                <input type="checkbox" checked={form.isActive} onChange={(e) => setForm((prev) => ({ ...prev, isActive: e.target.checked }))} className="w-4 h-4" />
                 {t("aiTools.showOnHome")}
               </label>
             </div>
@@ -286,63 +281,47 @@ export default function AiToolsPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <label className="space-y-1">
                 <span className="text-xs font-bold text-slate-500 uppercase">{t("aiTools.name")}</span>
-                <input
-                  value={form.label}
-                  onChange={(e) => setForm((prev) => ({ ...prev, label: e.target.value }))}
-                  placeholder="Esim. Loppuarvio"
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300"
-                />
+                <input value={form.label} onChange={(e) => setForm((prev) => ({ ...prev, label: e.target.value }))} placeholder="Esim. Loppuarvio" className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300" />
               </label>
-
               <label className="space-y-1">
                 <span className="text-xs font-bold text-slate-500 uppercase">{t("aiTools.icon")}</span>
-                <select
-                  value={form.icon}
-                  onChange={(e) => setForm((prev) => ({ ...prev, icon: e.target.value }))}
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300"
-                >
-                  {iconOptions.map((option) => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
-                  ))}
+                <select value={form.icon} onChange={(e) => setForm((prev) => ({ ...prev, icon: e.target.value }))} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300">
+                  {iconOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                 </select>
               </label>
             </div>
 
             <label className="space-y-1 block">
               <span className="text-xs font-bold text-slate-500 uppercase">{t("aiTools.description")}</span>
-              <input
-                value={form.description}
-                onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
-                placeholder="Lyhyt kuvaus työkalun tarkoituksesta"
-                className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300"
-              />
+              <input value={form.description} onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))} placeholder="Lyhyt kuvaus työkalun tarkoituksesta" className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300" />
             </label>
+
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+              <label className="flex items-center gap-2 text-sm font-bold text-slate-700">
+                <input type="checkbox" checked={form.useUserAiProfile} onChange={(e) => setForm((prev) => ({ ...prev, useUserAiProfile: e.target.checked, profileMode: e.target.checked ? prev.profileMode : "none" }))} />
+                Käytä käyttäjän AI-profiilia tässä työkalussa
+              </label>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <label className="space-y-1">
+                  <span className="text-xs font-bold text-slate-500 uppercase">AI-profiilin käyttötila</span>
+                  <select disabled={!form.useUserAiProfile} value={form.useUserAiProfile ? form.profileMode : "none"} onChange={(e) => setForm((prev) => ({ ...prev, profileMode: e.target.value as ProfileMode }))} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300 disabled:bg-slate-100 disabled:text-slate-400">
+                    {profileModeOptions.map((option) => <option key={option.value} value={option.value}>{option.label} — {option.description}</option>)}
+                  </select>
+                </label>
+                <div className="text-xs text-slate-500 leading-relaxed bg-white border border-slate-100 rounded-xl p-3">
+                  Full sopii esim. loppuarvioihin ja lähetteisiin. Style only sopii tekstin korjaukseen. Off sopii labroihin ja hyvin tarkkoihin formaatteihin.
+                </div>
+              </div>
+            </div>
 
             <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl border border-blue-100 shadow-sm p-5 space-y-4">
               <div>
-                <h2 className="font-bold text-slate-800 flex items-center gap-2">
-                  <Sparkles size={18} className="text-blue-600" /> {t("aiTools.promptAssistant")}
-                </h2>
-                <p className="text-sm text-slate-600 mt-1">
-                  {t("aiTools.promptAssistantDescription")}
-                </p>
-                <p className="text-xs text-blue-700 bg-white/70 border border-blue-100 rounded-xl px-3 py-2 mt-3">
-                  {hasCurrentPrompt ? t("aiTools.promptAssistantEditNotice") : t("aiTools.promptAssistantCreateNotice")}
-                </p>
+                <h2 className="font-bold text-slate-800 flex items-center gap-2"><Sparkles size={18} className="text-blue-600" /> {t("aiTools.promptAssistant")}</h2>
+                <p className="text-sm text-slate-600 mt-1">{t("aiTools.promptAssistantDescription")}</p>
+                <p className="text-xs text-blue-700 bg-white/70 border border-blue-100 rounded-xl px-3 py-2 mt-3">{hasCurrentPrompt ? t("aiTools.promptAssistantEditNotice") : t("aiTools.promptAssistantCreateNotice")}</p>
               </div>
-
-              <textarea
-                value={idea}
-                onChange={(e) => setIdea(e.target.value)}
-                placeholder={t("aiTools.promptAssistantPlaceholder")}
-                className="w-full h-32 rounded-xl border border-blue-100 bg-white/80 px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300"
-              />
-
-              <button
-                onClick={generatePrompt}
-                disabled={isAssistantLoading}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-black disabled:opacity-50 shadow-sm"
-              >
+              <textarea value={idea} onChange={(e) => setIdea(e.target.value)} placeholder={t("aiTools.promptAssistantPlaceholder")} className="w-full h-32 rounded-xl border border-blue-100 bg-white/80 px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300" />
+              <button onClick={generatePrompt} disabled={isAssistantLoading} className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-black disabled:opacity-50 shadow-sm">
                 {isAssistantLoading ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
                 {hasCurrentPrompt ? t("aiTools.improveCurrentPrompt") : t("aiTools.createPrompt")}
               </button>
@@ -350,38 +329,15 @@ export default function AiToolsPage() {
 
             <label className="space-y-1 block">
               <span className="text-xs font-bold text-slate-500 uppercase">{t("aiTools.prompt")}</span>
-              <textarea
-                value={form.prompt}
-                onChange={(e) => setForm((prev) => ({ ...prev, prompt: e.target.value }))}
-                placeholder={t("aiTools.promptPlaceholder")}
-                className="w-full h-72 rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300 font-mono leading-relaxed"
-              />
+              <textarea value={form.prompt} onChange={(e) => setForm((prev) => ({ ...prev, prompt: e.target.value }))} placeholder={t("aiTools.promptPlaceholder")} className="w-full h-72 rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300 font-mono leading-relaxed" />
             </label>
 
             <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
               <div className="text-xs text-slate-500">{status}</div>
               <div className="flex gap-2">
-                {isEditing && (
-                  <button
-                    onClick={deleteTool}
-                    disabled={isSaving}
-                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-red-200 text-red-600 text-sm font-bold hover:bg-red-50 disabled:opacity-50"
-                  >
-                    <Trash2 size={16} /> {t("common.delete")}
-                  </button>
-                )}
-                <button
-                  onClick={() => navigator.clipboard.writeText(form.prompt)}
-                  disabled={!form.prompt}
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-bold hover:bg-slate-50 disabled:opacity-50"
-                >
-                  <Copy size={16} /> {t("common.copy")}
-                </button>
-                <button
-                  onClick={saveTool}
-                  disabled={isSaving}
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-bold hover:bg-blue-700 disabled:opacity-50 shadow-sm"
-                >
+                {isEditing && <button onClick={deleteTool} disabled={isSaving} className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-red-200 text-red-600 text-sm font-bold hover:bg-red-50 disabled:opacity-50"><Trash2 size={16} /> {t("common.delete")}</button>}
+                <button onClick={() => navigator.clipboard.writeText(form.prompt)} disabled={!form.prompt} className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-bold hover:bg-slate-50 disabled:opacity-50"><Copy size={16} /> {t("common.copy")}</button>
+                <button onClick={saveTool} disabled={isSaving} className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-bold hover:bg-blue-700 disabled:opacity-50 shadow-sm">
                   {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
                   {t("common.save")}
                 </button>
