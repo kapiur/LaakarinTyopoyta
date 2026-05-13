@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '../../../../lib/auth';
 import { prisma } from '../../../../lib/prisma';
+import { normalizeAiProfileMode } from '../../../../lib/ai/userAiProfile';
 
 const ALLOWED_ICONS = new Set(['FileText', 'ListChecks', 'Languages', 'Scissors', 'FlaskConical']);
 
@@ -15,6 +16,21 @@ function getUserId(session: unknown) {
   const userId = Number((session as any)?.user?.id);
   return Number.isFinite(userId) ? userId : null;
 }
+
+const selectToolFields = {
+  id: true,
+  key: true,
+  label: true,
+  description: true,
+  icon: true,
+  prompt: true,
+  isActive: true,
+  order: true,
+  useUserAiProfile: true,
+  profileMode: true,
+  createdAt: true,
+  updatedAt: true,
+} as const;
 
 export async function PATCH(req: Request, { params }: RouteContext) {
   try {
@@ -45,6 +61,8 @@ export async function PATCH(req: Request, { params }: RouteContext) {
       prompt?: string;
       isActive?: boolean;
       order?: number;
+      useUserAiProfile?: boolean;
+      profileMode?: string;
     } = {};
 
     if (typeof body.label === 'string') {
@@ -75,6 +93,14 @@ export async function PATCH(req: Request, { params }: RouteContext) {
       data.isActive = body.isActive;
     }
 
+    if (typeof body.useUserAiProfile === 'boolean') {
+      data.useUserAiProfile = body.useUserAiProfile;
+    }
+
+    if (body.profileMode !== undefined) {
+      data.profileMode = normalizeAiProfileMode(body.profileMode);
+    }
+
     if (body.order !== undefined && Number.isFinite(Number(body.order))) {
       data.order = Number(body.order);
     }
@@ -84,18 +110,7 @@ export async function PATCH(req: Request, { params }: RouteContext) {
         id: existingTool.id,
       },
       data,
-      select: {
-        id: true,
-        key: true,
-        label: true,
-        description: true,
-        icon: true,
-        prompt: true,
-        isActive: true,
-        order: true,
-        createdAt: true,
-        updatedAt: true,
-      },
+      select: selectToolFields,
     });
 
     return NextResponse.json({ tool });
