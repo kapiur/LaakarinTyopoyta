@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { KeyRound, Settings, Shield, Users } from "lucide-react";
 import LanguageSettingsCard from "../../components/LanguageSettingsCard";
+import AiProfileSettingsCard from "../../components/AiProfileSettingsCard";
 import { useI18n } from "../../lib/useI18n";
 
 export default function SettingsPage() {
@@ -24,12 +25,10 @@ export default function SettingsPage() {
       </header>
 
       <LanguageSettingsCard />
+      <AiProfileSettingsCard />
 
       <section className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        <Link
-          href="/profile/security"
-          className="group bg-white border border-slate-200 rounded-[2rem] p-6 shadow-sm hover:shadow-md hover:border-blue-200 transition-all"
-        >
+        <Link href="/profile/security" className="group bg-white border border-slate-200 rounded-[2rem] p-6 shadow-sm hover:shadow-md hover:border-blue-200 transition-all">
           <div className="flex items-start gap-4">
             <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center group-hover:scale-105 transition-transform">
               <KeyRound size={24} />
@@ -43,10 +42,7 @@ export default function SettingsPage() {
         </Link>
 
         {isAdmin && (
-          <Link
-            href="/admin/users"
-            className="group bg-white border border-slate-200 rounded-[2rem] p-6 shadow-sm hover:shadow-md hover:border-blue-200 transition-all"
-          >
+          <Link href="/admin/users" className="group bg-white border border-slate-200 rounded-[2rem] p-6 shadow-sm hover:shadow-md hover:border-blue-200 transition-all">
             <div className="flex items-start gap-4">
               <div className="w-12 h-12 rounded-2xl bg-slate-900 text-white flex items-center justify-center group-hover:scale-105 transition-transform">
                 <Users size={24} />
