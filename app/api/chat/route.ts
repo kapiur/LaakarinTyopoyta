@@ -55,20 +55,21 @@ function applyProfile(systemPrompt: string, profile: UserAiProfileRecord | null,
 }
 
 async function getUserTool(mode: string, userId: number) {
-  const tool = await prisma.aiTool.findFirst({
-    where: {
-      key: mode,
-      userId,
-      scope: 'USER',
-      isActive: true,
-    },
-    select: {
-      prompt: true,
-      useUserAiProfile: true,
-      profileMode: true,
-    },
-  });
+  const rows = await prisma.$queryRaw<Array<{
+    prompt: string;
+    useUserAiProfile: boolean | null;
+    profileMode: string | null;
+  }>>`
+    SELECT
+      "prompt",
+      COALESCE("useUserAiProfile", true) AS "useUserAiProfile",
+      COALESCE("profileMode", 'full') AS "profileMode"
+    FROM "AiTool"
+    WHERE "key" = ${mode} AND "userId" = ${userId} AND "scope" = 'USER' AND "isActive" = true
+    LIMIT 1
+  `;
 
+  const tool = rows[0];
   if (!tool) return null;
 
   return {
