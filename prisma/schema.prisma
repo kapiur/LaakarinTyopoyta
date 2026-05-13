@@ -38,6 +38,7 @@ model User {
   pedsIndications PedsIndication[]
   history         AIHistory[]
   aiTools         AiTool[]
+  aiProfile       UserAiProfile?
   substanceNotes  Substance[]      // Связь для Wiki-заметок
   
   // Новые связи для каталога ссылок
@@ -156,23 +157,62 @@ enum AiToolScope {
 }
 
 model AiTool {
-  id          String      @id @default(cuid())
-  key         String
-  label       String
-  description String?
-  icon        String?
-  prompt      String      @db.Text
-  scope       AiToolScope
-  userId      Int?
-  user        User?       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  isActive    Boolean     @default(true)
-  order       Int         @default(100)
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  id               String      @id @default(cuid())
+  key              String
+  label            String
+  description      String?
+  icon             String?
+  prompt           String      @db.Text
+  scope            AiToolScope
+  userId           Int?
+  user             User?       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  isActive         Boolean     @default(true)
+  order            Int         @default(100)
+  useUserAiProfile Boolean     @default(true)
+  profileMode      String      @default("full")
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
 
   @@index([key])
   @@index([userId])
   @@index([scope, isActive, order])
+  @@index([profileMode])
+}
+
+model UserAiProfile {
+  id                     String                @id @default(cuid())
+  userId                 Int                   @unique
+  user                   User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role                   String?
+  specialty              String?
+  workplace              String?
+  experienceLevel        String?
+  defaultClinicalContext String?
+  preferredStructure     String?
+  detailLevel            String?
+  writingStyle           String?
+  permanentInstructions  String?               @db.Text
+  avoidInstructions      String?               @db.Text
+  styleSummary           String?               @db.Text
+  useProfileByDefault    Boolean               @default(true)
+  samples                UserAiProfileSample[]
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
+
+  @@index([userId])
+}
+
+model UserAiProfileSample {
+  id             String        @id @default(cuid())
+  profileId      String
+  profile        UserAiProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  anonymizedText String?       @db.Text
+  sourceLabel    String?
+  styleNotes     String?       @db.Text
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([profileId])
 }
 
 // ==========================================
