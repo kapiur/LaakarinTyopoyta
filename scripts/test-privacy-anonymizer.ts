@@ -1,14 +1,15 @@
-import { anonymizePatientText } from '../lib/privacy/anonymizePatientText';
+import { anonymizePatientText, type AnonymizationMode } from '../lib/privacy/anonymizePatientText';
 
 type TestCase = {
   name: string;
   input: string;
+  mode?: AnonymizationMode;
   expectedFragments: string[];
   forbiddenFragments: string[];
 };
 
 const syntheticHetu = '13' + '1052' + '-' + '308T';
-const syntheticShortHetu = '10' + '1180' + '-' + '287';
+const syntheticModernHetu = '01' + '0120' + 'B' + '123A';
 const syntheticEmail = 'patient.name' + '@' + 'example.com';
 const syntheticPhone = '+358' + ' 40 ' + '123 ' + '4567';
 const syntheticLocalPhone = '045' + '117' + '4031';
@@ -20,6 +21,7 @@ const syntheticStaffName = 'Laura' + ' ' + 'Laaksonen';
 const syntheticPhysioName = 'Pekka' + ' ' + 'Korhonen';
 const syntheticNameFromUserExample = 'Iurii' + ' ' + 'Kapustin';
 const syntheticAddress = 'Esimerkkikatu' + ' ' + '12 A';
+const syntheticLongAddress = 'Vanha Esimerkkitie' + ' ' + '12 A as 4, 00100 Helsinki';
 
 const cases: TestCase[] = [
   {
@@ -29,10 +31,16 @@ const cases: TestCase[] = [
     forbiddenFragments: [syntheticHetu],
   },
   {
-    name: 'Short Finnish identity-like code is redacted',
-    input: `Potilaan henkilötunnus on ${syntheticShortHetu} ja asia koskee kontrollia.`,
+    name: 'Modern Finnish identity code separator is redacted',
+    input: `Potilaan henkilötunnus on ${syntheticModernHetu} ja asia koskee kontrollia.`,
     expectedFragments: ['[HETU]'],
-    forbiddenFragments: [syntheticShortHetu],
+    forbiddenFragments: [syntheticModernHetu],
+  },
+  {
+    name: 'Incomplete Finnish identity-like code is not treated as HETU',
+    input: `Koodi 101180-287 ei yksin riitä henkilötunnukseksi.`,
+    expectedFragments: ['101180-287'],
+    forbiddenFragments: ['[HETU]'],
   },
   {
     name: 'Email is redacted',
@@ -60,9 +68,9 @@ const cases: TestCase[] = [
   },
   {
     name: 'Bare name and bare date near identifiers are redacted',
-    input: `${syntheticNameFromUserExample} ${syntheticShortHetu} ${syntheticBareDob} ${syntheticLocalPhone}`,
+    input: `${syntheticNameFromUserExample} ${syntheticHetu} ${syntheticBareDob} ${syntheticLocalPhone}`,
     expectedFragments: ['[NAME]', '[HETU]', '[DATE_OF_BIRTH]', '[PHONE]'],
-    forbiddenFragments: [syntheticNameFromUserExample, syntheticShortHetu, syntheticBareDob, syntheticLocalPhone],
+    forbiddenFragments: [syntheticNameFromUserExample, syntheticHetu, syntheticBareDob, syntheticLocalPhone],
   },
   {
     name: 'Relative words are normalized to generic Omainen before redacted name',
@@ -88,12 +96,32 @@ const cases: TestCase[] = [
     expectedFragments: ['[ADDRESS]'],
     forbiddenFragments: [syntheticAddress],
   },
+  {
+    name: 'Long street address with apartment and postcode is redacted',
+    input: `Potilas asuu osoitteessa ${syntheticLongAddress}.`,
+    expectedFragments: ['asuu osoitteessa [ADDRESS]'],
+    forbiddenFragments: [syntheticLongAddress],
+  },
+  {
+    name: 'Clinical dates are preserved in chat mode without identifying context',
+    input: `Leikkaus tehty 12.3.2024. Kontrolli 15.4.2024.`,
+    mode: 'chat',
+    expectedFragments: ['12.3.2024', '15.4.2024'],
+    forbiddenFragments: ['[DATE]'],
+  },
+  {
+    name: 'Exact dates are redacted in storage mode',
+    input: `Leikkaus tehty 12.3.2024. Kontrolli 15.4.2024.`,
+    mode: 'storage',
+    expectedFragments: ['[DATE]'],
+    forbiddenFragments: ['12.3.2024', '15.4.2024'],
+  },
 ];
 
 let failed = 0;
 
 for (const testCase of cases) {
-  const result = anonymizePatientText(testCase.input);
+  const result = anonymizePatientText(testCase.input, { mode: testCase.mode ?? 'chat' });
 
   for (const expected of testCase.expectedFragments) {
     if (!result.sanitizedText.includes(expected)) {
@@ -106,7 +134,7 @@ for (const testCase of cases) {
   for (const forbidden of testCase.forbiddenFragments) {
     if (result.sanitizedText.includes(forbidden)) {
       failed += 1;
-      console.error(`FAIL ${testCase.name}: forbidden fragment still present`);
+      console.error(`FAIL ${testCase.name}: forbidden fragment still present: ${forbidden}`);
       console.error(result.sanitizedText);
     }
   }
