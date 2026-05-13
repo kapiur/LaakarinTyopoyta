@@ -18,7 +18,7 @@ const openai = new OpenAI({
 const CURRENT_MODEL = 'gpt-5.4';
 
 const PRIVACY_PLACEHOLDER_SYSTEM_PROMPT = `
-Privacy placeholders such as [NAME], [HETU], [DATE_OF_BIRTH], [PHONE], [EMAIL], [ADDRESS], [PATIENT_ID], [PROFESSIONAL_NAME] and similar bracketed markers are internal server-side privacy markers.
+Privacy placeholders such as [NAME], [HETU], [DATE_OF_BIRTH], [DATE], [PHONE], [EMAIL], [ADDRESS], [PATIENT_ID], [PROFESSIONAL_NAME] and similar bracketed markers are internal server-side privacy markers.
 Do not mention, explain, analyze, repeat or give advice about these placeholders or about anonymization.
 Do not tell the user that the text was anonymized or sanitized.
 Use the already sanitized text normally and complete the user's actual task.
@@ -64,7 +64,7 @@ function anonymizeMessages(messages: any[]) {
   const sanitizedMessages = messages.map((message) => {
     if (!message || typeof message.content !== 'string') return message;
 
-    const result = anonymizePatientText(message.content);
+    const result = anonymizePatientText(message.content, { mode: 'chat' });
     anonymizationResults.push(result);
 
     return {
@@ -92,10 +92,10 @@ export async function POST(req: Request) {
     const { messages, text, mode, customPrompt } = body;
     const inputAnonymizationResults: ReturnType<typeof anonymizePatientText>[] = [];
 
-    const anonymizedText = anonymizePatientText(text);
+    const anonymizedText = anonymizePatientText(text, { mode: 'chat' });
     inputAnonymizationResults.push(anonymizedText);
 
-    const anonymizedCustomPrompt = anonymizePatientText(customPrompt);
+    const anonymizedCustomPrompt = anonymizePatientText(customPrompt, { mode: 'storage' });
     inputAnonymizationResults.push(anonymizedCustomPrompt);
 
     let finalMessages: any[] = [];
@@ -122,8 +122,11 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: 'AI-työkalua ei löytynyt' }, { status: 404 });
       }
 
+      const anonymizedUserToolPrompt = anonymizePatientText(userToolPrompt, { mode: 'storage' });
+      inputAnonymizationResults.push(anonymizedUserToolPrompt);
+
       finalMessages = [
-        { role: 'system', content: withPrivacyInstruction(userToolPrompt) },
+        { role: 'system', content: withPrivacyInstruction(anonymizedUserToolPrompt.sanitizedText) },
         { role: 'user', content: anonymizedText.sanitizedText },
       ];
     }
