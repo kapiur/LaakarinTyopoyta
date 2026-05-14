@@ -44,9 +44,10 @@ const dict = {
     avoidInstructions: "Mitä AI:n tulee välttää",
     styleSummary: "Tyyliyhteenveto",
     exampleTitle: "Lisää uusi esimerkki kirjoitustyyliin",
-    exampleHelp: "Liitä yksi hyvä esimerkkiteksti kerrallaan. AI täydentää nykyistä tyyliyhteenvetoa eikä aloita profiilia alusta. Alkuperäistä tekstiä ei tallenneta.",
+    exampleHelp: "Liitä yksi hyvä esimerkkiteksti kerrallaan. Valitse tai kirjoita ensin tekstityyppi, jotta AI erottaa esimerkiksi etäkontaktin, lähetteen ja loppuarvion tyylin. Alkuperäistä tekstiä ei tallenneta.",
     examplePlaceholder: "Liitä yksi vastaanottoteksti, etäkontakti, lähete tai loppuarvio...",
-    sourceLabel: "Esimerkin nimi / lähde",
+    sourceLabel: "Tekstityyppi / esimerkin nimi",
+    sourceLabelPlaceholder: "Esim. Loppuarvio, Lähete, Etäkontakti, Vastaanottokäynti, Väliarvio",
     saveSample: "Säilytä anonymisoitu esimerkki myöhempää tyylin tarkentamista varten",
     analyze: "Lisää esimerkki tyyliin",
     save: "Tallenna AI-profiili",
@@ -72,9 +73,10 @@ const dict = {
     avoidInstructions: "Чего AI должен избегать",
     styleSummary: "Краткое описание стиля",
     exampleTitle: "Добавить новый пример к стилю",
-    exampleHelp: "Вставляйте один хороший пример за раз. AI дополнит текущее описание стиля, а не начнёт профиль заново. Исходный текст не сохраняется.",
+    exampleHelp: "Вставляйте один хороший пример за раз. Сначала выберите или напишите тип текста, чтобы AI различал стиль etäkontakti, направления и loppuarvio. Исходный текст не сохраняется.",
     examplePlaceholder: "Вставьте один приём, etäkontakti, направление или loppuarvio...",
-    sourceLabel: "Название / источник образца",
+    sourceLabel: "Тип текста / название образца",
+    sourceLabelPlaceholder: "Например: Loppuarvio, Lähete, Etäkontakti, Vastaanottokäynti, Väliarvio",
     saveSample: "Сохранить анонимизированный пример для дальнейшего уточнения стиля",
     analyze: "Добавить пример к стилю",
     save: "Сохранить AI-профиль",
@@ -100,9 +102,10 @@ const dict = {
     avoidInstructions: "What AI should avoid",
     styleSummary: "Style summary",
     exampleTitle: "Add a new writing sample",
-    exampleHelp: "Paste one good sample at a time. AI updates the current style summary instead of starting the profile from scratch. The original text is not saved.",
+    exampleHelp: "Paste one good sample at a time. First choose or write the text type so AI can distinguish remote contacts, referrals and discharge summaries. The original text is not saved.",
     examplePlaceholder: "Paste one visit note, remote contact, referral or discharge summary...",
-    sourceLabel: "Sample name / source",
+    sourceLabel: "Text type / sample name",
+    sourceLabelPlaceholder: "For example: Loppuarvio, Lähete, Etäkontakti, Vastaanottokäynti, Väliarvio",
     saveSample: "Keep anonymized sample for later style refinement",
     analyze: "Add sample to style",
     save: "Save AI profile",
@@ -113,6 +116,18 @@ const dict = {
     preview: "Anonymized preview",
   },
 };
+
+const sampleTypeOptions = [
+  "Vastaanottokäynti",
+  "Etäkontakti",
+  "Lähete",
+  "Alkuarvio",
+  "Väliarvio",
+  "Loppuarvio",
+  "SAS-lausunto",
+  "Todistus / lausunto",
+  "Muu",
+];
 
 function emptyProfile(): AiProfile {
   return { useProfileByDefault: true };
@@ -296,12 +311,20 @@ export default function AiProfileSettingsCard() {
           </div>
         </div>
 
-        <input
-          value={sourceLabel}
-          onChange={(event) => setSourceLabel(event.target.value)}
-          placeholder={t.sourceLabel}
-          className="w-full rounded-2xl border border-blue-100 bg-white px-4 py-3 text-sm outline-none focus:border-blue-300"
-        />
+        <label className="space-y-1 block">
+          <span className="text-[10px] font-black uppercase tracking-wide text-slate-500">{t.sourceLabel}</span>
+          <input
+            value={sourceLabel}
+            onChange={(event) => setSourceLabel(event.target.value)}
+            placeholder={t.sourceLabelPlaceholder}
+            list="ai-profile-sample-types"
+            className="w-full rounded-2xl border border-blue-100 bg-white px-4 py-3 text-sm outline-none focus:border-blue-300"
+          />
+          <datalist id="ai-profile-sample-types">
+            {sampleTypeOptions.map((option) => <option key={option} value={option} />)}
+          </datalist>
+        </label>
+
         <textarea
           value={exampleText}
           onChange={(event) => setExampleText(event.target.value)}
