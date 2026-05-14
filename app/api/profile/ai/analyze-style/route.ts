@@ -8,6 +8,24 @@ import { anonymizePatientText } from '../../../../../lib/privacy/anonymizePatien
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const CURRENT_MODEL = 'gpt-5.4';
+const DEFAULT_RECENT_SAMPLE_LIMIT = 5;
+
+type ProfileRow = {
+  id: string;
+  styleSummary: string | null;
+  writingStyle: string | null;
+  preferredStructure: string | null;
+  detailLevel: string | null;
+  permanentInstructions: string | null;
+  avoidInstructions: string | null;
+};
+
+type SampleRow = {
+  anonymizedText: string | null;
+  sourceLabel: string | null;
+  styleNotes: string | null;
+  createdAt: Date;
+};
 
 async function getUserId() {
   const session = await getServerSession(authOptions);
@@ -15,12 +33,17 @@ async function getUserId() {
   return Number.isFinite(userId) ? userId : null;
 }
 
-async function ensureProfile(userId: number) {
-  const existing = await prisma.$queryRaw<{ id: string }[]>`
-    SELECT "id" FROM "UserAiProfile" WHERE "userId" = ${userId} LIMIT 1
+async function ensureProfile(userId: number): Promise<ProfileRow> {
+  const existing = await prisma.$queryRaw<ProfileRow[]>`
+    SELECT
+      "id", "styleSummary", "writingStyle", "preferredStructure", "detailLevel",
+      "permanentInstructions", "avoidInstructions"
+    FROM "UserAiProfile"
+    WHERE "userId" = ${userId}
+    LIMIT 1
   `;
 
-  if (existing[0]?.id) return existing[0].id;
+  if (existing[0]?.id) return existing[0];
 
   const id = randomUUID();
   await prisma.$executeRaw`
@@ -28,7 +51,85 @@ async function ensureProfile(userId: number) {
     VALUES (${id}, ${userId}, NOW(), NOW())
   `;
 
-  return id;
+  return {
+    id,
+    styleSummary: null,
+    writingStyle: null,
+    preferredStructure: null,
+    detailLevel: null,
+    permanentInstructions: null,
+    avoidInstructions: null,
+  };
+}
+
+async function getRecentSamples(profileId: string, limit = DEFAULT_RECENT_SAMPLE_LIMIT) {
+  return prisma.$queryRaw<SampleRow[]>`
+    SELECT "anonymizedText", "sourceLabel", "styleNotes", "createdAt"
+    FROM "UserAiProfileSample"
+    WHERE "profileId" = ${profileId}
+    ORDER BY "createdAt" DESC
+    LIMIT ${limit}
+  `;
+}
+
+function trimForPrompt(value: string | null | undefined, maxLength: number) {
+  const text = typeof value === 'string' ? value.trim() : '';
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, maxLength)}\n...[katkaistu]`;
+}
+
+function buildMergePromptPayload(profile: ProfileRow, recentSamples: SampleRow[], newSample: string, sourceLabel: string | null) {
+  return JSON.stringify({
+    currentStyleSummary: profile.styleSummary || '',
+    manuallyDefinedWritingStyle: profile.writingStyle || '',
+    preferredStructure: profile.preferredStructure || '',
+    detailLevel: profile.detailLevel || '',
+    permanentInstructions: profile.permanentInstructions || '',
+    avoidInstructions: profile.avoidInstructions || '',
+    newSample: {
+      sourceLabel: sourceLabel || '',
+      text: trimForPrompt(newSample, 9000),
+    },
+    recentSavedSamples: recentSamples.map((sample) => ({
+      sourceLabel: sample.sourceLabel || '',
+      text: trimForPrompt(sample.anonymizedText, 3000),
+      styleNotes: trimForPrompt(sample.styleNotes, 800),
+    })),
+  });
+}
+
+async function createMergedStyleSummary(profile: ProfileRow, recentSamples: SampleRow[], anonymizedText: string, sourceLabel: string | null) {
+  const response = await openai.chat.completions.create({
+    model: CURRENT_MODEL,
+    temperature: 0,
+    messages: [
+      {
+        role: 'system',
+        content: `Olet Suomen terveydenhuollon kliinisten tekstien kirjoitustyylin analysoija.
+Tehtäväsi on päivittää käyttäjän AI-kirjoitusprofiilin tyyliyhteenveto uuden anonymisoidun esimerkin perusteella.
+
+Tärkeät säännöt:
+- Älä kirjoita tyyliyhteenvetoa joka kerta alusta, jos nykyinen tyyliyhteenveto on annettu.
+- Yhdistä uusi havainto olemassa olevaan tyyliyhteenvetoon.
+- Säilytä aiemmin tunnistetut pysyvät piirteet, jos uusi esimerkki ei selvästi kumoa niitä.
+- Huomioi, että käyttäjän suomen kieli ja kliininen kirjoitustyyli voivat ajan myötä kehittyä.
+- Jos uusi esimerkki on laadukkaampi, tarkempi tai uudempi, anna sille hieman enemmän painoa.
+- Älä tee potilasta koskevia kliinisiä johtopäätöksiä.
+- Älä mainitse anonymisointia, tunnisteita tai placeholder-merkkejä.
+- Älä toista potilastietoja, nimiä, päivämääriä tai yksittäisiä kliinisiä tapahtumia.
+- Keskity vain kirjoitustyyliin, rakenteeseen, yksityiskohtaisuuteen, sanavalintoihin, kronologiaan, lääkitysmuutosten kuvaamiseen ja siihen, miten AI:n kannattaa jäljitellä käyttäjän dokumentointitapaa.
+- Kirjoita suomeksi.
+- Pituus 90-160 sanaa.
+- Lopputulos on yksi käytännöllinen tyyliyhteenveto myöhempää AI-kirjoitusavustajaa varten.`,
+      },
+      {
+        role: 'user',
+        content: buildMergePromptPayload(profile, recentSamples, anonymizedText, sourceLabel),
+      },
+    ],
+  });
+
+  return response.choices[0].message.content?.trim() || profile.styleSummary || '';
 }
 
 export async function POST(req: Request) {
@@ -41,7 +142,7 @@ export async function POST(req: Request) {
 
     const body = await req.json();
     const exampleText = typeof body?.text === 'string' ? body.text : '';
-    const saveAnonymizedSample = body?.saveAnonymizedSample === true;
+    const saveAnonymizedSample = body?.saveAnonymizedSample !== false;
     const sourceLabel = typeof body?.sourceLabel === 'string' ? body.sourceLabel.trim().slice(0, 120) : null;
 
     if (!exampleText.trim()) {
@@ -49,34 +150,14 @@ export async function POST(req: Request) {
     }
 
     const anonymized = anonymizePatientText(exampleText, { mode: 'profileSample' });
-
-    const response = await openai.chat.completions.create({
-      model: CURRENT_MODEL,
-      temperature: 0,
-      messages: [
-        {
-          role: 'system',
-          content: `Olet Suomen terveydenhuollon kliinisten tekstien kirjoitustyylin analysoija.
-Tehtäväsi on analysoida lääkärin anonymisoituja esimerkkitekstejä ja muodostaa lyhyt, käytännöllinen tyyliyhteenveto myöhempää AI-kirjoitusavustajaa varten.
-Älä mainitse anonymisointia, tunnisteita tai placeholder-merkkejä.
-Älä tee kliinisiä johtopäätöksiä potilaasta.
-Keskity vain kirjoitustyyliin, rakenteeseen, yksityiskohtaisuuteen, sanavalintoihin, kronologiaan ja siihen, miten käyttäjän tyyliä kannattaa jäljitellä.
-Kirjoita vastaus suomeksi. Pituus enintään 120 sanaa.`,
-        },
-        {
-          role: 'user',
-          content: anonymized.sanitizedText,
-        },
-      ],
-    });
-
-    const styleSummary = response.choices[0].message.content?.trim() || '';
-    const profileId = await ensureProfile(userId);
+    const profile = await ensureProfile(userId);
+    const recentSamples = await getRecentSamples(profile.id);
+    const styleSummary = await createMergedStyleSummary(profile, recentSamples, anonymized.sanitizedText, sourceLabel);
 
     await prisma.$executeRaw`
       UPDATE "UserAiProfile"
       SET "styleSummary" = ${styleSummary}, "updatedAt" = NOW()
-      WHERE "id" = ${profileId}
+      WHERE "id" = ${profile.id}
     `;
 
     if (saveAnonymizedSample) {
@@ -85,7 +166,7 @@ Kirjoita vastaus suomeksi. Pituus enintään 120 sanaa.`,
         INSERT INTO "UserAiProfileSample" (
           "id", "profileId", "anonymizedText", "sourceLabel", "styleNotes", "createdAt", "updatedAt"
         ) VALUES (
-          ${sampleId}, ${profileId}, ${anonymized.sanitizedText}, ${sourceLabel}, ${styleSummary}, NOW(), NOW()
+          ${sampleId}, ${profile.id}, ${anonymized.sanitizedText}, ${sourceLabel}, ${styleSummary}, NOW(), NOW()
         )
       `;
     }
@@ -99,6 +180,9 @@ Kirjoita vastaus suomeksi. Pituus enintään 120 sanaa.`,
         findings: anonymized.findings,
       },
       savedSample: saveAnonymizedSample,
+      mergeMode: 'incremental',
+      previousStyleSummary: profile.styleSummary || '',
+      recentSamplesUsed: recentSamples.length,
     });
   } catch (error: any) {
     console.error('AI profile style analysis error:', error.message || error);
