@@ -43,17 +43,18 @@ const dict = {
     permanentInstructions: "Pysyvät ohjeet AI:lle",
     avoidInstructions: "Mitä AI:n tulee välttää",
     styleSummary: "Tyyliyhteenveto",
-    exampleTitle: "Analysoi oma kirjoitustyyli esimerkkitekstistä",
-    exampleHelp: "Liitä vain anonymisoitavaksi sopiva esimerkkiteksti. Alkuperäistä tekstiä ei tallenneta.",
-    examplePlaceholder: "Liitä anonymisoitu tai anonymisoitava esimerkkiteksti...",
+    exampleTitle: "Lisää uusi esimerkki kirjoitustyyliin",
+    exampleHelp: "Liitä yksi hyvä esimerkkiteksti kerrallaan. AI täydentää nykyistä tyyliyhteenvetoa eikä aloita profiilia alusta. Alkuperäistä tekstiä ei tallenneta.",
+    examplePlaceholder: "Liitä yksi vastaanottoteksti, etäkontakti, lähete tai loppuarvio...",
     sourceLabel: "Esimerkin nimi / lähde",
-    saveSample: "Tallenna myös anonymisoitu esimerkki",
-    analyze: "Anonymisoi ja analysoi tyyli",
+    saveSample: "Säilytä anonymisoitu esimerkki myöhempää tyylin tarkentamista varten",
+    analyze: "Lisää esimerkki tyyliin",
     save: "Tallenna AI-profiili",
     saved: "AI-profiili tallennettu.",
-    analyzed: "Tyyliyhteenveto päivitetty.",
+    analyzed: "Tyyliyhteenvetoa täydennetty uudella esimerkillä.",
     error: "Toiminto epäonnistui.",
     loading: "Ladataan...",
+    preview: "Anonymisoitu esikatselu",
   },
   ru: {
     title: "AI-профиль",
@@ -70,17 +71,18 @@ const dict = {
     permanentInstructions: "Постоянные инструкции для AI",
     avoidInstructions: "Чего AI должен избегать",
     styleSummary: "Краткое описание стиля",
-    exampleTitle: "Проанализировать стиль по образцу текста",
-    exampleHelp: "Вставляйте только текст, подходящий для анонимизации. Исходный текст не сохраняется.",
-    examplePlaceholder: "Вставьте анонимизированный или подлежащий анонимизации образец...",
+    exampleTitle: "Добавить новый пример к стилю",
+    exampleHelp: "Вставляйте один хороший пример за раз. AI дополнит текущее описание стиля, а не начнёт профиль заново. Исходный текст не сохраняется.",
+    examplePlaceholder: "Вставьте один приём, etäkontakti, направление или loppuarvio...",
     sourceLabel: "Название / источник образца",
-    saveSample: "Также сохранить анонимизированный образец",
-    analyze: "Анонимизировать и проанализировать стиль",
+    saveSample: "Сохранить анонимизированный пример для дальнейшего уточнения стиля",
+    analyze: "Добавить пример к стилю",
     save: "Сохранить AI-профиль",
     saved: "AI-профиль сохранён.",
-    analyzed: "Описание стиля обновлено.",
+    analyzed: "Описание стиля дополнено новым примером.",
     error: "Действие не удалось.",
     loading: "Загрузка...",
+    preview: "Анонимизированный preview",
   },
   en: {
     title: "AI profile",
@@ -97,17 +99,18 @@ const dict = {
     permanentInstructions: "Permanent instructions for AI",
     avoidInstructions: "What AI should avoid",
     styleSummary: "Style summary",
-    exampleTitle: "Analyze writing style from a sample",
-    exampleHelp: "Paste only text suitable for anonymization. The original text is not saved.",
-    examplePlaceholder: "Paste an anonymized or anonymizable sample text...",
+    exampleTitle: "Add a new writing sample",
+    exampleHelp: "Paste one good sample at a time. AI updates the current style summary instead of starting the profile from scratch. The original text is not saved.",
+    examplePlaceholder: "Paste one visit note, remote contact, referral or discharge summary...",
     sourceLabel: "Sample name / source",
-    saveSample: "Also save anonymized sample",
-    analyze: "Anonymize and analyze style",
+    saveSample: "Keep anonymized sample for later style refinement",
+    analyze: "Add sample to style",
     save: "Save AI profile",
     saved: "AI profile saved.",
-    analyzed: "Style summary updated.",
+    analyzed: "Style summary updated with the new sample.",
     error: "Action failed.",
     loading: "Loading...",
+    preview: "Anonymized preview",
   },
 };
 
@@ -128,7 +131,7 @@ export default function AiProfileSettingsCard() {
   const [profile, setProfile] = useState<AiProfile>(emptyProfile());
   const [exampleText, setExampleText] = useState("");
   const [sourceLabel, setSourceLabel] = useState("");
-  const [saveAnonymizedSample, setSaveAnonymizedSample] = useState(false);
+  const [saveAnonymizedSample, setSaveAnonymizedSample] = useState(true);
   const [privacy, setPrivacy] = useState<PrivacyInfo>(null);
   const [anonymizedPreview, setAnonymizedPreview] = useState("");
   const [isLoading, setIsLoading] = useState(true);
@@ -207,6 +210,8 @@ export default function AiProfileSettingsCard() {
       setPrivacy(data.privacy || null);
       setAnonymizedPreview(data.anonymizedText || "");
       setProfile((current) => ({ ...current, styleSummary: data.styleSummary || current.styleSummary }));
+      setExampleText("");
+      setSourceLabel("");
       setMessage(t.analyzed);
     } catch (error) {
       setMessage(t.error);
@@ -323,7 +328,7 @@ export default function AiProfileSettingsCard() {
         {privacy && <PrivacyNotice privacy={privacy} />}
         {anonymizedPreview && (
           <div className="rounded-2xl border border-blue-100 bg-white p-4">
-            <div className="text-[10px] font-black uppercase text-slate-400 mb-2">Anonymized preview</div>
+            <div className="text-[10px] font-black uppercase text-slate-400 mb-2">{t.preview}</div>
             <pre className="whitespace-pre-wrap text-xs leading-relaxed text-slate-700 font-sans">{anonymizedPreview}</pre>
           </div>
         )}
