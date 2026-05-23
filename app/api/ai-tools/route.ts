@@ -23,6 +23,11 @@ type AiToolRow = {
   updatedAt: Date;
 };
 
+type DefaultToolVisibilityRow = {
+  toolKey: string;
+  isVisible: boolean;
+};
+
 function slugifyKey(value: string) {
   return value
     .toLowerCase()
@@ -55,6 +60,19 @@ async function getManageTools(userId: number) {
   `;
 }
 
+async function getDefaultToolVisibility(userId: number) {
+  try {
+    return await prisma.$queryRaw<DefaultToolVisibilityRow[]>`
+      SELECT "toolKey", "isVisible"
+      FROM "UserAiToolVisibility"
+      WHERE "userId" = ${userId}
+    `;
+  } catch (error) {
+    console.error('Default AI tool visibility loading failed:', error);
+    return [];
+  }
+}
+
 export async function GET(req: Request) {
   try {
     const session = await getServerSession(authOptions);
@@ -68,6 +86,10 @@ export async function GET(req: Request) {
       return NextResponse.json({ tools });
     }
 
+    const visibilityRows = userId ? await getDefaultToolVisibility(userId) : [];
+    const visibilityMap = new Map(visibilityRows.map((row) => [row.toolKey, row.isVisible]));
+    const visibleDefaultTools = DEFAULT_AI_TOOL_METADATA.filter((tool) => visibilityMap.get(tool.key) !== false);
+
     const userTools = userId
       ? await prisma.$queryRaw<Array<{ key: string; label: string; description: string | null; icon: string | null }>>`
           SELECT "key", "label", "description", "icon"
@@ -79,7 +101,7 @@ export async function GET(req: Request) {
 
     return NextResponse.json({
       tools: [
-        ...DEFAULT_AI_TOOL_METADATA,
+        ...visibleDefaultTools,
         ...userTools.map((tool) => ({
           key: tool.key,
           label: tool.label,
