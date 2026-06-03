@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSession } from "next-auth/react";
-import { BrainCircuit, KeyRound, KeySquare, Settings, Shield, Users } from "lucide-react";
+import { Bot, BrainCircuit, KeyRound, KeySquare, Settings, Shield, Users } from "lucide-react";
 import LanguageSettingsCard from "../../components/LanguageSettingsCard";
 import AiProfileSettingsCard from "../../components/AiProfileSettingsCard";
 import AiProviderSettingsCard from "../../components/AiProviderSettingsCard";
@@ -43,6 +43,19 @@ export default function SettingsPage() {
           </div>
         </Link>
 
+        <Link href="/agent" className="group bg-white border border-slate-200 rounded-[2rem] p-6 shadow-sm hover:shadow-md hover:border-purple-200 transition-all">
+          <div className="flex items-start gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center group-hover:scale-105 transition-transform">
+              <Bot size={24} />
+            </div>
+            <div className="space-y-1">
+              <h2 className="text-lg font-bold text-slate-900">{t("settings.agentTitle")}</h2>
+              <p className="text-sm text-slate-500">{t("settings.agentDescription")}</p>
+              <p className="text-xs font-semibold text-purple-600 uppercase tracking-wider pt-2">MVP</p>
+            </div>
+          </div>
+        </Link>
+
         {isAdmin && (
           <>
             <Link href="/admin/users" className="group bg-white border border-slate-200 rounded-[2rem] p-6 shadow-sm hover:shadow-md hover:border-blue-200 transition-all">
@@ -64,8 +77,8 @@ export default function SettingsPage() {
                   <KeySquare size={24} />
                 </div>
                 <div className="space-y-1">
-                  <h2 className="text-lg font-bold text-slate-900">AI API-avaimet</h2>
-                  <p className="text-sm text-slate-500">Hallinnoi palvelun yhteisiä AI-palveluiden API-avaimia ja oletusmalleja.</p>
+                  <h2 className="text-lg font-bold text-slate-900">{t("settings.aiApiKeysTitle")}</h2>
+                  <p className="text-sm text-slate-500">{t("settings.aiApiKeysDescription")}</p>
                   <p className="text-xs font-semibold text-amber-600 uppercase tracking-wider pt-2">Admin</p>
                 </div>
               </div>
@@ -77,8 +90,8 @@ export default function SettingsPage() {
                   <BrainCircuit size={24} />
                 </div>
                 <div className="space-y-1">
-                  <h2 className="text-lg font-bold text-slate-900">AI-käyttöoikeudet</h2>
-                  <p className="text-sm text-slate-500">Hallinnoi käyttäjien oikeutta käyttää yhteisiä tai omia AI API-avaimia.</p>
+                  <h2 className="text-lg font-bold text-slate-900">{t("settings.aiAccessTitle")}</h2>
+                  <p className="text-sm text-slate-500">{t("settings.aiAccessDescription")}</p>
                   <p className="text-xs font-semibold text-purple-600 uppercase tracking-wider pt-2">Admin</p>
                 </div>
               </div>
