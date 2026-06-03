@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, KeyRound, Loader2, RefreshCcw, Save, Trash2, XCircle } from "lucide-react";
+import { useI18n } from "../../../lib/useI18n";
+import { aiAdminT } from "../../../components/ai-admin/aiAdminI18n";
 
 type ProviderCredential = {
   id: string;
@@ -45,14 +47,6 @@ const initialForm: FormState = {
   allowedModels: "gpt-5.4",
 };
 
-function formatDate(value: string | null) {
-  if (!value) return "-";
-  return new Intl.DateTimeFormat("fi-FI", {
-    dateStyle: "short",
-    timeStyle: "short",
-  }).format(new Date(value));
-}
-
 function modelsToText(value: string[]) {
   return value.join(", ");
 }
@@ -65,6 +59,10 @@ function textToModels(value: string) {
 }
 
 export default function AdminAiProvidersPage() {
+  const { language } = useI18n();
+  const tt = (key: string) => aiAdminT(language, "providers", key);
+  const tc = (key: string) => aiAdminT(language, "common", key);
+
   const [providers, setProviders] = useState<ProviderCredential[]>([]);
   const [registry, setRegistry] = useState<Registry>({});
   const [loading, setLoading] = useState(true);
@@ -77,6 +75,14 @@ export default function AdminAiProvidersPage() {
 
   const providerOptions = useMemo(() => Object.entries(registry), [registry]);
 
+  function formatDate(value: string | null) {
+    if (!value) return "-";
+    return new Intl.DateTimeFormat(language === "ru" ? "ru-RU" : language === "en" ? "en-GB" : "fi-FI", {
+      dateStyle: "short",
+      timeStyle: "short",
+    }).format(new Date(value));
+  }
+
   async function fetchProviders() {
     setLoading(true);
     setError(null);
@@ -85,12 +91,12 @@ export default function AdminAiProvidersPage() {
       const response = await fetch("/api/admin/ai-providers");
       const data = await response.json();
 
-      if (!response.ok) throw new Error(data.error || "AI-palveluiden lataus epäonnistui");
+      if (!response.ok) throw new Error(data.error || tt("loadFailed"));
 
       setProviders(data.providers || []);
       setRegistry(data.registry || {});
     } catch (err: any) {
-      setError(err.message || "AI-palveluiden lataus epäonnistui");
+      setError(err.message || tt("loadFailed"));
     } finally {
       setLoading(false);
     }
@@ -98,7 +104,8 @@ export default function AdminAiProvidersPage() {
 
   useEffect(() => {
     fetchProviders();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [language]);
 
   function resetForm() {
     setEditingId(null);
@@ -139,13 +146,13 @@ export default function AdminAiProvidersPage() {
       });
       const data = await response.json();
 
-      if (!response.ok) throw new Error(data.error || "Tallennus epäonnistui");
+      if (!response.ok) throw new Error(data.error || tt("saveFailed"));
 
-      setMessage("AI-palvelu tallennettu.");
+      setMessage(tt("saved"));
       resetForm();
       await fetchProviders();
     } catch (err: any) {
-      setError(err.message || "Tallennus epäonnistui");
+      setError(err.message || tt("saveFailed"));
     } finally {
       setSaving(false);
     }
@@ -160,12 +167,12 @@ export default function AdminAiProvidersPage() {
       const response = await fetch(`/api/admin/ai-providers/${provider.id}/test`, { method: "POST" });
       const data = await response.json();
 
-      if (!response.ok) throw new Error(data.error || "Testaus epäonnistui");
+      if (!response.ok) throw new Error(data.error || tt("testFailed"));
 
-      setMessage("Yhteystesti onnistui.");
+      setMessage(tt("testOk"));
       await fetchProviders();
     } catch (err: any) {
-      setError(err.message || "Testaus epäonnistui");
+      setError(err.message || tt("testFailed"));
       await fetchProviders();
     } finally {
       setTestingId(null);
@@ -173,7 +180,7 @@ export default function AdminAiProvidersPage() {
   }
 
   async function deleteProvider(provider: ProviderCredential) {
-    if (!confirm(`Poistetaanko AI-palvelun ${provider.provider} tallennettu API-avain?`)) return;
+    if (!confirm(`${tt("deleteConfirmPrefix")} ${provider.provider} ${tt("deleteConfirmSuffix")}`)) return;
 
     setSaving(true);
     setMessage(null);
@@ -183,13 +190,13 @@ export default function AdminAiProvidersPage() {
       const response = await fetch(`/api/admin/ai-providers/${provider.id}`, { method: "DELETE" });
       const data = await response.json();
 
-      if (!response.ok) throw new Error(data.error || "Poisto epäonnistui");
+      if (!response.ok) throw new Error(data.error || tt("deleteFailed"));
 
-      setMessage("AI-palvelu poistettu.");
+      setMessage(tt("deleted"));
       if (editingId === provider.id) resetForm();
       await fetchProviders();
     } catch (err: any) {
-      setError(err.message || "Poisto epäonnistui");
+      setError(err.message || tt("deleteFailed"));
     } finally {
       setSaving(false);
     }
@@ -203,14 +210,14 @@ export default function AdminAiProvidersPage() {
             <KeyRound size={26} />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">AI-palveluiden API-avaimet</h1>
-            <p className="text-sm text-slate-500">Hallinnoi sivuston yhteisiä AI API-avaimia. Avaimia ei näytetä käyttöliittymässä tallennuksen jälkeen.</p>
+            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">{tt("title")}</h1>
+            <p className="text-sm text-slate-500">{tt("description")}</p>
           </div>
         </div>
 
         <button onClick={fetchProviders} disabled={loading} className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl border border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50">
           {loading ? <Loader2 size={16} className="animate-spin" /> : <RefreshCcw size={16} />}
-          Päivitä
+          {tc("refresh")}
         </button>
       </header>
 
@@ -222,38 +229,38 @@ export default function AdminAiProvidersPage() {
 
       <section className="bg-white border border-slate-200 rounded-[2rem] p-6 shadow-sm space-y-5">
         <div>
-          <h2 className="text-lg font-bold text-slate-900">{editingId ? "Muokkaa AI-palvelua" : "Lisää / korvaa AI-palvelun avain"}</h2>
-          <p className="text-xs text-slate-500 mt-1">Jos päivität olemassa olevaa palvelua ilman uutta API-avainta, vanha avain säilyy.</p>
+          <h2 className="text-lg font-bold text-slate-900">{editingId ? tt("editTitle") : tt("createTitle")}</h2>
+          <p className="text-xs text-slate-500 mt-1">{tt("updateNote")}</p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <select value={form.provider} onChange={(event) => setForm({ ...form, provider: event.target.value })} disabled={!!editingId} className="px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-blue-100 disabled:opacity-60">
             {providerOptions.map(([key, value]) => <option key={key} value={key}>{value.label}</option>)}
           </select>
-          <input value={form.label} onChange={(event) => setForm({ ...form, label: event.target.value })} placeholder="Nimi / label" className="px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-blue-100" />
-          <input value={form.defaultModel} onChange={(event) => setForm({ ...form, defaultModel: event.target.value })} placeholder="Oletusmalli" className="px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-blue-100" />
-          <input type="password" value={form.secret} onChange={(event) => setForm({ ...form, secret: event.target.value })} placeholder={editingId ? "Uusi API-avain (valinnainen)" : "API-avain"} className="px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-blue-100" />
-          <input value={form.baseUrl} onChange={(event) => setForm({ ...form, baseUrl: event.target.value })} placeholder="Base URL (valinnainen)" className="px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-blue-100" />
-          <input value={form.allowedModels} onChange={(event) => setForm({ ...form, allowedModels: event.target.value })} placeholder="Sallitut mallit pilkulla" className="px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-blue-100" />
+          <input value={form.label} onChange={(event) => setForm({ ...form, label: event.target.value })} placeholder={tt("labelPlaceholder")} className="px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-blue-100" />
+          <input value={form.defaultModel} onChange={(event) => setForm({ ...form, defaultModel: event.target.value })} placeholder={tt("defaultModelPlaceholder")} className="px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-blue-100" />
+          <input type="password" value={form.secret} onChange={(event) => setForm({ ...form, secret: event.target.value })} placeholder={editingId ? tt("newSecretPlaceholder") : tt("secretPlaceholder")} className="px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-blue-100" />
+          <input value={form.baseUrl} onChange={(event) => setForm({ ...form, baseUrl: event.target.value })} placeholder={tt("baseUrlPlaceholder")} className="px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-blue-100" />
+          <input value={form.allowedModels} onChange={(event) => setForm({ ...form, allowedModels: event.target.value })} placeholder={tt("allowedModelsPlaceholder")} className="px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-blue-100" />
         </div>
 
         <div className="flex flex-wrap items-center gap-4 text-sm">
-          <label className="inline-flex items-center gap-2 font-semibold text-slate-600"><input type="checkbox" checked={form.isEnabled} onChange={(event) => setForm({ ...form, isEnabled: event.target.checked })} /> Käytössä</label>
-          <label className="inline-flex items-center gap-2 font-semibold text-slate-600"><input type="checkbox" checked={form.isDefault} onChange={(event) => setForm({ ...form, isDefault: event.target.checked })} /> Oletuspalvelu</label>
+          <label className="inline-flex items-center gap-2 font-semibold text-slate-600"><input type="checkbox" checked={form.isEnabled} onChange={(event) => setForm({ ...form, isEnabled: event.target.checked })} /> {tt("isEnabled")}</label>
+          <label className="inline-flex items-center gap-2 font-semibold text-slate-600"><input type="checkbox" checked={form.isDefault} onChange={(event) => setForm({ ...form, isDefault: event.target.checked })} /> {tt("isDefault")}</label>
         </div>
 
         <div className="flex gap-2">
           <button onClick={saveProvider} disabled={saving || (!editingId && !form.secret.trim())} className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-slate-800 disabled:opacity-50">
             {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-            Tallenna
+            {tc("save")}
           </button>
-          {editingId && <button onClick={resetForm} className="px-5 py-3 rounded-xl border border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-50">Peruuta</button>}
+          {editingId && <button onClick={resetForm} className="px-5 py-3 rounded-xl border border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-50">{tc("cancel")}</button>}
         </div>
       </section>
 
       <section className="bg-white border border-slate-200 rounded-[2rem] p-6 shadow-sm space-y-4">
-        <h2 className="text-lg font-bold text-slate-900">Tallennetut AI-palvelut</h2>
-        {providers.length === 0 && <p className="text-sm text-slate-500">Ei tallennettuja AI-palveluita. Järjestelmä käyttää vielä .env-fallbackia, jos se on määritetty.</p>}
+        <h2 className="text-lg font-bold text-slate-900">{tt("savedProviders")}</h2>
+        {providers.length === 0 && <p className="text-sm text-slate-500">{tt("noProviders")}</p>}
         <div className="space-y-3">
           {providers.map((provider) => (
             <div key={provider.id} className="border border-slate-200 rounded-2xl p-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
@@ -261,28 +268,28 @@ export default function AdminAiProvidersPage() {
                 <div className="flex flex-wrap items-center gap-2">
                   <h3 className="font-bold text-slate-900">{provider.label || provider.provider}</h3>
                   <span className="text-xs px-2 py-1 rounded-full bg-slate-100 text-slate-600 font-bold">{provider.provider}</span>
-                  <span className={`text-xs px-2 py-1 rounded-full font-bold ${provider.isEnabled ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{provider.isEnabled ? "Käytössä" : "Pois"}</span>
-                  {provider.isDefault && <span className="text-xs px-2 py-1 rounded-full bg-blue-50 text-blue-700 font-bold">Oletus</span>}
+                  <span className={`text-xs px-2 py-1 rounded-full font-bold ${provider.isEnabled ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{provider.isEnabled ? tc("enabled") : tc("disabled")}</span>
+                  {provider.isDefault && <span className="text-xs px-2 py-1 rounded-full bg-blue-50 text-blue-700 font-bold">{tc("default")}</span>}
                   {provider.lastTestOk === true && <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 font-bold"><CheckCircle2 size={13} /> Test OK</span>}
                   {provider.lastTestOk === false && <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-red-50 text-red-700 font-bold"><XCircle size={13} /> Test failed</span>}
                 </div>
                 <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-1 text-xs text-slate-500">
                   <div>Key: <span className="font-semibold text-slate-700">{provider.keyPreview || "-"}</span></div>
                   <div>Model: <span className="font-semibold text-slate-700">{provider.defaultModel || "-"}</span></div>
-                  <div>Testattu: <span className="font-semibold text-slate-700">{formatDate(provider.lastTestedAt)}</span></div>
+                  <div>{tt("testedAt")}: <span className="font-semibold text-slate-700">{formatDate(provider.lastTestedAt)}</span></div>
                   <div>Base URL: <span className="font-semibold text-slate-700">{provider.baseUrl || "-"}</span></div>
-                  <div>Allowed: <span className="font-semibold text-slate-700">{modelsToText(provider.allowedModels || []) || "-"}</span></div>
-                  <div>Last used: <span className="font-semibold text-slate-700">{formatDate(provider.lastUsedAt)}</span></div>
+                  <div>{tt("allowed")}: <span className="font-semibold text-slate-700">{modelsToText(provider.allowedModels || []) || "-"}</span></div>
+                  <div>{tt("lastUsed")}: <span className="font-semibold text-slate-700">{formatDate(provider.lastUsedAt)}</span></div>
                 </div>
                 {provider.lastTestError && <p className="mt-2 text-xs text-red-600">{provider.lastTestError}</p>}
               </div>
               <div className="flex flex-wrap gap-2">
-                <button onClick={() => editProvider(provider)} className="px-4 py-2 rounded-xl border border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-50">Muokkaa</button>
+                <button onClick={() => editProvider(provider)} className="px-4 py-2 rounded-xl border border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-50">{tc("edit")}</button>
                 <button onClick={() => testProvider(provider)} disabled={testingId === provider.id} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-blue-100 text-sm font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 disabled:opacity-50">
                   {testingId === provider.id && <Loader2 size={14} className="animate-spin" />}
-                  Testaa
+                  {tt("test")}
                 </button>
-                <button onClick={() => deleteProvider(provider)} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-red-100 text-sm font-bold text-red-700 bg-red-50 hover:bg-red-100"><Trash2 size={14} /> Poista</button>
+                <button onClick={() => deleteProvider(provider)} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-red-100 text-sm font-bold text-red-700 bg-red-50 hover:bg-red-100"><Trash2 size={14} /> {tc("delete")}</button>
               </div>
             </div>
           ))}

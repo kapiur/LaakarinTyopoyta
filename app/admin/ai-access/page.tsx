@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { BrainCircuit, Loader2, RefreshCcw, Save } from "lucide-react";
+import { useI18n } from "../../../lib/useI18n";
+import { aiAdminT } from "../../../components/ai-admin/aiAdminI18n";
 
 type AiAccessUser = {
   id: number;
@@ -24,6 +26,10 @@ type Registry = Record<string, { label: string }>;
 type EditState = AiAccessUser["policy"] & { userId: number };
 
 export default function AdminAiAccessPage() {
+  const { language } = useI18n();
+  const tt = (key: string) => aiAdminT(language, "access", key);
+  const tc = (key: string) => aiAdminT(language, "common", key);
+
   const [users, setUsers] = useState<AiAccessUser[]>([]);
   const [registry, setRegistry] = useState<Registry>({});
   const [loading, setLoading] = useState(true);
@@ -41,12 +47,12 @@ export default function AdminAiAccessPage() {
     try {
       const response = await fetch("/api/admin/ai-access");
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "AI-käyttöoikeuksien lataus epäonnistui");
+      if (!response.ok) throw new Error(data.error || tt("loadFailed"));
 
       setUsers(data.users || []);
       setRegistry(data.registry || {});
     } catch (err: any) {
-      setError(err.message || "AI-käyttöoikeuksien lataus epäonnistui");
+      setError(err.message || tt("loadFailed"));
     } finally {
       setLoading(false);
     }
@@ -54,7 +60,8 @@ export default function AdminAiAccessPage() {
 
   useEffect(() => {
     fetchAccess();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [language]);
 
   function startEdit(user: AiAccessUser) {
     setEditing({ userId: user.id, ...user.policy });
@@ -84,13 +91,13 @@ export default function AdminAiAccessPage() {
         body: JSON.stringify(editing),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Tallennus epäonnistui");
+      if (!response.ok) throw new Error(data.error || tt("saveFailed"));
 
-      setMessage("AI-käyttöoikeudet tallennettu.");
+      setMessage(tt("saved"));
       setEditing(null);
       await fetchAccess();
     } catch (err: any) {
-      setError(err.message || "Tallennus epäonnistui");
+      setError(err.message || tt("saveFailed"));
     } finally {
       setSavingId(null);
     }
@@ -104,14 +111,14 @@ export default function AdminAiAccessPage() {
             <BrainCircuit size={26} />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">AI-käyttöoikeudet</h1>
-            <p className="text-sm text-slate-500">Määritä, ketkä voivat käyttää palvelun yhteisiä API-avaimia ja kenelle sallitaan myöhemmin omat avaimet.</p>
+            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">{tt("title")}</h1>
+            <p className="text-sm text-slate-500">{tt("description")}</p>
           </div>
         </div>
 
         <button onClick={fetchAccess} disabled={loading} className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl border border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50">
           {loading ? <Loader2 size={16} className="animate-spin" /> : <RefreshCcw size={16} />}
-          Päivitä
+          {tc("refresh")}
         </button>
       </header>
 
@@ -123,7 +130,7 @@ export default function AdminAiAccessPage() {
 
       <section className="bg-white border border-slate-200 rounded-[2rem] p-6 shadow-sm space-y-4">
         {loading ? (
-          <div className="flex items-center gap-2 text-sm text-slate-500"><Loader2 size={16} className="animate-spin" /> Ladataan...</div>
+          <div className="flex items-center gap-2 text-sm text-slate-500"><Loader2 size={16} className="animate-spin" /> {tc("loading")}</div>
         ) : (
           users.map((user) => {
             const isEditing = editing?.userId === user.id;
@@ -136,7 +143,7 @@ export default function AdminAiAccessPage() {
                     <div className="flex flex-wrap items-center gap-2">
                       <h3 className="font-bold text-slate-900">{user.name || user.email}</h3>
                       <span className="text-xs px-2 py-1 rounded-full bg-slate-100 text-slate-600 font-bold">{user.role}</span>
-                      <span className={`text-xs px-2 py-1 rounded-full font-bold ${user.isActive ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{user.isActive ? "Active" : "Inactive"}</span>
+                      <span className={`text-xs px-2 py-1 rounded-full font-bold ${user.isActive ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{user.isActive ? tc("active") : tc("inactive")}</span>
                     </div>
                     <p className="text-xs text-slate-500 mt-1">{user.email}</p>
                   </div>
@@ -145,12 +152,12 @@ export default function AdminAiAccessPage() {
                       <>
                         <button onClick={savePolicy} disabled={savingId === user.id} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-slate-800 disabled:opacity-50">
                           {savingId === user.id ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-                          Tallenna
+                          {tc("save")}
                         </button>
-                        <button onClick={() => setEditing(null)} className="px-4 py-2 rounded-xl border border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-50">Peruuta</button>
+                        <button onClick={() => setEditing(null)} className="px-4 py-2 rounded-xl border border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-50">{tc("cancel")}</button>
                       </>
                     ) : (
-                      <button onClick={() => startEdit(user)} className="px-4 py-2 rounded-xl border border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-50">Muokkaa</button>
+                      <button onClick={() => startEdit(user)} className="px-4 py-2 rounded-xl border border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-50">{tc("edit")}</button>
                     )}
                   </div>
                 </div>
@@ -158,22 +165,22 @@ export default function AdminAiAccessPage() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
                   <label className="flex items-center gap-2 p-3 rounded-xl bg-slate-50 border border-slate-200 font-semibold text-slate-600">
                     <input type="checkbox" disabled={!isEditing} checked={current.allowPlatformCredentials} onChange={(event) => editing && setEditing({ ...editing, allowPlatformCredentials: event.target.checked })} />
-                    Yhteiset API-avaimet
+                    {tt("platformKeys")}
                   </label>
                   <label className="flex items-center gap-2 p-3 rounded-xl bg-slate-50 border border-slate-200 font-semibold text-slate-600">
                     <input type="checkbox" disabled={!isEditing} checked={current.allowUserCredentials} onChange={(event) => editing && setEditing({ ...editing, allowUserCredentials: event.target.checked, requireUserCredentials: event.target.checked ? editing.requireUserCredentials : false })} />
-                    Omat API-avaimet sallittu
+                    {tt("userKeysAllowed")}
                   </label>
                   <label className="flex items-center gap-2 p-3 rounded-xl bg-slate-50 border border-slate-200 font-semibold text-slate-600">
                     <input type="checkbox" disabled={!isEditing} checked={current.requireUserCredentials} onChange={(event) => editing && setEditing({ ...editing, requireUserCredentials: event.target.checked, allowUserCredentials: event.target.checked ? true : editing.allowUserCredentials })} />
-                    Vaadi oma API-avain
+                    {tt("requireUserKey")}
                   </label>
                 </div>
 
                 <div className="space-y-2">
-                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Sallitut providerit</p>
+                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">{tt("allowedProviders")}</p>
                   <div className="flex flex-wrap gap-2">
-                    <button disabled={!isEditing} onClick={() => editing && setEditing({ ...editing, allowedProviders: [] })} className={`px-3 py-2 rounded-xl text-xs font-bold border ${current.allowedProviders.length === 0 ? "bg-blue-50 border-blue-100 text-blue-700" : "bg-slate-50 border-slate-200 text-slate-500"}`}>Kaikki</button>
+                    <button disabled={!isEditing} onClick={() => editing && setEditing({ ...editing, allowedProviders: [] })} className={`px-3 py-2 rounded-xl text-xs font-bold border ${current.allowedProviders.length === 0 ? "bg-blue-50 border-blue-100 text-blue-700" : "bg-slate-50 border-slate-200 text-slate-500"}`}>{tc("all")}</button>
                     {providerOptions.map(([key, value]) => (
                       <button key={key} disabled={!isEditing} onClick={() => toggleProvider(key)} className={`px-3 py-2 rounded-xl text-xs font-bold border ${current.allowedProviders.includes(key) ? "bg-blue-50 border-blue-100 text-blue-700" : "bg-slate-50 border-slate-200 text-slate-500"}`}>{value.label}</button>
                     ))}
