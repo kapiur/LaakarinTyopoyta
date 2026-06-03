@@ -1,4 +1,3 @@
-import { OpenAI } from 'openai';
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import {
@@ -9,6 +8,8 @@ import {
 import { authOptions } from '../../../lib/auth';
 import { prisma } from '../../../lib/prisma';
 import { anonymizePatientText, mergeAnonymizationResults } from '../../../lib/privacy/anonymizePatientText';
+import { runAiCompletion } from '../../../lib/ai/runAiCompletion';
+import { DEFAULT_AI_MODEL, DEFAULT_AI_PROVIDER } from '../../../lib/ai/modelRegistry';
 import {
   buildUserAiProfileInstruction,
   defaultProfileModeForTool,
@@ -17,12 +18,6 @@ import {
   type AiProfileMode,
   type UserAiProfileRecord,
 } from '../../../lib/ai/userAiProfile';
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
-const CURRENT_MODEL = 'gpt-5.4';
 
 const PRIVACY_PLACEHOLDER_SYSTEM_PROMPT = `
 Privacy placeholders such as [NAME], [HETU], [DATE_OF_BIRTH], [DATE], [PHONE], [EMAIL], [ADDRESS], [PATIENT_ID], [PROFESSIONAL_NAME] and similar bracketed markers are internal server-side privacy markers.
@@ -187,8 +182,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Puuttuvat tiedot' }, { status: 400 });
     }
 
-    const response = await openai.chat.completions.create({
-      model: CURRENT_MODEL,
+    const response = await runAiCompletion({
+      userId,
+      provider: DEFAULT_AI_PROVIDER,
+      model: DEFAULT_AI_MODEL,
       messages: finalMessages,
       temperature: 0,
     });
@@ -196,7 +193,7 @@ export async function POST(req: Request) {
     const anonymization = mergeAnonymizationResults(inputAnonymizationResults);
 
     return NextResponse.json({
-      content: response.choices[0].message.content,
+      content: response.content,
       privacy: {
         anonymized: anonymization.hasFindings,
         findingTypes: anonymization.findingTypes,
