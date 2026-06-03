@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Bot, Clipboard, Loader2, Send, ShieldCheck, Sparkles } from "lucide-react";
+import { useI18n } from "../../lib/useI18n";
 
 type AgentContextType = "general" | "malli" | "aiTool" | "clinicalText";
 
@@ -30,18 +31,12 @@ type AgentPanelProps = {
   compact?: boolean;
 };
 
-const contextOptions: Array<{ value: AgentContextType; label: string; description: string }> = [
-  { value: "general", label: "Yleinen", description: "Työnkulku, kysymykset ja yleinen AI-apu" },
-  { value: "clinicalText", label: "Kliininen teksti", description: "Arvioi tai luonnostele kliinistä tekstiä" },
-  { value: "malli", label: "Malli", description: "Luo tai paranna tekstimallia" },
-  { value: "aiTool", label: "AI-työkalu", description: "Suunnittele tai paranna promptia" },
-];
-
 async function copyToClipboard(text: string) {
   await navigator.clipboard.writeText(text);
 }
 
 export default function AgentPanel({ defaultContextType = "general", initialText = "", initialTemplate = "", compact = false }: AgentPanelProps) {
+  const { t } = useI18n();
   const [contextType, setContextType] = useState<AgentContextType>(defaultContextType);
   const [userMessage, setUserMessage] = useState("");
   const [currentText, setCurrentText] = useState(initialText);
@@ -51,7 +46,14 @@ export default function AgentPanel({ defaultContextType = "general", initialText
   const [response, setResponse] = useState<AgentResponse | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
 
-  const selectedContext = useMemo(() => contextOptions.find((option) => option.value === contextType), [contextType]);
+  const contextOptions = useMemo<Array<{ value: AgentContextType; label: string; description: string }>>(() => [
+    { value: "general", label: t("agent.contextGeneral"), description: t("agent.contextGeneralDescription") },
+    { value: "clinicalText", label: t("agent.contextClinicalText"), description: t("agent.contextClinicalTextDescription") },
+    { value: "malli", label: t("agent.contextMalli"), description: t("agent.contextMalliDescription") },
+    { value: "aiTool", label: t("agent.contextAiTool"), description: t("agent.contextAiToolDescription") },
+  ], [t]);
+
+  const selectedContext = useMemo(() => contextOptions.find((option) => option.value === contextType), [contextOptions, contextType]);
 
   async function sendToAgent() {
     setLoading(true);
@@ -73,12 +75,12 @@ export default function AgentPanel({ defaultContextType = "general", initialText
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.error || data.details || "Agentin kutsu epäonnistui");
+        throw new Error(data.error || data.details || t("agent.callFailed"));
       }
 
       setResponse(data);
     } catch (err: any) {
-      setError(err.message || "Agentin kutsu epäonnistui");
+      setError(err.message || t("agent.callFailed"));
     } finally {
       setLoading(false);
     }
@@ -101,21 +103,21 @@ export default function AgentPanel({ defaultContextType = "general", initialText
             <Bot size={24} />
           </div>
           <div>
-            <h2 className="text-lg font-bold text-slate-900">AI-agentti</h2>
-            <p className="text-sm text-slate-500">Ohjattu AI-avustaja. Tekstiä ei tallenneta eikä muutoksia tehdä automaattisesti.</p>
+            <h2 className="text-lg font-bold text-slate-900">{t("agent.title")}</h2>
+            <p className="text-sm text-slate-500">{t("agent.description")}</p>
           </div>
         </div>
 
         <div className="inline-flex items-center gap-2 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 px-3 py-2 rounded-full">
           <ShieldCheck size={14} />
-          Privacy gateway käytössä
+          {t("agent.privacyBadge")}
         </div>
       </header>
 
       <div className={`p-6 grid grid-cols-1 ${compact ? "" : "xl:grid-cols-2"} gap-6`}>
         <div className="space-y-4">
           <label className="space-y-1 block">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Konteksti</span>
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{t("agent.contextLabel")}</span>
             <select
               value={contextType}
               onChange={(event) => setContextType(event.target.value as AgentContextType)}
@@ -127,34 +129,34 @@ export default function AgentPanel({ defaultContextType = "general", initialText
           </label>
 
           <label className="space-y-1 block">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Pyyntö agentille</span>
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{t("agent.requestLabel")}</span>
             <textarea
               value={userMessage}
               onChange={(event) => setUserMessage(event.target.value)}
               rows={4}
-              placeholder="Esim. Tarkista teksti ja ehdota mitä puuttuu."
+              placeholder={t("agent.requestPlaceholder")}
               className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-purple-100 resize-y"
             />
           </label>
 
           <label className="space-y-1 block">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Nykyinen teksti</span>
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{t("agent.currentTextLabel")}</span>
             <textarea
               value={currentText}
               onChange={(event) => setCurrentText(event.target.value)}
               rows={7}
-              placeholder="Liitä käsiteltävä teksti tähän."
+              placeholder={t("agent.currentTextPlaceholder")}
               className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-purple-100 resize-y"
             />
           </label>
 
           <label className="space-y-1 block">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Nykyinen malli / prompti</span>
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{t("agent.currentTemplateLabel")}</span>
             <textarea
               value={currentTemplate}
               onChange={(event) => setCurrentTemplate(event.target.value)}
               rows={5}
-              placeholder="Valinnainen. Mallin tai promptin nykyinen sisältö."
+              placeholder={t("agent.currentTemplatePlaceholder")}
               className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-purple-100 resize-y"
             />
           </label>
@@ -165,7 +167,7 @@ export default function AgentPanel({ defaultContextType = "general", initialText
             className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
-            Lähetä agentille
+            {t("agent.send")}
           </button>
         </div>
 
@@ -179,8 +181,8 @@ export default function AgentPanel({ defaultContextType = "general", initialText
           {!response && !error && (
             <div className="rounded-[2rem] border border-dashed border-slate-200 bg-slate-50 p-8 text-center text-slate-500">
               <Sparkles className="mx-auto mb-3 text-slate-400" size={28} />
-              <p className="text-sm font-semibold">Agentin vastaus näkyy tässä.</p>
-              <p className="text-xs mt-1">MVP ei tallenna eikä muuta tietoja automaattisesti.</p>
+              <p className="text-sm font-semibold">{t("agent.emptyTitle")}</p>
+              <p className="text-xs mt-1">{t("agent.emptyDescription")}</p>
             </div>
           )}
 
@@ -193,7 +195,7 @@ export default function AgentPanel({ defaultContextType = "general", initialText
                   {response.model && <span className="px-2 py-1 rounded-full bg-white border border-slate-200">{response.model}</span>}
                   {response.privacy && (
                     <span className="px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100">
-                      Privacy {response.privacy.anonymized ? "OK · tunnisteita poistettu" : "OK"}
+                      {response.privacy.anonymized ? t("agent.privacyAnonymized") : t("agent.privacyOk")}
                     </span>
                   )}
                 </div>
@@ -204,20 +206,20 @@ export default function AgentPanel({ defaultContextType = "general", initialText
 
                 <div className="flex flex-wrap gap-2 pt-2">
                   <button onClick={() => copyValue("reply", response.reply)} className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-600 hover:bg-slate-50">
-                    <Clipboard size={14} /> Kopioi vastaus
+                    <Clipboard size={14} /> {t("agent.copyReply")}
                   </button>
                   {response.draft && (
                     <button onClick={() => copyValue("draft", response.draft)} className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-600 hover:bg-slate-50">
-                      <Clipboard size={14} /> Kopioi luonnos
+                      <Clipboard size={14} /> {t("agent.copyDraft")}
                     </button>
                   )}
-                  {copied && <span className="text-xs font-bold text-emerald-600 self-center">Kopioitu: {copied}</span>}
+                  {copied && <span className="text-xs font-bold text-emerald-600 self-center">{t("agent.copiedLabel")}: {copied}</span>}
                 </div>
               </div>
 
               {response.suggestedActions && response.suggestedActions.length > 0 && (
                 <div className="rounded-[2rem] border border-slate-200 bg-white p-5">
-                  <h3 className="text-sm font-bold text-slate-900 mb-3">Ehdotetut toiminnot</h3>
+                  <h3 className="text-sm font-bold text-slate-900 mb-3">{t("agent.suggestedActions")}</h3>
                   <div className="flex flex-wrap gap-2">
                     {response.suggestedActions.map((action, index) => (
                       <button
@@ -229,7 +231,7 @@ export default function AgentPanel({ defaultContextType = "general", initialText
                       </button>
                     ))}
                   </div>
-                  <p className="text-xs text-slate-400 mt-3">MVP-vaiheessa ehdotetut toiminnot kopioivat luonnoksen. Tallennus tehdään myöhemmin erikseen käyttäjän vahvistuksella.</p>
+                  <p className="text-xs text-slate-400 mt-3">{t("agent.suggestedActionsNotice")}</p>
                 </div>
               )}
             </>
