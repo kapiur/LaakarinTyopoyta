@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSession } from "next-auth/react";
-import { KeyRound, Settings, Shield, Users } from "lucide-react";
+import { BrainCircuit, KeyRound, Settings, Shield, Users } from "lucide-react";
 import LanguageSettingsCard from "../../components/LanguageSettingsCard";
 import AiProfileSettingsCard from "../../components/AiProfileSettingsCard";
 import AiProviderSettingsCard from "../../components/AiProviderSettingsCard";
@@ -44,18 +44,33 @@ export default function SettingsPage() {
         </Link>
 
         {isAdmin && (
-          <Link href="/admin/users" className="group bg-white border border-slate-200 rounded-[2rem] p-6 shadow-sm hover:shadow-md hover:border-blue-200 transition-all">
-            <div className="flex items-start gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-slate-900 text-white flex items-center justify-center group-hover:scale-105 transition-transform">
-                <Users size={24} />
+          <>
+            <Link href="/admin/users" className="group bg-white border border-slate-200 rounded-[2rem] p-6 shadow-sm hover:shadow-md hover:border-blue-200 transition-all">
+              <div className="flex items-start gap-4">
+                <div className="w-12 h-12 rounded-2xl bg-slate-900 text-white flex items-center justify-center group-hover:scale-105 transition-transform">
+                  <Users size={24} />
+                </div>
+                <div className="space-y-1">
+                  <h2 className="text-lg font-bold text-slate-900">{t("settings.userManagementTitle")}</h2>
+                  <p className="text-sm text-slate-500">{t("settings.userManagementDescription")}</p>
+                  <p className="text-xs font-semibold text-blue-600 uppercase tracking-wider pt-2">Admin</p>
+                </div>
               </div>
-              <div className="space-y-1">
-                <h2 className="text-lg font-bold text-slate-900">{t("settings.userManagementTitle")}</h2>
-                <p className="text-sm text-slate-500">{t("settings.userManagementDescription")}</p>
-                <p className="text-xs font-semibold text-blue-600 uppercase tracking-wider pt-2">Admin</p>
+            </Link>
+
+            <Link href="/admin/ai-access" className="group bg-white border border-slate-200 rounded-[2rem] p-6 shadow-sm hover:shadow-md hover:border-purple-200 transition-all">
+              <div className="flex items-start gap-4">
+                <div className="w-12 h-12 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center group-hover:scale-105 transition-transform">
+                  <BrainCircuit size={24} />
+                </div>
+                <div className="space-y-1">
+                  <h2 className="text-lg font-bold text-slate-900">AI-käyttöoikeudet</h2>
+                  <p className="text-sm text-slate-500">Hallinnoi käyttäjien oikeutta käyttää yhteisiä tai omia AI API-avaimia.</p>
+                  <p className="text-xs font-semibold text-purple-600 uppercase tracking-wider pt-2">Admin</p>
+                </div>
               </div>
-            </div>
-          </Link>
+            </Link>
+          </>
         )}
       </section>
 
