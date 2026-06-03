@@ -49,8 +49,8 @@ export default function SettingsPage() {
               <Bot size={24} />
             </div>
             <div className="space-y-1">
-              <h2 className="text-lg font-bold text-slate-900">AI-agentti</h2>
-              <p className="text-sm text-slate-500">Avaa ohjattu AI-agentti. MVP ei tallenna tai muuta tietoja automaattisesti.</p>
+              <h2 className="text-lg font-bold text-slate-900">{t("settings.agentTitle")}</h2>
+              <p className="text-sm text-slate-500">{t("settings.agentDescription")}</p>
               <p className="text-xs font-semibold text-purple-600 uppercase tracking-wider pt-2">MVP</p>
             </div>
           </div>
@@ -77,8 +77,8 @@ export default function SettingsPage() {
                   <KeySquare size={24} />
                 </div>
                 <div className="space-y-1">
-                  <h2 className="text-lg font-bold text-slate-900">AI API-avaimet</h2>
-                  <p className="text-sm text-slate-500">Hallinnoi palvelun yhteisiä AI-palveluiden API-avaimia ja oletusmalleja.</p>
+                  <h2 className="text-lg font-bold text-slate-900">{t("settings.aiApiKeysTitle")}</h2>
+                  <p className="text-sm text-slate-500">{t("settings.aiApiKeysDescription")}</p>
                   <p className="text-xs font-semibold text-amber-600 uppercase tracking-wider pt-2">Admin</p>
                 </div>
               </div>
@@ -90,8 +90,8 @@ export default function SettingsPage() {
                   <BrainCircuit size={24} />
                 </div>
                 <div className="space-y-1">
-                  <h2 className="text-lg font-bold text-slate-900">AI-käyttöoikeudet</h2>
-                  <p className="text-sm text-slate-500">Hallinnoi käyttäjien oikeutta käyttää yhteisiä tai omia AI API-avaimia.</p>
+                  <h2 className="text-lg font-bold text-slate-900">{t("settings.aiAccessTitle")}</h2>
+                  <p className="text-sm text-slate-500">{t("settings.aiAccessDescription")}</p>
                   <p className="text-xs font-semibold text-purple-600 uppercase tracking-wider pt-2">Admin</p>
                 </div>
               </div>
