@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { BrainCircuit, Loader2, Save } from "lucide-react";
+import { useI18n } from "../lib/useI18n";
+import { aiAdminT } from "./ai-admin/aiAdminI18n";
 
 type Registry = Record<string, { label: string; models: Array<{ id: string; label: string }> }>;
 
@@ -27,6 +29,9 @@ const defaultSettings: AiSettings = {
 };
 
 export default function AiProviderSettingsCard() {
+  const { language } = useI18n();
+  const tt = (key: string) => aiAdminT(language, "userSettings", key);
+  const tc = (key: string) => aiAdminT(language, "common", key);
   const [settings, setSettings] = useState<AiSettings>(defaultSettings);
   const [policy, setPolicy] = useState<AiPolicy | null>(null);
   const [registry, setRegistry] = useState<Registry>({});
@@ -52,13 +57,13 @@ export default function AiProviderSettingsCard() {
     try {
       const response = await fetch("/api/profile/ai-settings");
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "AI-asetusten lataus epäonnistui");
+      if (!response.ok) throw new Error(data.error || tt("loadFailed"));
 
       setSettings(data.settings || defaultSettings);
       setPolicy(data.policy || null);
       setRegistry(data.registry || {});
     } catch (err: any) {
-      setError(err.message || "AI-asetusten lataus epäonnistui");
+      setError(err.message || tt("loadFailed"));
     } finally {
       setLoading(false);
     }
@@ -66,7 +71,8 @@ export default function AiProviderSettingsCard() {
 
   useEffect(() => {
     loadSettings();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [language]);
 
   async function saveSettings() {
     setSaving(true);
@@ -80,21 +86,21 @@ export default function AiProviderSettingsCard() {
         body: JSON.stringify(settings),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "AI-asetusten tallennus epäonnistui");
+      if (!response.ok) throw new Error(data.error || tt("saveFailed"));
 
-      setMessage("AI-asetukset tallennettu.");
+      setMessage(tt("saved"));
       await loadSettings();
     } catch (err: any) {
-      setError(err.message || "AI-asetusten tallennus epäonnistui");
+      setError(err.message || tt("saveFailed"));
     } finally {
       setSaving(false);
     }
   }
 
   const credentialOptions = [
-    { value: "platform", label: "Palvelun yhteinen API-yhteys", enabled: policy?.allowPlatformCredentials !== false },
-    { value: "user", label: "Oma API-avain", enabled: policy?.allowUserCredentials === true },
-    { value: "auto", label: "Automaattinen", enabled: policy?.allowUserCredentials === true || policy?.allowPlatformCredentials !== false },
+    { value: "platform", label: tt("platformCredential"), enabled: policy?.allowPlatformCredentials !== false },
+    { value: "user", label: tt("userCredential"), enabled: policy?.allowUserCredentials === true },
+    { value: "auto", label: tt("autoCredential"), enabled: policy?.allowUserCredentials === true || policy?.allowPlatformCredentials !== false },
   ] as const;
 
   return (
@@ -104,8 +110,8 @@ export default function AiProviderSettingsCard() {
           <BrainCircuit size={24} />
         </div>
         <div>
-          <h2 className="text-lg font-bold text-slate-900">AI-asetukset</h2>
-          <p className="text-sm text-slate-500">Valitse oletusarvoinen AI-palvelu ja malli. Kliiniset tekstit anonymisoidaan edelleen ennen ulkoista AI-kutsua.</p>
+          <h2 className="text-lg font-bold text-slate-900">{tt("title")}</h2>
+          <p className="text-sm text-slate-500">{tt("description")}</p>
         </div>
       </div>
 
@@ -116,12 +122,12 @@ export default function AiProviderSettingsCard() {
       )}
 
       {loading ? (
-        <div className="flex items-center gap-2 text-sm text-slate-500"><Loader2 size={16} className="animate-spin" /> Ladataan...</div>
+        <div className="flex items-center gap-2 text-sm text-slate-500"><Loader2 size={16} className="animate-spin" /> {tc("loading")}</div>
       ) : (
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <label className="space-y-1">
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">AI-palvelu</span>
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{tt("provider")}</span>
               <select
                 value={settings.defaultProvider}
                 onChange={(event) => setSettings({ ...settings, defaultProvider: event.target.value, defaultModel: registry[event.target.value]?.models?.[0]?.id || settings.defaultModel })}
@@ -132,7 +138,7 @@ export default function AiProviderSettingsCard() {
             </label>
 
             <label className="space-y-1">
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Malli</span>
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{tt("model")}</span>
               <input
                 list="ai-model-options"
                 value={settings.defaultModel}
@@ -146,7 +152,7 @@ export default function AiProviderSettingsCard() {
             </label>
 
             <label className="space-y-1">
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">API-avaimen käyttö</span>
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{tt("credentialMode")}</span>
               <select
                 value={settings.credentialMode}
                 onChange={(event) => setSettings({ ...settings, credentialMode: event.target.value as AiSettings["credentialMode"] })}
@@ -162,19 +168,19 @@ export default function AiProviderSettingsCard() {
                 checked={settings.allowAgentModelSelection}
                 onChange={(event) => setSettings({ ...settings, allowAgentModelSelection: event.target.checked })}
               />
-              Salli agentin valita malli tehtävän mukaan
+              {tt("allowAgentModelSelection")}
             </label>
           </div>
 
           {policy?.requireUserCredentials && (
             <div className="rounded-2xl bg-amber-50 border border-amber-100 text-amber-800 px-5 py-4 text-sm font-semibold">
-              Tälle käyttäjälle vaaditaan oma API-avain. Omat API-avaimet lisätään myöhemmässä vaiheessa.
+              {tt("userCredentialRequired")}
             </div>
           )}
 
           <button onClick={saveSettings} disabled={saving} className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-slate-800 disabled:opacity-50">
             {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-            Tallenna AI-asetukset
+            {tt("saveButton")}
           </button>
         </div>
       )}
