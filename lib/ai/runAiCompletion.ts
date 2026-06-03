@@ -1,18 +1,27 @@
 import { resolveAiCredential } from './credentials/resolveAiCredential';
 import { runOpenAiCompletion } from './providers/openai';
+import { getUserAiSettings } from './userAiSettings';
 import type { RunAiCompletionInput, RunAiCompletionResult } from './providers/types';
 
 export async function runAiCompletion(input: RunAiCompletionInput): Promise<RunAiCompletionResult> {
-  const secret = await resolveAiCredential(input.provider);
-  const model = secret.defaultModel || input.model;
+  const userSettings = await getUserAiSettings(input.userId);
+  const provider = userSettings.defaultProvider || input.provider;
+  const requestedModel = userSettings.defaultModel || input.model;
+  const secret = await resolveAiCredential({
+    userId: input.userId,
+    provider,
+    credentialMode: userSettings.credentialMode,
+  });
+  const model = secret.defaultModel || requestedModel;
 
-  if (input.provider === 'openai') {
+  if (provider === 'openai') {
     return runOpenAiCompletion({
       ...input,
+      provider,
       model,
       secret,
     });
   }
 
-  throw new Error(`AI provider is not implemented: ${input.provider}`);
+  throw new Error(`AI provider is not implemented: ${provider}`);
 }
