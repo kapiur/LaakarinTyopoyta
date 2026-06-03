@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSession } from "next-auth/react";
-import { BrainCircuit, KeyRound, KeySquare, Settings, Shield, Users } from "lucide-react";
+import { Bot, BrainCircuit, KeyRound, KeySquare, Settings, Shield, Users } from "lucide-react";
 import LanguageSettingsCard from "../../components/LanguageSettingsCard";
 import AiProfileSettingsCard from "../../components/AiProfileSettingsCard";
 import AiProviderSettingsCard from "../../components/AiProviderSettingsCard";
@@ -39,6 +39,19 @@ export default function SettingsPage() {
               <h2 className="text-lg font-bold text-slate-900">{t("settings.securityTitle")}</h2>
               <p className="text-sm text-slate-500">{t("settings.securityDescription")}</p>
               <p className="text-xs font-semibold text-slate-400 pt-2">{session?.user?.email}</p>
+            </div>
+          </div>
+        </Link>
+
+        <Link href="/agent" className="group bg-white border border-slate-200 rounded-[2rem] p-6 shadow-sm hover:shadow-md hover:border-purple-200 transition-all">
+          <div className="flex items-start gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center group-hover:scale-105 transition-transform">
+              <Bot size={24} />
+            </div>
+            <div className="space-y-1">
+              <h2 className="text-lg font-bold text-slate-900">AI-agentti</h2>
+              <p className="text-sm text-slate-500">Avaa ohjattu AI-agentti. MVP ei tallenna tai muuta tietoja automaattisesti.</p>
+              <p className="text-xs font-semibold text-purple-600 uppercase tracking-wider pt-2">MVP</p>
             </div>
           </div>
         </Link>
