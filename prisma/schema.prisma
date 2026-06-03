@@ -215,6 +215,27 @@ model UserAiProfileSample {
   @@index([profileId])
 }
 
+model AiProviderCredential {
+  id              String   @id @default(cuid())
+  provider        String   @unique
+  label           String?
+  encryptedSecret String   @db.Text
+  keyPreview      String?
+  baseUrl         String?
+  isEnabled       Boolean  @default(true)
+  isDefault       Boolean  @default(false)
+  defaultModel    String?
+  allowedModels   String?  @db.Text
+  lastTestedAt    DateTime?
+  lastTestOk      Boolean?
+  lastTestError   String?  @db.Text
+  lastUsedAt      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([isEnabled])
+}
+
 // ==========================================
 // 4. СПРАВОЧНИК ЛЕКАРСТВ (FIMEA + WIKI)
 // ==========================================
