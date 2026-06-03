@@ -15,6 +15,7 @@ export type AiProviderSecret = {
   provider: AiProviderKey;
   value: string;
   baseUrl?: string | null;
+  defaultModel?: string | null;
   source?: AiSecretSource;
 };
 

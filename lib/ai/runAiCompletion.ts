@@ -1,30 +1,15 @@
+import { resolveAiCredential } from './credentials/resolveAiCredential';
 import { runOpenAiCompletion } from './providers/openai';
-import type { AiProviderSecret, RunAiCompletionInput, RunAiCompletionResult } from './providers/types';
-
-function resolveEnvSecret(provider: RunAiCompletionInput['provider']): AiProviderSecret {
-  if (provider === 'openai') {
-    const value = process.env.OPENAI_API_KEY;
-
-    if (!value) {
-      throw new Error('OpenAI API key is not configured');
-    }
-
-    return {
-      provider,
-      value,
-      source: 'env',
-    };
-  }
-
-  throw new Error(`AI provider is not configured: ${provider}`);
-}
+import type { RunAiCompletionInput, RunAiCompletionResult } from './providers/types';
 
 export async function runAiCompletion(input: RunAiCompletionInput): Promise<RunAiCompletionResult> {
-  const secret = resolveEnvSecret(input.provider);
+  const secret = await resolveAiCredential(input.provider);
+  const model = secret.defaultModel || input.model;
 
   if (input.provider === 'openai') {
     return runOpenAiCompletion({
       ...input,
+      model,
       secret,
     });
   }
