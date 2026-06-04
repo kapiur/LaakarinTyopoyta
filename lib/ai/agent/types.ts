@@ -1,6 +1,7 @@
 import type { AiTaskType } from '../taskTypes';
 
 export type AgentContextType = 'general' | 'malli' | 'aiTool' | 'clinicalText' | 'pikaohje';
+export type AgentUiLanguage = 'fi' | 'ru' | 'en';
 
 export type AgentSuggestedAction =
   | { type: 'copy_draft'; label: string }
@@ -12,6 +13,7 @@ export type AgentSuggestedAction =
 
 export type AgentRequestBody = {
   contextType?: AgentContextType;
+  uiLanguage?: AgentUiLanguage;
   userMessage?: string;
   currentText?: string;
   currentTemplate?: string;
