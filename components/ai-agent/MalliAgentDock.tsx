@@ -198,6 +198,18 @@ export default function MalliAgentDock() {
     void loadTemplateContext();
   }
 
+  function applyDraftToMalliEditor(draft: string) {
+    if (!seed?.title) return;
+    window.dispatchEvent(new CustomEvent("malli-agent-apply-draft", {
+      detail: {
+        templateTitle: seed.title,
+        categoryName: seed.categoryName,
+        draft,
+      },
+    }));
+    setOpen(false);
+  }
+
   return (
     <>
       <button
@@ -253,6 +265,7 @@ export default function MalliAgentDock() {
               defaultContextType="malli"
               initialText={seed?.currentText || ""}
               initialTemplate={seed?.currentTemplate || ""}
+              onApplyDraft={seed?.title ? applyDraftToMalliEditor : undefined}
               compact
             />
           </div>
