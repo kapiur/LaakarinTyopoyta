@@ -1,25 +1,42 @@
 import type { AgentContextType, AgentPlan, AgentSuggestedAction } from './types';
 import type { AiTaskType } from '../taskTypes';
 
+function includesAny(text: string, words: string[]) {
+  return words.some((word) => text.includes(word));
+}
+
 function inferTaskType(contextType: AgentContextType, userMessage: string): AiTaskType {
   const text = userMessage.toLowerCase();
 
+  if (contextType === 'pikaohje') {
+    if (includesAny(text, ['tarkista', 'проверь', 'review', 'lähde', 'источ', 'source'])) return 'pikaohje_review';
+    return 'pikaohje_generation';
+  }
+
   if (contextType === 'malli') {
-    if (text.includes('korjaa') || text.includes('paranna') || text.includes('muokkaa') || text.includes('улуч') || text.includes('исправ')) return 'template_polish';
+    if (includesAny(text, ['red flag', 'red flags', 'lähetekriteeri', 'hoitosuositus', 'antibiootti', 'hoito-ohje', 'критер', 'лечение', 'рекомендац'])) return 'clinical_advice';
+    if (includesAny(text, ['korjaa', 'paranna', 'muokkaa', 'улуч', 'исправ'])) return 'template_polish';
     return 'template_generation';
   }
 
   if (contextType === 'aiTool') return 'tool_design';
 
   if (contextType === 'clinicalText') {
-    if (text.includes('tarkista') || text.includes('проверь') || text.includes('arvioi') || text.includes('review')) return 'clinical_review';
+    if (includesAny(text, ['lääke', 'annos', 'доза', 'препарат', 'medication'])) return 'medication_guidance';
+    if (includesAny(text, ['päivystys', 'kiire', 'urgent', 'срочно', 'неотлож'])) return 'urgent_triage';
+    if (includesAny(text, ['lähete', 'направ', 'referral'])) return 'referral_guidance';
+    if (includesAny(text, ['tarkista', 'проверь', 'arvioi', 'review'])) return 'clinical_review';
     return 'clinical_document';
   }
 
-  if (text.includes('lab') || text.includes('laboratorio')) return 'lab_format';
-  if (text.includes('käännä') || text.includes('translate') || text.includes('перев')) return 'translation';
-  if (text.includes('korjaa') || text.includes('исправ') || text.includes('поправ')) return 'text_fix';
-  if (text.includes('lähete') || text.includes('lausunto') || text.includes('arvio') || text.includes('направ')) return 'clinical_document';
+  if (includesAny(text, ['lab', 'laboratorio'])) return 'lab_format';
+  if (includesAny(text, ['käännä', 'translate', 'перев'])) return 'translation';
+  if (includesAny(text, ['korjaa', 'исправ', 'поправ'])) return 'text_fix';
+  if (includesAny(text, ['lääke', 'annos', 'доза', 'препарат', 'medication'])) return 'medication_guidance';
+  if (includesAny(text, ['päivystys', 'kiire', 'urgent', 'срочно', 'неотлож'])) return 'urgent_triage';
+  if (includesAny(text, ['lähete', 'направ', 'referral'])) return 'referral_guidance';
+  if (includesAny(text, ['hoito', 'diagnostiikka', 'suositus', 'лечение', 'диагност', 'рекомендац', 'guideline'])) return 'clinical_advice';
+  if (includesAny(text, ['lausunto', 'arvio'])) return 'clinical_document';
 
   return 'general_chat';
 }
@@ -29,6 +46,13 @@ function actionsForTask(taskType: AiTaskType): AgentSuggestedAction[] {
     return [
       { type: 'use_as_template_draft', label: 'Käytä malliluonnoksena' },
       { type: 'open_template_editor', label: 'Avaa mallieditorissa' },
+      { type: 'copy_draft', label: 'Kopioi luonnos' },
+    ];
+  }
+
+  if (taskType === 'pikaohje_generation' || taskType === 'pikaohje_review') {
+    return [
+      { type: 'use_as_pikaohje_draft', label: 'Käytä pikaohje-luonnoksena' },
       { type: 'copy_draft', label: 'Kopioi luonnos' },
     ];
   }
@@ -50,6 +74,16 @@ function actionsForTask(taskType: AiTaskType): AgentSuggestedAction[] {
   return [{ type: 'copy_draft', label: 'Kopioi luonnos' }];
 }
 
+function clinicalSafetyInstruction() {
+  return [
+    'Clinical safety rule:',
+    'For clinical recommendations, treatment advice, diagnostic advice, referral criteria, urgent-care triage, medication guidance, red flags or clinical quick guide content, use only the official evidence sources provided by the backend for the selected clinical country.',
+    'Do not use general model knowledge as the basis for clinical recommendations.',
+    'If the backend says evidence is missing, partial, or not retrieved, clearly state that source support is insufficient and do not add concrete recommendations, dosages, treatment durations, referral criteria, red flags or contraindications.',
+    'You may format facts provided by the user, but you must not add new clinical facts without source support.',
+  ].join('\n');
+}
+
 function systemInstructionForTask(taskType: AiTaskType, contextType: AgentContextType) {
   const base = [
     'You are a supervised AI assistant inside a clinical documentation web application for physicians.',
@@ -57,7 +91,7 @@ function systemInstructionForTask(taskType: AiTaskType, contextType: AgentContex
     'Produce drafts, analysis, and proposed next actions only.',
     'Do not invent clinical facts not present in the provided material.',
     'If important information is missing, state it clearly and continue with a draft only when reasonable.',
-    'Return practical, concise output suitable for a physician working in Finnish healthcare.',
+    'Use the clinical output language and clinical country provided by the backend.',
   ].join('\n');
 
   if (taskType === 'template_generation' || taskType === 'template_polish') {
@@ -65,15 +99,24 @@ function systemInstructionForTask(taskType: AiTaskType, contextType: AgentContex
   }
 
   if (taskType === 'tool_design') {
-    return `${base}\nFocus on designing or improving an AI tool prompt. The prompt should be clear, constrained, safe, and reusable. Include output format requirements when useful.`;
+    return `${base}\nFocus on designing or improving an AI tool prompt. The prompt should be clear, constrained, safe, and reusable. For clinical tools, include a rule that clinical recommendations require official sources for the selected country.`;
   }
 
-  if (taskType === 'clinical_review') {
-    return `${base}\nFocus on reviewing clinical logic, missing information, contradictions, medication changes, dates, follow-up, referrals, and patient-safety issues. Do not rewrite unless requested.`;
+  if (
+    taskType === 'clinical_review' ||
+    taskType === 'clinical_advice' ||
+    taskType === 'clinical_source_check' ||
+    taskType === 'pikaohje_generation' ||
+    taskType === 'pikaohje_review' ||
+    taskType === 'medication_guidance' ||
+    taskType === 'urgent_triage' ||
+    taskType === 'referral_guidance'
+  ) {
+    return `${base}\n${clinicalSafetyInstruction()}`;
   }
 
   if (taskType === 'clinical_document') {
-    return `${base}\nFocus on producing a clinically coherent Finnish medical draft based only on provided information. Use professional Finnish medical language.`;
+    return `${base}\nFocus on producing a clinically coherent medical draft based only on provided information. Do not add new recommendations unless source support is provided.`;
   }
 
   if (contextType === 'general') {

@@ -4,11 +4,22 @@ import { useMemo, useState } from "react";
 import { Bot, Clipboard, Loader2, Send, ShieldCheck, Sparkles } from "lucide-react";
 import { useI18n } from "../../lib/useI18n";
 
-type AgentContextType = "general" | "malli" | "aiTool" | "clinicalText";
+type AgentContextType = "general" | "malli" | "aiTool" | "clinicalText" | "pikaohje";
 
 type AgentSuggestedAction = {
   type: string;
   label: string;
+};
+
+type AgentEvidence = {
+  status: "found" | "partial" | "not_found" | "not_required";
+  level: string;
+  clinicalCountry: string;
+  clinicalOutputLanguage: string;
+  requiresEvidence: boolean;
+  sources: Array<{ id: string; name: string; sourceType: string; trustLevel: string; baseUrl?: string }>;
+  warnings?: string[];
+  unsupportedClaims?: string[];
 };
 
 type AgentResponse = {
@@ -16,8 +27,9 @@ type AgentResponse = {
   draft?: string;
   suggestedActions?: AgentSuggestedAction[];
   taskType?: string;
-  provider?: string;
-  model?: string;
+  provider?: string | null;
+  model?: string | null;
+  evidence?: AgentEvidence;
   privacy?: {
     anonymized: boolean;
     findingTypes: string[];
@@ -31,12 +43,40 @@ type AgentPanelProps = {
   compact?: boolean;
 };
 
+const localLabels = {
+  fi: {
+    contextPikaohje: "Pikaohje",
+    contextPikaohjeDescription: "Luo tai tarkista kliinistä pikaohjetta",
+    evidenceTitle: "Näyttö",
+    clinicalCountry: "Kliininen maa",
+    clinicalLanguage: "Kliininen kieli",
+    sources: "Lähteet",
+  },
+  ru: {
+    contextPikaohje: "Быстрая инструкция",
+    contextPikaohjeDescription: "Создать или проверить клиническую карточку",
+    evidenceTitle: "Источники",
+    clinicalCountry: "Страна рекомендаций",
+    clinicalLanguage: "Клинический язык",
+    sources: "Источники",
+  },
+  en: {
+    contextPikaohje: "Quick guide",
+    contextPikaohjeDescription: "Create or review a clinical quick guide",
+    evidenceTitle: "Evidence",
+    clinicalCountry: "Clinical country",
+    clinicalLanguage: "Clinical language",
+    sources: "Sources",
+  },
+} as const;
+
 async function copyToClipboard(text: string) {
   await navigator.clipboard.writeText(text);
 }
 
 export default function AgentPanel({ defaultContextType = "general", initialText = "", initialTemplate = "", compact = false }: AgentPanelProps) {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
+  const l = localLabels[language] || localLabels.fi;
   const [contextType, setContextType] = useState<AgentContextType>(defaultContextType);
   const [userMessage, setUserMessage] = useState("");
   const [currentText, setCurrentText] = useState(initialText);
@@ -51,7 +91,8 @@ export default function AgentPanel({ defaultContextType = "general", initialText
     { value: "clinicalText", label: t("agent.contextClinicalText"), description: t("agent.contextClinicalTextDescription") },
     { value: "malli", label: t("agent.contextMalli"), description: t("agent.contextMalliDescription") },
     { value: "aiTool", label: t("agent.contextAiTool"), description: t("agent.contextAiToolDescription") },
-  ], [t]);
+    { value: "pikaohje", label: l.contextPikaohje, description: l.contextPikaohjeDescription },
+  ], [t, l]);
 
   const selectedContext = useMemo(() => contextOptions.find((option) => option.value === contextType), [contextOptions, contextType]);
 
@@ -66,6 +107,7 @@ export default function AgentPanel({ defaultContextType = "general", initialText
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contextType,
+          uiLanguage: language,
           userMessage,
           currentText,
           currentTemplate,
@@ -199,6 +241,31 @@ export default function AgentPanel({ defaultContextType = "general", initialText
                     </span>
                   )}
                 </div>
+
+                {response.evidence && (
+                  <div className="rounded-2xl bg-white border border-slate-200 p-4 space-y-2 text-xs text-slate-600">
+                    <div className="flex flex-wrap gap-2 font-bold">
+                      <span>{l.evidenceTitle}: {response.evidence.status}</span>
+                      <span>{l.clinicalCountry}: {response.evidence.clinicalCountry}</span>
+                      <span>{l.clinicalLanguage}: {response.evidence.clinicalOutputLanguage}</span>
+                    </div>
+                    {response.evidence.sources.length > 0 && (
+                      <div>
+                        <div className="font-bold text-slate-700 mb-1">{l.sources}</div>
+                        <ul className="list-disc pl-5 space-y-1">
+                          {response.evidence.sources.map((source) => (
+                            <li key={source.id}>{source.name} · {source.trustLevel}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {response.evidence.warnings && response.evidence.warnings.length > 0 && (
+                      <div className="rounded-xl bg-amber-50 border border-amber-100 text-amber-800 p-3 font-semibold">
+                        {response.evidence.warnings.join(" ")}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div className="prose prose-sm max-w-none whitespace-pre-wrap text-slate-800">
                   {response.reply}

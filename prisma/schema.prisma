@@ -39,6 +39,8 @@ model User {
   history         AIHistory[]
   aiTools         AiTool[]
   aiProfile       UserAiProfile?
+  clinicalSettings UserClinicalSettings?
+  clinicalSourcePreferences UserClinicalSourcePreference[]
   substanceNotes  Substance[]      // Связь для Wiki-заметок
   
   // Новые связи для каталога ссылок
@@ -234,6 +236,66 @@ model AiProviderCredential {
   updatedAt       DateTime @updatedAt
 
   @@index([isEnabled])
+}
+
+model UserClinicalSettings {
+  id                       String   @id @default(cuid())
+  userId                   Int      @unique
+  user                     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clinicalCountry           String   @default("FI")
+  clinicalOutputLanguage    String   @default("fi")
+  evidenceStrictness        String   @default("strict")
+  allowLocalSources         Boolean  @default(true)
+  allowSupplementarySources Boolean  @default(false)
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  @@index([clinicalCountry])
+}
+
+model ClinicalSource {
+  id             String   @id
+  country        String
+  name           String
+  description    String?  @db.Text
+  sourceType     String
+  trustLevel     String
+  priority       Int      @default(100)
+  baseUrl        String?
+  allowedDomains Json?
+  language       Json?
+  isEnabled      Boolean  @default(true)
+  isOfficial     Boolean  @default(false)
+  specialty      String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  preferences    UserClinicalSourcePreference[]
+
+  @@index([country])
+  @@index([sourceType])
+  @@index([trustLevel])
+  @@index([isEnabled])
+}
+
+model UserClinicalSourcePreference {
+  id                         String         @id @default(cuid())
+  userId                     Int
+  user                       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sourceId                   String
+  source                     ClinicalSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  country                    String
+  isEnabled                  Boolean        @default(true)
+  priorityOverride           Int?
+  useForAgent                Boolean        @default(true)
+  useForPikaohjeet           Boolean        @default(true)
+  useForPatientInstructions  Boolean        @default(true)
+  createdAt                  DateTime       @default(now())
+  updatedAt                  DateTime       @updatedAt
+
+  @@unique([userId, sourceId])
+  @@index([userId, country])
+  @@index([sourceId])
 }
 
 // ==========================================
