@@ -107,6 +107,7 @@ export default function AgentPanel({ defaultContextType = "general", initialText
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contextType,
+          uiLanguage: language,
           userMessage,
           currentText,
           currentTemplate,
