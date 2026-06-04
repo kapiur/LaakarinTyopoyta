@@ -2,24 +2,26 @@ import { prisma } from '../../prisma';
 import { getClinicalCountryConfig, normalizeClinicalCountry, normalizeClinicalOutputLanguage, normalizeEvidenceStrictness } from '../countries/countryRegistry';
 import { CLINICAL_SOURCE_SEEDS, getDefaultClinicalSources } from '../sources/sourceRegistry';
 
+export type UserClinicalEvidenceSource = {
+  id: string;
+  country: 'FI' | 'RU';
+  name: string;
+  sourceType: string;
+  trustLevel: string;
+  priority: number;
+  isOfficial: boolean;
+  baseUrl?: string;
+  allowedDomains: string[];
+  language: string[];
+};
+
 export type UserClinicalEvidenceConfig = {
   clinicalCountry: 'FI' | 'RU';
   clinicalOutputLanguage: string;
   evidenceStrictness: 'strict' | 'balanced' | 'local-aware';
   allowLocalSources: boolean;
   allowSupplementarySources: boolean;
-  allowedSources: Array<{
-    id: string;
-    country: 'FI' | 'RU';
-    name: string;
-    sourceType: string;
-    trustLevel: string;
-    priority: number;
-    isOfficial: boolean;
-    baseUrl?: string;
-    allowedDomains: string[];
-    language: string[];
-  }>;
+  allowedSources: UserClinicalEvidenceSource[];
   hasOfficialSources: boolean;
 };
 
@@ -33,6 +35,21 @@ function parseJsonArray(value: unknown): string[] {
   } catch {
     return [];
   }
+}
+
+function seedToEvidenceSource(source: (typeof CLINICAL_SOURCE_SEEDS)[number]): UserClinicalEvidenceSource {
+  return {
+    id: source.id,
+    country: source.country,
+    name: source.name,
+    sourceType: source.sourceType,
+    trustLevel: source.trustLevel,
+    priority: source.priority,
+    isOfficial: source.isOfficial,
+    baseUrl: source.baseUrl,
+    allowedDomains: source.allowedDomains,
+    language: source.language,
+  };
 }
 
 export async function getUserClinicalEvidenceConfig(userId: number): Promise<UserClinicalEvidenceConfig> {
@@ -72,7 +89,7 @@ export async function getUserClinicalEvidenceConfig(userId: number): Promise<Use
     evidenceStrictness = country.defaultEvidenceStrictness;
   }
 
-  let allowedSources = getDefaultClinicalSources(clinicalCountry);
+  let allowedSources: UserClinicalEvidenceSource[] = getDefaultClinicalSources(clinicalCountry).map(seedToEvidenceSource);
 
   try {
     const rows = await prisma.$queryRaw<Array<{
@@ -98,7 +115,7 @@ export async function getUserClinicalEvidenceConfig(userId: number): Promise<Use
       ORDER BY COALESCE(p."priorityOverride", s."priority") ASC, s."name" ASC
     `;
 
-    const mapped = rows
+    const mapped: UserClinicalEvidenceSource[] = rows
       .filter((row) => row.userEnabled !== false)
       .filter((row) => allowLocalSources || (row.trustLevel !== 'local_instruction' && row.sourceType !== 'local_instruction' && row.sourceType !== 'hospital_instruction'))
       .filter((row) => allowSupplementarySources || row.trustLevel !== 'supplementary')
@@ -121,7 +138,8 @@ export async function getUserClinicalEvidenceConfig(userId: number): Promise<Use
     allowedSources = CLINICAL_SOURCE_SEEDS
       .filter((source) => source.country === clinicalCountry && source.isOfficial)
       .filter((source) => allowLocalSources || (source.trustLevel !== 'local_instruction' && source.sourceType !== 'local_instruction' && source.sourceType !== 'hospital_instruction'))
-      .filter((source) => allowSupplementarySources || source.trustLevel !== 'supplementary');
+      .filter((source) => allowSupplementarySources || source.trustLevel !== 'supplementary')
+      .map(seedToEvidenceSource);
   }
 
   return {
