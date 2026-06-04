@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { DatabaseZap, Loader2, RefreshCcw, Save, Trash2 } from "lucide-react";
 import { useI18n } from "../../../lib/useI18n";
 
@@ -66,15 +66,19 @@ const labels = {
     description: "Ylläpidä AI-agentin sallittuja kliinisiä lähteitä. Vain admin voi muuttaa trust level -arvoja.",
     create: "Luo uusi lähde",
     edit: "Muokkaa lähdettä",
+    editButton: "Muokkaa",
     savedSources: "Tallennetut lähteet",
     refresh: "Päivitä",
     save: "Tallenna lähde",
     cancel: "Peruuta",
     delete: "Poista",
     enabled: "Käytössä",
+    disabled: "Pois käytöstä",
     official: "Virallinen lähde",
+    officialBadge: "virallinen",
     saved: "Tallennettu",
     deleted: "Poistettu",
+    editMode: "Muokkaustila",
     loadFailed: "Lähteiden lataus epäonnistui",
     saveFailed: "Tallennus epäonnistui",
     deleteFailed: "Poisto epäonnistui",
@@ -87,15 +91,19 @@ const labels = {
     description: "Управление разрешёнными клиническими источниками для AI-агента. Только admin может менять trust level.",
     create: "Создать новый источник",
     edit: "Редактировать источник",
+    editButton: "Редактировать",
     savedSources: "Сохранённые источники",
     refresh: "Обновить",
     save: "Сохранить источник",
     cancel: "Отмена",
     delete: "Удалить",
     enabled: "Включён",
+    disabled: "Отключён",
     official: "Официальный источник",
+    officialBadge: "официальный",
     saved: "Сохранено",
     deleted: "Удалено",
+    editMode: "Режим редактирования",
     loadFailed: "Не удалось загрузить источники",
     saveFailed: "Не удалось сохранить",
     deleteFailed: "Не удалось удалить",
@@ -108,15 +116,19 @@ const labels = {
     description: "Manage allowed clinical sources for the AI agent. Only admins can change trust levels.",
     create: "Create source",
     edit: "Edit source",
+    editButton: "Edit",
     savedSources: "Saved sources",
     refresh: "Refresh",
     save: "Save source",
     cancel: "Cancel",
     delete: "Delete",
     enabled: "Enabled",
+    disabled: "Disabled",
     official: "Official source",
+    officialBadge: "official",
     saved: "Saved",
     deleted: "Deleted",
+    editMode: "Edit mode",
     loadFailed: "Failed to load sources",
     saveFailed: "Failed to save",
     deleteFailed: "Failed to delete",
@@ -151,6 +163,7 @@ function sourceToForm(source: ClinicalSource): FormState {
 export default function AdminClinicalSourcesPage() {
   const { language } = useI18n();
   const l = labels[language] || labels.fi;
+  const formRef = useRef<HTMLElement | null>(null);
   const [sources, setSources] = useState<ClinicalSource[]>([]);
   const [options, setOptions] = useState<Options>({ countries: ["FI", "RU"], sourceTypes: [], trustLevels: [] });
   const [countryFilter, setCountryFilter] = useState("");
@@ -195,6 +208,9 @@ export default function AdminClinicalSourcesPage() {
     setForm(sourceToForm(source));
     setMessage(null);
     setError(null);
+    window.setTimeout(() => {
+      formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 0);
   }
 
   async function saveSource() {
@@ -262,7 +278,7 @@ export default function AdminClinicalSourcesPage() {
             <option value="">{l.allCountries}</option>
             {options.countries.map((country) => <option key={country} value={country}>{country}</option>)}
           </select>
-          <button onClick={loadSources} disabled={loading} className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl border border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50">
+          <button type="button" onClick={loadSources} disabled={loading} className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl border border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50">
             {loading ? <Loader2 size={16} className="animate-spin" /> : <RefreshCcw size={16} />}
             {l.refresh}
           </button>
@@ -275,9 +291,12 @@ export default function AdminClinicalSourcesPage() {
         </div>
       )}
 
-      <section className="bg-white border border-slate-200 rounded-[2rem] p-6 shadow-sm space-y-5">
+      <section ref={formRef} className="bg-white border border-slate-200 rounded-[2rem] p-6 shadow-sm space-y-5 scroll-mt-6">
         <div>
-          <h2 className="text-lg font-bold text-slate-900">{editingId ? l.edit : l.create}</h2>
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-lg font-bold text-slate-900">{editingId ? l.edit : l.create}</h2>
+            {editingId && <span className="text-xs px-2 py-1 rounded-full bg-blue-50 text-blue-700 font-bold">{l.editMode}: {editingId}</span>}
+          </div>
           <p className="text-xs text-slate-500 mt-1">{l.help}</p>
         </div>
 
@@ -308,11 +327,11 @@ export default function AdminClinicalSourcesPage() {
         </div>
 
         <div className="flex gap-2">
-          <button onClick={saveSource} disabled={saving || !form.name.trim()} className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-slate-800 disabled:opacity-50">
+          <button type="button" onClick={saveSource} disabled={saving || !form.name.trim()} className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-slate-800 disabled:opacity-50">
             {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
             {l.save}
           </button>
-          {editingId && <button onClick={resetForm} className="px-5 py-3 rounded-xl border border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-50">{l.cancel}</button>}
+          {editingId && <button type="button" onClick={resetForm} className="px-5 py-3 rounded-xl border border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-50">{l.cancel}</button>}
         </div>
       </section>
 
@@ -328,8 +347,8 @@ export default function AdminClinicalSourcesPage() {
                   <span className="text-xs px-2 py-1 rounded-full bg-slate-100 text-slate-600 font-bold">{source.country}</span>
                   <span className="text-xs px-2 py-1 rounded-full bg-blue-50 text-blue-700 font-bold">{source.sourceType}</span>
                   <span className="text-xs px-2 py-1 rounded-full bg-purple-50 text-purple-700 font-bold">{source.trustLevel}</span>
-                  <span className={`text-xs px-2 py-1 rounded-full font-bold ${source.isEnabled ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{source.isEnabled ? l.enabled : "disabled"}</span>
-                  {source.isOfficial && <span className="text-xs px-2 py-1 rounded-full bg-amber-50 text-amber-700 font-bold">official</span>}
+                  <span className={`text-xs px-2 py-1 rounded-full font-bold ${source.isEnabled ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{source.isEnabled ? l.enabled : l.disabled}</span>
+                  {source.isOfficial && <span className="text-xs px-2 py-1 rounded-full bg-amber-50 text-amber-700 font-bold">{l.officialBadge}</span>}
                 </div>
                 <p className="mt-2 text-xs text-slate-500">{source.description || "-"}</p>
                 <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-1 text-xs text-slate-500">
@@ -342,8 +361,8 @@ export default function AdminClinicalSourcesPage() {
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
-                <button onClick={() => editSource(source)} className="px-4 py-2 rounded-xl border border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-50">Edit</button>
-                <button onClick={() => deleteSource(source)} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-red-100 text-sm font-bold text-red-700 bg-red-50 hover:bg-red-100"><Trash2 size={14} /> {l.delete}</button>
+                <button type="button" onClick={() => editSource(source)} className="px-4 py-2 rounded-xl border border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-50">{l.editButton}</button>
+                <button type="button" onClick={() => deleteSource(source)} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-red-100 text-sm font-bold text-red-700 bg-red-50 hover:bg-red-100"><Trash2 size={14} /> {l.delete}</button>
               </div>
             </div>
           ))}
