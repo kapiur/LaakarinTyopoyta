@@ -2,13 +2,15 @@ import { DEFAULT_AI_MODEL, DEFAULT_AI_PROVIDER, AI_MODEL_REGISTRY } from './mode
 import { getUserAiSettings } from './userAiSettings';
 import type { AiProviderKey } from './providers/types';
 import type { AiProfileMode } from './userAiProfile';
-import type { AiTaskType } from './taskTypes';
+import { getAiTaskPolicy, type AiTaskType } from './taskTypes';
 
 export type AiRouteDecision = {
   provider: AiProviderKey;
   model: string;
   profileMode: AiProfileMode;
   taskType: AiTaskType;
+  requiresEvidence: boolean;
+  safetyLevel: 'none' | 'low' | 'clinical' | 'high';
 };
 
 export type ResolveAiRouteInput = {
@@ -26,7 +28,14 @@ export function profileModeForTask(taskType: AiTaskType): AiProfileMode {
   if (taskType === 'template_generation') return 'styleOnly';
   if (taskType === 'template_polish') return 'styleOnly';
   if (taskType === 'tool_design') return 'workContextOnly';
-  if (taskType === 'clinical_review') return 'full';
+  if (taskType === 'clinical_review') return 'workContextOnly';
+  if (taskType === 'clinical_advice') return 'workContextOnly';
+  if (taskType === 'clinical_source_check') return 'workContextOnly';
+  if (taskType === 'pikaohje_generation') return 'workContextOnly';
+  if (taskType === 'pikaohje_review') return 'workContextOnly';
+  if (taskType === 'medication_guidance') return 'workContextOnly';
+  if (taskType === 'urgent_triage') return 'workContextOnly';
+  if (taskType === 'referral_guidance') return 'workContextOnly';
   if (taskType === 'clinical_document') return 'full';
   return 'full';
 }
@@ -45,11 +54,14 @@ export async function resolveAiRoute(input: ResolveAiRouteInput): Promise<AiRout
   const routedModel = settings.allowAgentModelSelection
     ? modelRecommendedForTask(provider, input.taskType) ?? requestedModel
     : requestedModel;
+  const policy = getAiTaskPolicy(input.taskType);
 
   return {
     provider,
     model: routedModel,
     profileMode: input.requestedProfileMode ?? profileModeForTask(input.taskType),
     taskType: input.taskType,
+    requiresEvidence: policy.requiresEvidence,
+    safetyLevel: policy.safetyLevel,
   };
 }
