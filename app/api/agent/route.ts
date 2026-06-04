@@ -121,7 +121,6 @@ function applyUserProvidedEvidence(input: {
         trustLevel: 'user_provided_not_independently_verified',
         baseUrl: undefined,
       },
-      ...input.evidence.sources,
     ],
     warnings: [userProvidedEvidenceWarning(input.uiLanguage)],
   };
@@ -211,7 +210,7 @@ export async function POST(req: Request) {
       `UI language: ${uiLanguage}`,
       `Evidence strictness: ${clinicalConfig.evidenceStrictness}`,
       `Evidence status: ${evidence.status}`,
-      `Allowed sources: ${evidence.sources.map((source) => `${source.name} (${source.trustLevel})`).join(', ') || 'none'}`,
+      `Used sources: ${evidence.sources.map((source) => `${source.name} (${source.trustLevel})`).join(', ') || 'none'}`,
       hasPotentialUserProvidedEvidence(privacyResult.sanitized.currentText)
         ? [
             'User-provided evidence excerpt is present below.',
