@@ -5,6 +5,25 @@ function includesAny(text: string, words: string[]) {
   return words.some((word) => text.includes(word));
 }
 
+const redFlagTerms = [
+  'red flag',
+  'red flags',
+  'hälyttävä oire',
+  'hälyttävät oireet',
+  'hälytysmerkki',
+  'hälytysmerkit',
+  'alarm symptom',
+  'alarm symptoms',
+  'warning sign',
+  'warning signs',
+  'красный флаг',
+  'красные флаги',
+  'тревожный симптом',
+  'тревожные симптомы',
+  'опасный симптом',
+  'опасные симптомы',
+];
+
 function inferTaskType(contextType: AgentContextType, userMessage: string): AiTaskType {
   const text = userMessage.toLowerCase();
 
@@ -14,7 +33,7 @@ function inferTaskType(contextType: AgentContextType, userMessage: string): AiTa
   }
 
   if (contextType === 'malli') {
-    if (includesAny(text, ['red flag', 'red flags', 'lähetekriteeri', 'hoitosuositus', 'antibiootti', 'hoito-ohje', 'критер', 'лечение', 'рекомендац'])) return 'clinical_advice';
+    if (includesAny(text, [...redFlagTerms, 'lähetekriteeri', 'hoitosuositus', 'antibiootti', 'hoito-ohje', 'критер', 'лечение', 'рекомендац'])) return 'clinical_advice';
     if (includesAny(text, ['korjaa', 'paranna', 'muokkaa', 'улуч', 'исправ'])) return 'template_polish';
     return 'template_generation';
   }
@@ -22,6 +41,7 @@ function inferTaskType(contextType: AgentContextType, userMessage: string): AiTa
   if (contextType === 'aiTool') return 'tool_design';
 
   if (contextType === 'clinicalText') {
+    if (includesAny(text, redFlagTerms)) return 'clinical_advice';
     if (includesAny(text, ['lääke', 'annos', 'доза', 'препарат', 'medication'])) return 'medication_guidance';
     if (includesAny(text, ['päivystys', 'kiire', 'urgent', 'срочно', 'неотлож'])) return 'urgent_triage';
     if (includesAny(text, ['lähete', 'направ', 'referral'])) return 'referral_guidance';
@@ -32,6 +52,7 @@ function inferTaskType(contextType: AgentContextType, userMessage: string): AiTa
   if (includesAny(text, ['lab', 'laboratorio'])) return 'lab_format';
   if (includesAny(text, ['käännä', 'translate', 'перев'])) return 'translation';
   if (includesAny(text, ['korjaa', 'исправ', 'поправ'])) return 'text_fix';
+  if (includesAny(text, redFlagTerms)) return 'clinical_advice';
   if (includesAny(text, ['lääke', 'annos', 'доза', 'препарат', 'medication'])) return 'medication_guidance';
   if (includesAny(text, ['päivystys', 'kiire', 'urgent', 'срочно', 'неотлож'])) return 'urgent_triage';
   if (includesAny(text, ['lähete', 'направ', 'referral'])) return 'referral_guidance';
