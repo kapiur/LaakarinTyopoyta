@@ -1,6 +1,7 @@
 import TemplatesRedesignPage from '../templates/redesign/page';
 import MalliAgentDock from '../../components/ai-agent/MalliAgentDock';
 import MalliAgentDraftApplier from '../../components/ai-agent/MalliAgentDraftApplier';
+import MalliTemplateValidatorDock from '../../components/templates/MalliTemplateValidatorDock';
 
 export default function MalliPage() {
   return (
@@ -8,6 +9,7 @@ export default function MalliPage() {
       <TemplatesRedesignPage />
       <MalliAgentDock />
       <MalliAgentDraftApplier />
+      <MalliTemplateValidatorDock />
 
       <style
         dangerouslySetInnerHTML={{
