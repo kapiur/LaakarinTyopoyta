@@ -22,6 +22,34 @@ function optionalString(value: unknown) {
   return typeof value === 'string' ? value : '';
 }
 
+function truncate(value: string, maxLength: number) {
+  if (value.length <= maxLength) return value;
+  return `${value.slice(0, maxLength)}\n...[truncated]`;
+}
+
+function buildConversationContext(body: AgentRequestBody) {
+  const turns = Array.isArray(body.conversationContext?.previousTurns)
+    ? body.conversationContext.previousTurns.slice(-4)
+    : [];
+
+  if (turns.length === 0 && !body.conversationContext?.latestDraft) return '';
+
+  const safeTurns = turns.map((turn, index) => [
+    `Turn ${index + 1}`,
+    `User: ${truncate(optionalString(turn.userMessage), 1200)}`,
+    `Assistant reply: ${truncate(optionalString(turn.assistantReply), 2000)}`,
+    turn.assistantDraft ? `Assistant draft: ${truncate(optionalString(turn.assistantDraft), 2000)}` : '',
+  ].filter(Boolean).join('\n'));
+
+  return [
+    'Previous transient conversation context follows.',
+    'Use it only to refine the current task. Do not treat it as independently verified clinical evidence.',
+    'Keep all privacy and evidence rules active for the latest user request.',
+    body.conversationContext?.latestDraft ? `Latest draft to refine:\n${truncate(optionalString(body.conversationContext.latestDraft), 3000)}` : '',
+    ...safeTurns,
+  ].filter(Boolean).join('\n\n');
+}
+
 function inputKindForContext(contextType: AgentContextType) {
   if (contextType === 'clinicalText' || contextType === 'pikaohje') return 'clinicalText' as const;
   if (contextType === 'aiTool') return 'storedInstruction' as const;
@@ -143,8 +171,9 @@ export async function POST(req: Request) {
     const userMessage = optionalString(body.userMessage).trim();
     const currentText = optionalString(body.currentText);
     const currentTemplate = optionalString(body.currentTemplate);
+    const conversationContext = buildConversationContext(body);
 
-    if (!userMessage && !currentText && !currentTemplate) {
+    if (!userMessage && !currentText && !currentTemplate && !conversationContext) {
       return NextResponse.json({ error: 'Puuttuvat tiedot' }, { status: 400 });
     }
 
@@ -152,6 +181,7 @@ export async function POST(req: Request) {
       { key: 'userMessage', value: userMessage, kind: inputKindForContext(contextType) },
       { key: 'currentText', value: currentText, kind: contextType === 'clinicalText' || contextType === 'pikaohje' ? 'clinicalText' : 'general' },
       { key: 'currentTemplate', value: currentTemplate, kind: 'templateSyntax' },
+      { key: 'conversationContext', value: conversationContext, kind: inputKindForContext(contextType) },
     ]);
 
     const plan = createAgentPlan({
@@ -221,14 +251,19 @@ export async function POST(req: Request) {
         : '',
     ].filter(Boolean).join('\n\n');
 
+    const messages = [
+      { role: 'system' as const, content: plan.systemInstruction },
+      { role: 'system' as const, content: evidenceContext },
+      privacyResult.sanitized.conversationContext
+        ? { role: 'system' as const, content: privacyResult.sanitized.conversationContext }
+        : null,
+      { role: 'user' as const, content: plan.userInstruction },
+    ].filter((message): message is { role: 'system' | 'user'; content: string } => Boolean(message));
+
     const result = await runRoutedAiCompletion({
       userId,
       taskType: plan.taskType,
-      messages: [
-        { role: 'system', content: plan.systemInstruction },
-        { role: 'system', content: evidenceContext },
-        { role: 'user', content: plan.userInstruction },
-      ],
+      messages,
       temperature: 0,
     });
 

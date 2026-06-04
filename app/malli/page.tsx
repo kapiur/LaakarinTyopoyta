@@ -1,9 +1,13 @@
 import TemplatesRedesignPage from '../templates/redesign/page';
+import MalliAgentDock from '../../components/ai-agent/MalliAgentDock';
+import MalliAgentDraftApplier from '../../components/ai-agent/MalliAgentDraftApplier';
 
 export default function MalliPage() {
   return (
     <div className="malli-page-scope">
       <TemplatesRedesignPage />
+      <MalliAgentDock />
+      <MalliAgentDraftApplier />
 
       <style
         dangerouslySetInnerHTML={{
