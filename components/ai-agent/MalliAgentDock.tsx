@@ -19,6 +19,11 @@ type TemplateCategory = {
   templates?: TemplateItem[];
 };
 
+type TemplateMatch = {
+  template: TemplateItem;
+  category: TemplateCategory;
+};
+
 type AgentSeed = {
   key: string;
   title: string;
@@ -63,6 +68,14 @@ const labels = {
   },
 } as const;
 
+function normalizeForMatch(value: string) {
+  return value
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9åäöа-яё]+/gi, "");
+}
+
 function getSelectedTemplateTitleFromDom() {
   const buttons = Array.from(document.querySelectorAll("button"));
   const selectedButton = buttons.find((button) => {
@@ -96,6 +109,35 @@ function flattenTemplates(categories: TemplateCategory[]) {
   return categories.flatMap((category) => (category.templates || []).map((template) => ({ template, category })));
 }
 
+function findTemplateMatch(categories: TemplateCategory[], selectedTitle: string): TemplateMatch | undefined {
+  const flattened = flattenTemplates(categories);
+  const rawSelected = selectedTitle.trim();
+  const normalizedSelected = normalizeForMatch(rawSelected);
+  if (!normalizedSelected) return undefined;
+
+  const exact = flattened.find(({ template }) => template.title.trim() === rawSelected);
+  if (exact) return exact;
+
+  const normalizedExact = flattened.find(({ template }) => normalizeForMatch(template.title) === normalizedSelected);
+  if (normalizedExact) return normalizedExact;
+
+  const prefixOrContained = flattened
+    .filter(({ template, category }) => {
+      const normalizedTitle = normalizeForMatch(template.title);
+      const normalizedTitleWithCategory = normalizeForMatch(`${template.title}${category.name}`);
+      return (
+        normalizedSelected.startsWith(normalizedTitle) ||
+        normalizedTitle.startsWith(normalizedSelected) ||
+        normalizedTitleWithCategory === normalizedSelected ||
+        normalizedTitleWithCategory.startsWith(normalizedSelected) ||
+        normalizedSelected.startsWith(normalizedTitleWithCategory)
+      );
+    })
+    .sort((a, b) => b.template.title.length - a.template.title.length);
+
+  return prefixOrContained[0];
+}
+
 export default function MalliAgentDock() {
   const { language } = useI18n();
   const l = labels[language] || labels.fi;
@@ -118,7 +160,7 @@ export default function MalliAgentDock() {
       const response = await fetch("/api/templates");
       const data = await response.json();
       const categories: TemplateCategory[] = Array.isArray(data) ? data : [];
-      const match = flattenTemplates(categories).find(({ template }) => template.title.trim() === selectedTitle.trim());
+      const match = findTemplateMatch(categories, selectedTitle);
 
       if (!match) {
         setSeed({
