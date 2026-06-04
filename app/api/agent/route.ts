@@ -5,7 +5,7 @@ import { createAgentPlan } from '../../../lib/ai/agent/agentPlanner';
 import type { AgentContextType, AgentRequestBody, AgentUiLanguage } from '../../../lib/ai/agent/types';
 import { runRoutedAiCompletion } from '../../../lib/ai/runRoutedAiCompletion';
 import { taskRequiresEvidence } from '../../../lib/ai/taskTypes';
-import { buildInitialEvidencePackage, buildNoEvidenceReply } from '../../../lib/clinical/evidence/evidencePackage';
+import { buildInitialEvidencePackage, buildNoEvidenceReply, type EvidencePackage } from '../../../lib/clinical/evidence/evidencePackage';
 import { getUserClinicalEvidenceConfig } from '../../../lib/clinical/evidence/userClinicalSettings';
 
 function normalizeContextType(value: unknown): AgentContextType {
@@ -56,6 +56,77 @@ function localizedEvidenceWarnings(language: AgentUiLanguage, status: string) {
   return [];
 }
 
+function userProvidedEvidenceWarning(language: AgentUiLanguage) {
+  if (language === 'ru') {
+    return 'Используется фрагмент источника, вставленный пользователем. Он не был независимо проверен системой. Агент должен отвечать только в пределах этого фрагмента.';
+  }
+  if (language === 'fi') {
+    return 'Käytössä on käyttäjän liittämä lähdekatkelma. Järjestelmä ei ole tarkistanut sitä itsenäisesti. Agentin tulee vastata vain tämän katkelman perusteella.';
+  }
+  return 'Using a source excerpt pasted by the user. It has not been independently verified by the system. The agent must answer only within this excerpt.';
+}
+
+function hasPotentialUserProvidedEvidence(text: string) {
+  const normalized = text.toLowerCase();
+  const compactLength = normalized.replace(/\s+/g, ' ').trim().length;
+  if (compactLength < 300) return false;
+
+  const sourceMarkers = [
+    'käypä hoito',
+    'kaypahoito',
+    'terveyskirjasto',
+    'lääkärikirja',
+    'duodecim',
+    'thl',
+    'hus',
+    'keusote',
+    'minzdrav',
+    'минздрав',
+    'клинические рекомендации',
+    'государственный реестр лекарственных средств',
+    'грлс',
+    'rospotrebnadzor',
+    'роспотребнадзор',
+    'suositus',
+    'hoitosuositus',
+    'ohje',
+    'lähde',
+    'source',
+    'guideline',
+    'recommendation',
+    'рекомендац',
+    'инструкция',
+    'официальн',
+  ];
+
+  return sourceMarkers.some((marker) => normalized.includes(marker));
+}
+
+function applyUserProvidedEvidence(input: {
+  evidence: EvidencePackage;
+  sourceText: string;
+  uiLanguage: AgentUiLanguage;
+}): EvidencePackage {
+  if (!input.evidence.requiresEvidence || !hasPotentialUserProvidedEvidence(input.sourceText)) return input.evidence;
+
+  return {
+    ...input.evidence,
+    status: 'found',
+    level: 'official_reference',
+    sources: [
+      {
+        id: 'user-provided-source-excerpt',
+        name: input.uiLanguage === 'ru' ? 'Фрагмент источника, вставленный пользователем' : input.uiLanguage === 'fi' ? 'Käyttäjän liittämä lähdekatkelma' : 'User-provided source excerpt',
+        sourceType: 'user_provided_excerpt',
+        trustLevel: 'user_provided_not_independently_verified',
+        baseUrl: undefined,
+      },
+      ...input.evidence.sources,
+    ],
+    warnings: [userProvidedEvidenceWarning(input.uiLanguage)],
+  };
+}
+
 export async function POST(req: Request) {
   const { session, error } = await requireAuthenticatedUser();
   if (error) return error;
@@ -93,15 +164,21 @@ export async function POST(req: Request) {
 
     const clinicalConfig = await getUserClinicalEvidenceConfig(userId);
     const requiresEvidence = taskRequiresEvidence(plan.taskType);
-    const evidence = buildInitialEvidencePackage({
+    const initialEvidence = buildInitialEvidencePackage({
       taskType: plan.taskType,
       requiresEvidence,
       config: clinicalConfig,
     });
 
+    const evidence = applyUserProvidedEvidence({
+      evidence: initialEvidence,
+      sourceText: privacyResult.sanitized.currentText,
+      uiLanguage,
+    });
+
     const localizedEvidence = {
       ...evidence,
-      warnings: localizedEvidenceWarnings(uiLanguage, evidence.status),
+      warnings: evidence.warnings.length > 0 ? evidence.warnings : localizedEvidenceWarnings(uiLanguage, evidence.status),
     };
 
     if (requiresEvidence && (evidence.status === 'not_found' || evidence.status === 'partial')) {
@@ -135,7 +212,15 @@ export async function POST(req: Request) {
       `Evidence strictness: ${clinicalConfig.evidenceStrictness}`,
       `Evidence status: ${evidence.status}`,
       `Allowed sources: ${evidence.sources.map((source) => `${source.name} (${source.trustLevel})`).join(', ') || 'none'}`,
-    ].join('\n');
+      hasPotentialUserProvidedEvidence(privacyResult.sanitized.currentText)
+        ? [
+            'User-provided evidence excerpt is present below.',
+            'Use it as the only clinical evidence for concrete recommendations.',
+            'Do not add clinical claims, dosages, referral criteria, red flags or treatment instructions that are not supported by the excerpt.',
+            `User-provided evidence excerpt:\n${privacyResult.sanitized.currentText}`,
+          ].join('\n')
+        : '',
+    ].filter(Boolean).join('\n\n');
 
     const result = await runRoutedAiCompletion({
       userId,
