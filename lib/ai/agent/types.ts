@@ -11,6 +11,18 @@ export type AgentSuggestedAction =
   | { type: 'use_as_pikaohje_draft'; label: string }
   | { type: 'review_again'; label: string };
 
+export type AgentConversationTurn = {
+  userMessage: string;
+  assistantReply: string;
+  assistantDraft?: string;
+  taskType?: string;
+};
+
+export type AgentConversationContext = {
+  previousTurns?: AgentConversationTurn[];
+  latestDraft?: string;
+};
+
 export type AgentRequestBody = {
   contextType?: AgentContextType;
   uiLanguage?: AgentUiLanguage;
@@ -21,6 +33,7 @@ export type AgentRequestBody = {
   selectedToolId?: number | string;
   selectedCardId?: number | string;
   conversationId?: string;
+  conversationContext?: AgentConversationContext;
 };
 
 export type AgentPlan = {
