@@ -6,6 +6,7 @@ import { Bot, BrainCircuit, KeyRound, KeySquare, Settings, Shield, Users } from 
 import LanguageSettingsCard from "../../components/LanguageSettingsCard";
 import AiProfileSettingsCard from "../../components/AiProfileSettingsCard";
 import AiProviderSettingsCard from "../../components/AiProviderSettingsCard";
+import ClinicalEvidenceSettingsCard from "../../components/ClinicalEvidenceSettingsCard";
 import { useI18n } from "../../lib/useI18n";
 
 export default function SettingsPage() {
@@ -28,6 +29,7 @@ export default function SettingsPage() {
       <LanguageSettingsCard />
       <AiProfileSettingsCard />
       <AiProviderSettingsCard />
+      <ClinicalEvidenceSettingsCard />
 
       <section className="grid grid-cols-1 md:grid-cols-2 gap-5">
         <Link href="/profile/security" className="group bg-white border border-slate-200 rounded-[2rem] p-6 shadow-sm hover:shadow-md hover:border-blue-200 transition-all">
