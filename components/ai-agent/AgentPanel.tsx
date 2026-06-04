@@ -41,6 +41,7 @@ type AgentPanelProps = {
   initialText?: string;
   initialTemplate?: string;
   compact?: boolean;
+  onApplyDraft?: (draft: string) => void;
 };
 
 const localLabels = {
@@ -51,6 +52,8 @@ const localLabels = {
     clinicalCountry: "Kliininen maa",
     clinicalLanguage: "Kliininen kieli",
     sources: "Lähteet",
+    applyDraft: "Käytä luonnosta editorissa",
+    appliedDraft: "Luonnos siirretty editoriin",
   },
   ru: {
     contextPikaohje: "Быстрая инструкция",
@@ -59,6 +62,8 @@ const localLabels = {
     clinicalCountry: "Страна рекомендаций",
     clinicalLanguage: "Клинический язык",
     sources: "Источники",
+    applyDraft: "Применить draft в редакторе",
+    appliedDraft: "Draft перенесён в редактор",
   },
   en: {
     contextPikaohje: "Quick guide",
@@ -67,6 +72,8 @@ const localLabels = {
     clinicalCountry: "Clinical country",
     clinicalLanguage: "Clinical language",
     sources: "Sources",
+    applyDraft: "Use draft in editor",
+    appliedDraft: "Draft moved to editor",
   },
 } as const;
 
@@ -74,7 +81,7 @@ async function copyToClipboard(text: string) {
   await navigator.clipboard.writeText(text);
 }
 
-export default function AgentPanel({ defaultContextType = "general", initialText = "", initialTemplate = "", compact = false }: AgentPanelProps) {
+export default function AgentPanel({ defaultContextType = "general", initialText = "", initialTemplate = "", compact = false, onApplyDraft }: AgentPanelProps) {
   const { t, language } = useI18n();
   const l = localLabels[language] || localLabels.fi;
   const [contextType, setContextType] = useState<AgentContextType>(defaultContextType);
@@ -133,6 +140,13 @@ export default function AgentPanel({ defaultContextType = "general", initialText
     await copyToClipboard(value);
     setCopied(label);
     window.setTimeout(() => setCopied(null), 2000);
+  }
+
+  function applyDraft(value?: string) {
+    if (!value || !onApplyDraft) return;
+    onApplyDraft(value);
+    setCopied(l.appliedDraft);
+    window.setTimeout(() => setCopied(null), 2500);
   }
 
   const canSend = userMessage.trim().length > 0 || currentText.trim().length > 0 || currentTemplate.trim().length > 0;
@@ -278,6 +292,11 @@ export default function AgentPanel({ defaultContextType = "general", initialText
                   {response.draft && (
                     <button onClick={() => copyValue("draft", response.draft)} className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-600 hover:bg-slate-50">
                       <Clipboard size={14} /> {t("agent.copyDraft")}
+                    </button>
+                  )}
+                  {onApplyDraft && response.draft && (
+                    <button onClick={() => applyDraft(response.draft)} className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-purple-100 bg-purple-50 text-xs font-bold text-purple-700 hover:bg-purple-100">
+                      <Sparkles size={14} /> {l.applyDraft}
                     </button>
                   )}
                   {copied && <span className="text-xs font-bold text-emerald-600 self-center">{t("agent.copiedLabel")}: {copied}</span>}
