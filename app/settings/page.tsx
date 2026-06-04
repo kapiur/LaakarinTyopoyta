@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSession } from "next-auth/react";
-import { Bot, BrainCircuit, KeyRound, KeySquare, Settings, Shield, Users } from "lucide-react";
+import { Bot, BrainCircuit, DatabaseZap, KeyRound, KeySquare, Settings, Shield, Users } from "lucide-react";
 import LanguageSettingsCard from "../../components/LanguageSettingsCard";
 import AiProfileSettingsCard from "../../components/AiProfileSettingsCard";
 import AiProviderSettingsCard from "../../components/AiProviderSettingsCard";
@@ -11,8 +11,15 @@ import { useI18n } from "../../lib/useI18n";
 
 export default function SettingsPage() {
   const { data: session } = useSession();
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const isAdmin = (session?.user as any)?.role === "ADMIN";
+
+  const clinicalSourcesTitle = language === "ru" ? "Клинические источники" : language === "en" ? "Clinical sources" : "Kliiniset lähteet";
+  const clinicalSourcesDescription = language === "ru"
+    ? "Управление странами, trust level, priority и разрешёнными доменами источников."
+    : language === "en"
+      ? "Manage countries, trust levels, priorities and allowed source domains."
+      : "Hallitse maita, trust level -arvoja, prioriteetteja ja sallittuja lähdedomaineja.";
 
   return (
     <div className="max-w-5xl mx-auto space-y-8">
@@ -95,6 +102,19 @@ export default function SettingsPage() {
                   <h2 className="text-lg font-bold text-slate-900">{t("settings.aiAccessTitle")}</h2>
                   <p className="text-sm text-slate-500">{t("settings.aiAccessDescription")}</p>
                   <p className="text-xs font-semibold text-purple-600 uppercase tracking-wider pt-2">Admin</p>
+                </div>
+              </div>
+            </Link>
+
+            <Link href="/admin/clinical-sources" className="group bg-white border border-slate-200 rounded-[2rem] p-6 shadow-sm hover:shadow-md hover:border-emerald-200 transition-all">
+              <div className="flex items-start gap-4">
+                <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center group-hover:scale-105 transition-transform">
+                  <DatabaseZap size={24} />
+                </div>
+                <div className="space-y-1">
+                  <h2 className="text-lg font-bold text-slate-900">{clinicalSourcesTitle}</h2>
+                  <p className="text-sm text-slate-500">{clinicalSourcesDescription}</p>
+                  <p className="text-xs font-semibold text-emerald-600 uppercase tracking-wider pt-2">Admin</p>
                 </div>
               </div>
             </Link>
