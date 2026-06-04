@@ -36,6 +36,11 @@ type AgentResponse = {
   };
 };
 
+type AgentTurn = {
+  userMessage: string;
+  response: AgentResponse;
+};
+
 type AgentPanelProps = {
   defaultContextType?: AgentContextType;
   initialText?: string;
@@ -54,6 +59,12 @@ const localLabels = {
     sources: "Lähteet",
     applyDraft: "Käytä luonnosta editorissa",
     appliedDraft: "Luonnos siirretty editoriin",
+    followUpLabel: "Tarkenna tätä tulosta",
+    followUpPlaceholder: "Esim. tee lyhyempi, säilytä muuttujat, lisää rakenne...",
+    sendFollowUp: "Lähetä tarkennus",
+    conversationTitle: "Keskustelu",
+    turnUser: "Käyttäjä",
+    turnAssistant: "Agentti",
   },
   ru: {
     contextPikaohje: "Быстрая инструкция",
@@ -64,6 +75,12 @@ const localLabels = {
     sources: "Источники",
     applyDraft: "Применить draft в редакторе",
     appliedDraft: "Draft перенесён в редактор",
+    followUpLabel: "Уточнить этот результат",
+    followUpPlaceholder: "Например: сделай короче, сохрани переменные, добавь структуру...",
+    sendFollowUp: "Отправить уточнение",
+    conversationTitle: "Диалог",
+    turnUser: "Пользователь",
+    turnAssistant: "Агент",
   },
   en: {
     contextPikaohje: "Quick guide",
@@ -74,6 +91,12 @@ const localLabels = {
     sources: "Sources",
     applyDraft: "Use draft in editor",
     appliedDraft: "Draft moved to editor",
+    followUpLabel: "Refine this result",
+    followUpPlaceholder: "For example: make it shorter, keep variables, add structure...",
+    sendFollowUp: "Send refinement",
+    conversationTitle: "Conversation",
+    turnUser: "User",
+    turnAssistant: "Agent",
   },
 } as const;
 
@@ -86,11 +109,13 @@ export default function AgentPanel({ defaultContextType = "general", initialText
   const l = localLabels[language] || localLabels.fi;
   const [contextType, setContextType] = useState<AgentContextType>(defaultContextType);
   const [userMessage, setUserMessage] = useState("");
+  const [followUpMessage, setFollowUpMessage] = useState("");
   const [currentText, setCurrentText] = useState(initialText);
   const [currentTemplate, setCurrentTemplate] = useState(initialTemplate);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [response, setResponse] = useState<AgentResponse | null>(null);
+  const [turns, setTurns] = useState<AgentTurn[]>([]);
   const [copied, setCopied] = useState<string | null>(null);
 
   const contextOptions = useMemo<Array<{ value: AgentContextType; label: string; description: string }>>(() => [
@@ -102,8 +127,9 @@ export default function AgentPanel({ defaultContextType = "general", initialText
   ], [t, l]);
 
   const selectedContext = useMemo(() => contextOptions.find((option) => option.value === contextType), [contextOptions, contextType]);
+  const visibleHistory = turns.slice(0, -1);
 
-  async function sendToAgent() {
+  async function callAgent(message: string, previousTurns: AgentTurn[]) {
     setLoading(true);
     setError(null);
     setCopied(null);
@@ -115,9 +141,18 @@ export default function AgentPanel({ defaultContextType = "general", initialText
         body: JSON.stringify({
           contextType,
           uiLanguage: language,
-          userMessage,
+          userMessage: message,
           currentText,
           currentTemplate,
+          conversationContext: {
+            latestDraft: response?.draft || response?.reply || "",
+            previousTurns: previousTurns.map((turn) => ({
+              userMessage: turn.userMessage,
+              assistantReply: turn.response.reply,
+              assistantDraft: turn.response.draft,
+              taskType: turn.response.taskType,
+            })),
+          },
         }),
       });
 
@@ -128,11 +163,25 @@ export default function AgentPanel({ defaultContextType = "general", initialText
       }
 
       setResponse(data);
+      setTurns([...previousTurns, { userMessage: message, response: data }]);
     } catch (err: any) {
       setError(err.message || t("agent.callFailed"));
     } finally {
       setLoading(false);
     }
+  }
+
+  async function sendToAgent() {
+    const message = userMessage.trim();
+    if (!message && !currentText.trim() && !currentTemplate.trim()) return;
+    await callAgent(message, []);
+  }
+
+  async function sendFollowUp() {
+    const message = followUpMessage.trim();
+    if (!message || turns.length === 0) return;
+    setFollowUpMessage("");
+    await callAgent(message, turns);
   }
 
   async function copyValue(label: string, value?: string) {
@@ -150,6 +199,7 @@ export default function AgentPanel({ defaultContextType = "general", initialText
   }
 
   const canSend = userMessage.trim().length > 0 || currentText.trim().length > 0 || currentTemplate.trim().length > 0;
+  const canSendFollowUp = followUpMessage.trim().length > 0 && turns.length > 0;
 
   return (
     <section className="bg-white border border-slate-200 rounded-[2rem] shadow-sm overflow-hidden">
@@ -228,6 +278,20 @@ export default function AgentPanel({ defaultContextType = "general", initialText
         </div>
 
         <div className="space-y-4">
+          {visibleHistory.length > 0 && (
+            <div className="rounded-[2rem] border border-slate-200 bg-white p-4 space-y-3">
+              <h3 className="text-sm font-bold text-slate-900">{l.conversationTitle}</h3>
+              <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                {visibleHistory.map((turn, index) => (
+                  <div key={index} className="rounded-2xl bg-slate-50 border border-slate-100 p-3 text-xs text-slate-600 space-y-2">
+                    <div><span className="font-bold text-slate-800">{l.turnUser}:</span> {turn.userMessage}</div>
+                    <div className="whitespace-pre-wrap"><span className="font-bold text-slate-800">{l.turnAssistant}:</span> {turn.response.draft || turn.response.reply}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {error && (
             <div className="rounded-2xl bg-red-50 border border-red-100 text-red-700 px-5 py-4 text-sm font-semibold">
               {error}
@@ -301,6 +365,27 @@ export default function AgentPanel({ defaultContextType = "general", initialText
                   )}
                   {copied && <span className="text-xs font-bold text-emerald-600 self-center">{t("agent.copiedLabel")}: {copied}</span>}
                 </div>
+              </div>
+
+              <div className="rounded-[2rem] border border-slate-200 bg-white p-5 space-y-3">
+                <label className="space-y-2 block">
+                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{l.followUpLabel}</span>
+                  <textarea
+                    value={followUpMessage}
+                    onChange={(event) => setFollowUpMessage(event.target.value)}
+                    rows={3}
+                    placeholder={l.followUpPlaceholder}
+                    className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-purple-100 resize-y"
+                  />
+                </label>
+                <button
+                  onClick={sendFollowUp}
+                  disabled={loading || !canSendFollowUp}
+                  className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 text-white text-xs font-bold hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {loading ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                  {l.sendFollowUp}
+                </button>
               </div>
 
               {response.suggestedActions && response.suggestedActions.length > 0 && (
