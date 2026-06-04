@@ -200,14 +200,16 @@ export default function MalliAgentDock() {
 
   function applyDraftToMalliEditor(draft: string) {
     if (!seed?.title) return;
-    window.dispatchEvent(new CustomEvent("malli-agent-apply-draft", {
-      detail: {
-        templateTitle: seed.title,
-        categoryName: seed.categoryName,
-        draft,
-      },
-    }));
+    const detail = {
+      templateTitle: seed.title,
+      categoryName: seed.categoryName,
+      draft,
+    };
+
     setOpen(false);
+    window.setTimeout(() => {
+      window.dispatchEvent(new CustomEvent("malli-agent-apply-draft", { detail }));
+    }, 150);
   }
 
   return (
