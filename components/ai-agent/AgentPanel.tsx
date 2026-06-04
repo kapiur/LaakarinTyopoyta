@@ -4,11 +4,22 @@ import { useMemo, useState } from "react";
 import { Bot, Clipboard, Loader2, Send, ShieldCheck, Sparkles } from "lucide-react";
 import { useI18n } from "../../lib/useI18n";
 
-type AgentContextType = "general" | "malli" | "aiTool" | "clinicalText";
+type AgentContextType = "general" | "malli" | "aiTool" | "clinicalText" | "pikaohje";
 
 type AgentSuggestedAction = {
   type: string;
   label: string;
+};
+
+type AgentEvidence = {
+  status: "found" | "partial" | "not_found" | "not_required";
+  level: string;
+  clinicalCountry: string;
+  clinicalOutputLanguage: string;
+  requiresEvidence: boolean;
+  sources: Array<{ id: string; name: string; sourceType: string; trustLevel: string; baseUrl?: string }>;
+  warnings?: string[];
+  unsupportedClaims?: string[];
 };
 
 type AgentResponse = {
@@ -16,8 +27,9 @@ type AgentResponse = {
   draft?: string;
   suggestedActions?: AgentSuggestedAction[];
   taskType?: string;
-  provider?: string;
-  model?: string;
+  provider?: string | null;
+  model?: string | null;
+  evidence?: AgentEvidence;
   privacy?: {
     anonymized: boolean;
     findingTypes: string[];
@@ -51,6 +63,7 @@ export default function AgentPanel({ defaultContextType = "general", initialText
     { value: "clinicalText", label: t("agent.contextClinicalText"), description: t("agent.contextClinicalTextDescription") },
     { value: "malli", label: t("agent.contextMalli"), description: t("agent.contextMalliDescription") },
     { value: "aiTool", label: t("agent.contextAiTool"), description: t("agent.contextAiToolDescription") },
+    { value: "pikaohje", label: t("agent.contextPikaohje"), description: t("agent.contextPikaohjeDescription") },
   ], [t]);
 
   const selectedContext = useMemo(() => contextOptions.find((option) => option.value === contextType), [contextOptions, contextType]);
@@ -199,6 +212,31 @@ export default function AgentPanel({ defaultContextType = "general", initialText
                     </span>
                   )}
                 </div>
+
+                {response.evidence && (
+                  <div className="rounded-2xl bg-white border border-slate-200 p-4 space-y-2 text-xs text-slate-600">
+                    <div className="flex flex-wrap gap-2 font-bold">
+                      <span>{t("agent.evidenceTitle")}: {response.evidence.status}</span>
+                      <span>{t("agent.clinicalCountry")}: {response.evidence.clinicalCountry}</span>
+                      <span>{t("agent.clinicalLanguage")}: {response.evidence.clinicalOutputLanguage}</span>
+                    </div>
+                    {response.evidence.sources.length > 0 && (
+                      <div>
+                        <div className="font-bold text-slate-700 mb-1">{t("agent.sources")}</div>
+                        <ul className="list-disc pl-5 space-y-1">
+                          {response.evidence.sources.map((source) => (
+                            <li key={source.id}>{source.name} · {source.trustLevel}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {response.evidence.warnings && response.evidence.warnings.length > 0 && (
+                      <div className="rounded-xl bg-amber-50 border border-amber-100 text-amber-800 p-3 font-semibold">
+                        {response.evidence.warnings.join(" ")}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div className="prose prose-sm max-w-none whitespace-pre-wrap text-slate-800">
                   {response.reply}
