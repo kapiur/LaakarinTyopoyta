@@ -12,10 +12,12 @@ type ClinicalCountry = {
   defaultEvidenceStrictness: "strict" | "balanced" | "local-aware";
 };
 
+type EvidenceStrictness = "strict" | "balanced" | "local-aware";
+
 type ClinicalSettings = {
   clinicalCountry: "FI" | "RU";
   clinicalOutputLanguage: string;
-  evidenceStrictness: "strict" | "balanced" | "local-aware";
+  evidenceStrictness: EvidenceStrictness;
   allowLocalSources: boolean;
   allowSupplementarySources: boolean;
 };
@@ -41,7 +43,8 @@ const labels = {
     description: "Valitse, minkä maan virallisiin lähteisiin AI-agentti perustaa kliiniset vastaukset.",
     country: "Kliininen maa",
     clinicalLanguage: "Kliinisen tekstin kieli",
-    strictness: "Näyttötila",
+    strictness: "Miten tiukasti lähteitä käytetään",
+    strictnessHelp: "Suositus: pidä turvallisin tila päällä kliinisessä työssä. Agentti ei saa antaa hoito-ohjeita ilman virallista lähdetukea.",
     allowLocal: "Salli paikalliset ohjeet",
     allowSupplementary: "Salli täydentävät lähteet",
     save: "Tallenna kliiniset asetukset",
@@ -52,14 +55,30 @@ const labels = {
     agent: "Agentti",
     pikaohjeet: "Pikaohjeet",
     patientInstructions: "Potilasohjeet",
+    enabled: "Käytössä",
     warning: "Jos virallisia lähteitä ei ole käytössä, agentti ei anna kliinisiä suosituksia.",
+    evidenceModes: {
+      strict: {
+        label: "Vain viralliset suositukset",
+        description: "Turvallisin tila. Agentti käyttää kliinisissä suosituksissa vain valitun maan virallisia lähteitä.",
+      },
+      balanced: {
+        label: "Viralliset + luotettavat viitelähteet",
+        description: "Sallii virallisten suositusten lisäksi luotettavat lääketieteelliset viitelähteet, mutta ei korvaa suosituksia niillä.",
+      },
+      "local-aware": {
+        label: "Viralliset + paikalliset ohjeet",
+        description: "Huomioi myös paikalliset hoitopolut ja organisaatio-ohjeet, jos ne on otettu käyttöön.",
+      },
+    },
   },
   ru: {
     title: "Клинические источники и страна",
     description: "Выберите, на официальные источники какой страны AI-агент должен опираться в клинических ответах.",
     country: "Страна рекомендаций",
     clinicalLanguage: "Язык клинического текста",
-    strictness: "Режим доказательности",
+    strictness: "Как строго использовать источники",
+    strictnessHelp: "Рекомендация: для клинической работы оставлять самый безопасный режим. Агент не должен давать лечебные рекомендации без официального источника.",
     allowLocal: "Разрешить локальные инструкции",
     allowSupplementary: "Разрешить дополнительные источники",
     save: "Сохранить клинические настройки",
@@ -70,14 +89,30 @@ const labels = {
     agent: "Агент",
     pikaohjeet: "Pikaohjeet",
     patientInstructions: "Инструкции пациенту",
+    enabled: "Включён",
     warning: "Если официальные источники отключены, агент не будет давать клинические рекомендации.",
+    evidenceModes: {
+      strict: {
+        label: "Только официальные рекомендации",
+        description: "Самый безопасный режим. Для клинических рекомендаций агент использует только официальные источники выбранной страны.",
+      },
+      balanced: {
+        label: "Официальные + надёжные справочники",
+        description: "Разрешает использовать надёжные медицинские справочники вместе с официальными рекомендациями, но не вместо них.",
+      },
+      "local-aware": {
+        label: "Официальные + локальные инструкции",
+        description: "Учитывает также локальные протоколы и инструкции организации, если они включены.",
+      },
+    },
   },
   en: {
     title: "Clinical sources and country",
     description: "Choose which country's official sources the AI agent should use for clinical answers.",
     country: "Clinical country",
     clinicalLanguage: "Clinical text language",
-    strictness: "Evidence mode",
+    strictness: "How strictly sources are used",
+    strictnessHelp: "Recommended: keep the safest mode for clinical work. The agent must not provide treatment recommendations without official source support.",
     allowLocal: "Allow local instructions",
     allowSupplementary: "Allow supplementary sources",
     save: "Save clinical settings",
@@ -88,9 +123,26 @@ const labels = {
     agent: "Agent",
     pikaohjeet: "Quick guides",
     patientInstructions: "Patient instructions",
+    enabled: "Enabled",
     warning: "If no official sources are enabled, the agent will not provide clinical recommendations.",
+    evidenceModes: {
+      strict: {
+        label: "Official guidelines only",
+        description: "Safest mode. The agent uses only official sources from the selected country for clinical recommendations.",
+      },
+      balanced: {
+        label: "Official + trusted references",
+        description: "Allows trusted medical references together with official guidelines, but not as a replacement for them.",
+      },
+      "local-aware": {
+        label: "Official + local instructions",
+        description: "Also considers local care pathways and organization instructions when enabled.",
+      },
+    },
   },
 } as const;
+
+const evidenceModeOrder: EvidenceStrictness[] = ["strict", "balanced", "local-aware"];
 
 export default function ClinicalEvidenceSettingsCard() {
   const { language } = useI18n();
@@ -103,6 +155,7 @@ export default function ClinicalEvidenceSettingsCard() {
   const [message, setMessage] = useState<string | null>(null);
 
   const selectedCountry = useMemo(() => countries.find((country) => country.code === settings?.clinicalCountry), [countries, settings?.clinicalCountry]);
+  const selectedEvidenceMode = settings ? l.evidenceModes[settings.evidenceStrictness] : null;
 
   async function loadSettings() {
     setLoading(true);
@@ -240,15 +293,20 @@ export default function ClinicalEvidenceSettingsCard() {
           <span className="text-xs font-bold uppercase tracking-wider text-slate-500">{l.strictness}</span>
           <select
             value={settings.evidenceStrictness}
-            onChange={(event) => setSettings({ ...settings, evidenceStrictness: event.target.value as ClinicalSettings["evidenceStrictness"] })}
+            onChange={(event) => setSettings({ ...settings, evidenceStrictness: event.target.value as EvidenceStrictness })}
             className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
           >
-            <option value="strict">strict</option>
-            <option value="balanced">balanced</option>
-            <option value="local-aware">local-aware</option>
+            {evidenceModeOrder.map((mode) => (
+              <option key={mode} value={mode}>{l.evidenceModes[mode].label}</option>
+            ))}
           </select>
+          {selectedEvidenceMode && (
+            <p className="text-xs text-slate-500 leading-relaxed">{selectedEvidenceMode.description}</p>
+          )}
         </label>
       </div>
+
+      <p className="text-xs text-slate-500 leading-relaxed">{l.strictnessHelp}</p>
 
       <div className="flex flex-wrap gap-4 text-sm">
         <label className="inline-flex items-center gap-2 font-semibold text-slate-600">
@@ -297,7 +355,7 @@ export default function ClinicalEvidenceSettingsCard() {
                 </div>
                 <label className="inline-flex items-center gap-2 text-sm font-bold text-slate-700">
                   <input type="checkbox" checked={source.isEnabled} onChange={(event) => updateSource(source, { isEnabled: event.target.checked })} />
-                  enabled
+                  {l.enabled}
                 </label>
               </div>
 
