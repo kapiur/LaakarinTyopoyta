@@ -1,8 +1,7 @@
 import type { AiTaskType } from '../taskTypes';
 
-export type AgentContextType = 'general' | 'clinicalReference' | 'malli' | 'aiTool' | 'clinicalText' | 'pikaohje';
+export type AgentContextType = string;
 export type AgentUiLanguage = 'fi' | 'ru' | 'en';
-
 export type AgentSuggestedAction = { type: string; label: string };
 
 export type AgentConversationTurn = {
@@ -12,4 +11,27 @@ export type AgentConversationTurn = {
   taskType?: string;
 };
 
-export type AgentConversationContext
+export type AgentConversationContext = {
+  previousTurns?: AgentConversationTurn[];
+  latestDraft?: string;
+};
+
+export type AgentRequestBody = {
+  contextType?: AgentContextType;
+  uiLanguage?: AgentUiLanguage;
+  userMessage?: string;
+  currentText?: string;
+  currentTemplate?: string;
+  selectedTemplateId?: number | string;
+  selectedToolId?: number | string;
+  selectedCardId?: number | string;
+  conversationId?: string;
+  conversationContext?: AgentConversationContext;
+};
+
+export type AgentPlan = {
+  taskType: AiTaskType;
+  systemInstruction: string;
+  userInstruction: string;
+  suggestedActions: AgentSuggestedAction[];
+};
