@@ -12,10 +12,4 @@ export type AiTaskType =
   | 'referral_guidance'
   | 'text_fix'
   | 'translation'
-  | 'template_generation'
-  | 'template_polish'
-  | 'tool_design'
-  | 'lab_format'
-  | 'general_chat';
-
-export type AiTaskContext
+  | 'template_generation
