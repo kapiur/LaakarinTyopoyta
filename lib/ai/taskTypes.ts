@@ -13,12 +13,4 @@ export type AiTaskType =
   | 'text_fix'
   | 'translation'
   | 'template_generation'
-  | 'template_polish'
-  | 'tool_design'
-  | 'lab_format'
-  | 'general_chat';
-
-export type AiTaskContext = {
-  taskType: AiTaskType;
-  requiresHighQuality?: boolean;
- 
+  | 'template
