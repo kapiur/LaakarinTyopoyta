@@ -15,4 +15,16 @@ export type AiTaskType =
   | 'template_generation'
   | 'template_polish'
   | 'tool_design'
-  | 'lab
+  | 'lab_format'
+  | 'general_chat';
+
+const STRICT_EVIDENCE_TASKS: AiTaskType[] = [
+  'clinical_advice',
+  'pikaohje_generation',
+  'pikaohje_review',
+  'medication_guidance',
+  'urgent_triage',
+  'referral_guidance',
+];
+
+const
