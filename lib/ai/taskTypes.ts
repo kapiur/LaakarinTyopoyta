@@ -13,4 +13,6 @@ export type AiTaskType =
   | 'text_fix'
   | 'translation'
   | 'template_generation'
-  | 'template
+  | 'template_polish'
+  | 'tool_design'
+  | 'lab
