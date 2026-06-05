@@ -14,8 +14,4 @@ export type AiTaskType =
   | 'translation'
   | 'template_generation'
   | 'template_polish'
-  | 'tool_design'
-  | 'lab_format'
-  | 'general_chat';
-
-export type
+  | 'tool
