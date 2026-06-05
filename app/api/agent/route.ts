@@ -4,12 +4,26 @@ import { sanitizeAgentInputs } from '../../../lib/ai/agent/agentPrivacy';
 import { createAgentPlan } from '../../../lib/ai/agent/agentPlanner';
 import type { AgentContextType, AgentRequestBody, AgentUiLanguage } from '../../../lib/ai/agent/types';
 import { runRoutedAiCompletion } from '../../../lib/ai/runRoutedAiCompletion';
-import { taskRequiresEvidence } from '../../../lib/ai/taskTypes';
-import { buildInitialEvidencePackage, buildNoEvidenceReply, type EvidencePackage } from '../../../lib/clinical/evidence/evidencePackage';
+import { taskAllowsRegistryOnlyReference, taskRequiresEvidence } from '../../../lib/ai/taskTypes';
+import {
+  buildInitialEvidencePackage,
+  buildNoEvidenceReply,
+  type EvidencePackage,
+} from '../../../lib/clinical/evidence/evidencePackage';
 import { getUserClinicalEvidenceConfig } from '../../../lib/clinical/evidence/userClinicalSettings';
 
 function normalizeContextType(value: unknown): AgentContextType {
-  if (value === 'general' || value === 'malli' || value === 'aiTool' || value === 'clinicalText' || value === 'pikaohje') return value;
+  if (
+    value === 'general' ||
+    value === 'clinicalReference' ||
+    value === 'malli' ||
+    value === 'aiTool' ||
+    value === 'clinicalText' ||
+    value === 'pikaohje'
+  ) {
+    return value;
+  }
+
   return 'general';
 }
 
@@ -45,7 +59,9 @@ function buildConversationContext(body: AgentRequestBody) {
     'Previous transient conversation context follows.',
     'Use it only to refine the current task. Do not treat it as independently verified clinical evidence.',
     'Keep all privacy and evidence rules active for the latest user request.',
-    body.conversationContext?.latestDraft ? `Latest draft to refine:\n${truncate(optionalString(body.conversationContext.latestDraft), 3000)}` : '',
+    body.conversationContext?.latestDraft
+      ? `Latest draft to refine:\n${truncate(optionalString(body.conversationContext.latestDraft), 3000)}`
+      : '',
     ...safeTurns,
   ].filter(Boolean).join('\n\n');
 }
@@ -54,17 +70,42 @@ function inputKindForContext(contextType: AgentContextType) {
   if (contextType === 'clinicalText' || contextType === 'pikaohje') return 'clinicalText' as const;
   if (contextType === 'aiTool') return 'storedInstruction' as const;
   if (contextType === 'malli') return 'general' as const;
+  if (contextType === 'clinicalReference') return 'general' as const;
   return 'general' as const;
 }
 
 function parseDraftFromContent(content: string) {
-  const draftHeading = /(?:^|\n)(?:3\.\s*)?(?:Draft|Luonnos|Ehdotus|Proposed solution|Korjattu luonnos|Malliluonnos|Promptiluonnos)\s*:?\s*\n/i;
+  const draftHeading =
+    /(?:^|\n)(?:3\.\s*)?(?:Draft|Luonnos|Ehdotus|Proposed solution|Korjattu luonnos|Malliluonnos|Promptiluonnos)\s*:?\s*\n/i;
   const match = draftHeading.exec(content);
+
   if (!match || match.index === undefined) return content.trim();
   return content.slice(match.index + match[0].length).trim();
 }
 
-function localizedEvidenceWarnings(language: AgentUiLanguage, status: string) {
+function localizedEvidenceWarnings(
+  language: AgentUiLanguage,
+  status: string,
+  registryOnlyReference = false,
+) {
+  if (registryOnlyReference) {
+    if (language === 'ru') {
+      return [
+        'Официальные источники для выбранной страны настроены, но текущая версия агента ещё не извлекает автоматически конкретные фрагменты из этих источников. Поэтому ответ должен оставаться справочным: структура сравнения, общие принципы и указание, какие пункты нужно проверить. Нельзя утверждать конкретные различия, дозировки, целевые значения, сроки лечения, red flags или критерии направления без retrieved evidence или вставленного фрагмента источника.',
+      ];
+    }
+
+    if (language === 'fi') {
+      return [
+        'Valitun maan viralliset lähteet on määritelty, mutta tämä agenttiversio ei vielä hae automaattisesti varsinaisia lähdekatkelmia. Vastauksen tulee siksi olla yleinen viite-/vertailurakenne. Tarkkoja eroja, annoksia, tavoitearvoja, hoidon kestoja, red flags -kohtia tai lähetekriteereitä ei saa esittää ilman retrieved evidence -tietoja tai käyttäjän liittämää lähdekatkelmaa.',
+      ];
+    }
+
+    return [
+      'Official sources are configured for the selected country, but this agent version does not yet automatically retrieve specific source excerpts. The answer must remain a general reference/comparison framework. Do not state exact differences, dosages, targets, treatment durations, red flags or referral criteria without retrieved evidence or a user-provided source excerpt.',
+    ];
+  }
+
   if (status === 'not_found') {
     if (language === 'ru') return ['Для выбранной страны не включены официальные клинические источники.'];
     if (language === 'fi') return ['Valitulle maalle ei ole käytössä virallisia kliinisiä lähteitä.'];
@@ -73,12 +114,20 @@ function localizedEvidenceWarnings(language: AgentUiLanguage, status: string) {
 
   if (status === 'partial') {
     if (language === 'ru') {
-      return ['Реестр официальных источников доступен, но этот MVP ещё не извлекает конкретные фрагменты клинических рекомендаций. Нельзя давать конкретные клинические рекомендации, если пользователь не предоставил текст источника или retrieval-layer не передал evidence facts.'];
+      return [
+        'Реестр официальных источников доступен, но этот MVP ещё не извлекает конкретные фрагменты клинических рекомендаций. Нельзя давать конкретные клинические рекомендации, если пользователь не предоставил текст источника или retrieval-layer не передал evidence facts.',
+      ];
     }
+
     if (language === 'fi') {
-      return ['Virallinen lähderekisteri on käytettävissä, mutta tämä MVP ei vielä hae varsinaisia suosituskatkelmia. Konkreettisia kliinisiä suosituksia ei saa antaa, ellei käyttäjä anna lähdetekstiä tai myöhempi retrieval-layer toimita evidence facts -tietoja.'];
+      return [
+        'Virallinen lähderekisteri on käytettävissä, mutta tämä MVP ei vielä hae varsinaisia suosituskatkelmia. Konkreettisia kliinisiä suosituksia ei saa antaa, ellei käyttäjä anna lähdetekstiä tai myöhempi retrieval-layer toimita evidence facts -tietoja.',
+      ];
     }
-    return ['Official source registry is available, but this MVP does not yet retrieve guideline passages. Do not provide concrete clinical recommendations unless the user provides source text or a later retrieval layer supplies evidence facts.'];
+
+    return [
+      'Official source registry is available, but this MVP does not yet retrieve guideline passages. Do not provide concrete clinical recommendations unless the user provides source text or a later retrieval layer supplies evidence facts.',
+    ];
   }
 
   return [];
@@ -88,15 +137,18 @@ function userProvidedEvidenceWarning(language: AgentUiLanguage) {
   if (language === 'ru') {
     return 'Используется фрагмент источника, вставленный пользователем. Он не был независимо проверен системой. Агент должен отвечать только в пределах этого фрагмента.';
   }
+
   if (language === 'fi') {
     return 'Käytössä on käyttäjän liittämä lähdekatkelma. Järjestelmä ei ole tarkistanut sitä itsenäisesti. Agentin tulee vastata vain tämän katkelman perusteella.';
   }
+
   return 'Using a source excerpt pasted by the user. It has not been independently verified by the system. The agent must answer only within this excerpt.';
 }
 
 function hasPotentialUserProvidedEvidence(text: string) {
   const normalized = text.toLowerCase();
   const compactLength = normalized.replace(/\s+/g, ' ').trim().length;
+
   if (compactLength < 300) return false;
 
   const sourceMarkers = [
@@ -135,7 +187,8 @@ function applyUserProvidedEvidence(input: {
   sourceText: string;
   uiLanguage: AgentUiLanguage;
 }): EvidencePackage {
-  if (!input.evidence.requiresEvidence || !hasPotentialUserProvidedEvidence(input.sourceText)) return input.evidence;
+  if (!input.evidence.requiresEvidence && input.evidence.status !== 'partial') return input.evidence;
+  if (!hasPotentialUserProvidedEvidence(input.sourceText)) return input.evidence;
 
   return {
     ...input.evidence,
@@ -144,7 +197,12 @@ function applyUserProvidedEvidence(input: {
     sources: [
       {
         id: 'user-provided-source-excerpt',
-        name: input.uiLanguage === 'ru' ? 'Фрагмент источника, вставленный пользователем' : input.uiLanguage === 'fi' ? 'Käyttäjän liittämä lähdekatkelma' : 'User-provided source excerpt',
+        name:
+          input.uiLanguage === 'ru'
+            ? 'Фрагмент источника, вставленный пользователем'
+            : input.uiLanguage === 'fi'
+              ? 'Käyttäjän liittämä lähdekatkelma'
+              : 'User-provided source excerpt',
         sourceType: 'user_provided_excerpt',
         trustLevel: 'user_provided_not_independently_verified',
         baseUrl: undefined,
@@ -179,7 +237,11 @@ export async function POST(req: Request) {
 
     const privacyResult = sanitizeAgentInputs([
       { key: 'userMessage', value: userMessage, kind: inputKindForContext(contextType) },
-      { key: 'currentText', value: currentText, kind: contextType === 'clinicalText' || contextType === 'pikaohje' ? 'clinicalText' : 'general' },
+      {
+        key: 'currentText',
+        value: currentText,
+        kind: contextType === 'clinicalText' || contextType === 'pikaohje' ? 'clinicalText' : 'general',
+      },
       { key: 'currentTemplate', value: currentTemplate, kind: 'templateSyntax' },
       { key: 'conversationContext', value: conversationContext, kind: inputKindForContext(contextType) },
     ]);
@@ -193,9 +255,11 @@ export async function POST(req: Request) {
 
     const clinicalConfig = await getUserClinicalEvidenceConfig(userId);
     const requiresEvidence = taskRequiresEvidence(plan.taskType);
+    const allowsRegistryOnlyReference = taskAllowsRegistryOnlyReference(plan.taskType);
+
     const initialEvidence = buildInitialEvidencePackage({
       taskType: plan.taskType,
-      requiresEvidence,
+      requiresEvidence: requiresEvidence || allowsRegistryOnlyReference,
       config: clinicalConfig,
     });
 
@@ -205,12 +269,23 @@ export async function POST(req: Request) {
       uiLanguage,
     });
 
+    const isRegistryOnlyReference =
+      allowsRegistryOnlyReference &&
+      (evidence.status === 'partial' || evidence.status === 'not_found');
+
     const localizedEvidence = {
       ...evidence,
-      warnings: evidence.warnings.length > 0 ? evidence.warnings : localizedEvidenceWarnings(uiLanguage, evidence.status),
+      warnings:
+        evidence.warnings.length > 0
+          ? evidence.warnings
+          : localizedEvidenceWarnings(uiLanguage, evidence.status, isRegistryOnlyReference),
     };
 
-    if (requiresEvidence && (evidence.status === 'not_found' || evidence.status === 'partial')) {
+    if (
+      requiresEvidence &&
+      !allowsRegistryOnlyReference &&
+      (evidence.status === 'not_found' || evidence.status === 'partial')
+    ) {
       const reply = buildNoEvidenceReply({
         clinicalCountry: evidence.clinicalCountry,
         language: uiLanguage,
@@ -240,7 +315,15 @@ export async function POST(req: Request) {
       `UI language: ${uiLanguage}`,
       `Evidence strictness: ${clinicalConfig.evidenceStrictness}`,
       `Evidence status: ${evidence.status}`,
+      `Registry-only reference mode: ${isRegistryOnlyReference ? 'yes' : 'no'}`,
       `Used sources: ${evidence.sources.map((source) => `${source.name} (${source.trustLevel})`).join(', ') || 'none'}`,
+      isRegistryOnlyReference
+        ? [
+            'The official source registry is configured, but concrete source excerpts have not been automatically retrieved.',
+            'For clinical reference or guideline comparison tasks, provide only a safe general framework, structure, and list of items to compare.',
+            'Do not state exact guideline differences, target values, medication choices, dosages, treatment durations, red flags, contraindications, or referral thresholds unless they are present in retrieved evidence or a user-provided source excerpt.',
+          ].join('\n')
+        : '',
       hasPotentialUserProvidedEvidence(privacyResult.sanitized.currentText)
         ? [
             'User-provided evidence excerpt is present below.',
