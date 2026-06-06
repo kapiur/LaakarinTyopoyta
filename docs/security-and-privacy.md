@@ -30,6 +30,19 @@ Key principles:
 - anonymized writing samples should be stored only through explicit user opt-in
 - persisted profile samples and AI-derived style summaries should be kept minimized rather than stored as large raw text blocks
 
+Important boundary:
+
+- patient or third-party clinical text is the target of anonymization
+- first-party account identity data for the authenticated site user is not
+- current examples of first-party account identity include `User.email` and `User.name`
+- future account/profile identity fields should follow the same rule unless they are explicitly copied into AI-facing free-text areas
+
+That means:
+
+- do not run patient-text anonymization over core account identity records just because they are personal data
+- do run privacy controls on AI-facing free-text fields, even when they belong to a logged-in user profile
+- keep a clear separation between `account identity storage` and `AI free-text / clinical text processing`
+
 Useful commands:
 
 ```bash

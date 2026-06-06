@@ -36,6 +36,14 @@ Main files:
 - [middleware.ts](/C:/Users/kapus/Documents/Codex/2026-06-06/github-plugin-github-openai-curated-github/work/LaakarinTyopoyta/middleware.ts)
 - [prisma/schema.prisma](/C:/Users/kapus/Documents/Codex/2026-06-06/github-plugin-github-openai-curated-github/work/LaakarinTyopoyta/prisma/schema.prisma)
 
+Important boundary:
+
+- user account identity data such as `User.email` and `User.name` is first-party system data
+- patient / third-party clinical text is privacy-gateway data
+- these must not be treated as the same thing
+
+The anonymization system is designed to protect patient and third-party clinical text before AI processing, not to rewrite core account identity records in the application database.
+
 ### 2. Templates (`malli`)
 
 Structured text templates for physician documentation.

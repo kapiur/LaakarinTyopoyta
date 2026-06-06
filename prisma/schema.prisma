@@ -19,6 +19,7 @@ enum UserRole {
 
 model User {
   id                 Int              @id @default(autoincrement())
+  // Core first-party account identity. These values are not patient-text anonymization targets.
   email              String           @unique
   password           String
   name               String?
@@ -210,6 +211,7 @@ model UserAiProfile {
   id                     String                @id @default(cuid())
   userId                 Int                   @unique
   user                   User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // AI-facing free-text profile fields may require privacy sanitization before persistence.
   role                   String?
   specialty              String?
   workplace              String?
