@@ -12,6 +12,8 @@ import { sanitizeJsonValue } from '../../../../../lib/privacy/structured/sanitiz
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const CURRENT_MODEL = 'gpt-5.4';
 const DEFAULT_RECENT_SAMPLE_LIMIT = 5;
+const MAX_STORED_SAMPLE_CHARS = 4000;
+const MAX_STORED_STYLE_SUMMARY_CHARS = 1200;
 
 type ProfileRow = {
   id: string;
@@ -36,6 +38,12 @@ function buildPrivacyBlockReply() {
 
 function buildPrivacyOutputBlockReply() {
   return 'AI-vastaus sisälsi henkilötietoihin viittaavia tietoja, joten sitä ei näytetä turvallisuussyistä. Muokkaa pyyntöä yleisemmäksi ilman tunnistetietoja ja yritä uudelleen.';
+}
+
+function trimForStorage(value: string, maxLength: number) {
+  const trimmed = value.trim();
+  if (trimmed.length <= maxLength) return trimmed;
+  return trimmed.slice(0, maxLength).trim();
 }
 
 async function getUserId() {
@@ -164,7 +172,7 @@ export async function POST(req: Request) {
 
     const body = await req.json();
     const exampleText = typeof body?.text === 'string' ? body.text : '';
-    const saveAnonymizedSample = body?.saveAnonymizedSample !== false;
+    const saveAnonymizedSample = body?.saveAnonymizedSample === true;
     const sourceLabel = typeof body?.sourceLabel === 'string' ? body.sourceLabel.trim().slice(0, 120) : null;
 
     if (!exampleText.trim()) {
@@ -193,7 +201,8 @@ export async function POST(req: Request) {
     const outputPrivacy = preparePrivacyPayload([
       { key: 'styleSummary', value: styleSummary, mode: 'persistentStorage' },
     ]);
-    const safeStyleSummary = outputPrivacy.sanitized.styleSummary ?? styleSummary;
+    const safeStyleSummary = trimForStorage(outputPrivacy.sanitized.styleSummary ?? styleSummary, MAX_STORED_STYLE_SUMMARY_CHARS);
+    const storedAnonymizedSample = trimForStorage(anonymized.sanitizedText, MAX_STORED_SAMPLE_CHARS);
 
     if (
       outputPrivacy.privacy.blocked &&
@@ -224,7 +233,7 @@ export async function POST(req: Request) {
         INSERT INTO "UserAiProfileSample" (
           "id", "profileId", "anonymizedText", "sourceLabel", "styleNotes", "createdAt", "updatedAt"
         ) VALUES (
-          ${sampleId}, ${profile.id}, ${anonymized.sanitizedText}, ${inputPrivacy.sanitized.sourceLabel || null}, ${safeStyleSummary}, NOW(), NOW()
+          ${sampleId}, ${profile.id}, ${storedAnonymizedSample}, ${inputPrivacy.sanitized.sourceLabel || null}, ${safeStyleSummary}, NOW(), NOW()
         )
       `;
     }
@@ -242,6 +251,11 @@ export async function POST(req: Request) {
       recentSamplesUsed: recentSamples.length,
       route: {
         outputSanitized: outputPrivacy.privacy.anonymized,
+      },
+      storage: {
+        sampleStored: saveAnonymizedSample,
+        sampleTextTruncated: anonymized.sanitizedText.length > MAX_STORED_SAMPLE_CHARS,
+        styleSummaryTruncated: (outputPrivacy.sanitized.styleSummary ?? styleSummary).trim().length > MAX_STORED_STYLE_SUMMARY_CHARS,
       },
     });
   } catch (error: any) {

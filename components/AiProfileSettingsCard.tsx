@@ -48,7 +48,7 @@ const dict = {
     examplePlaceholder: "Liitä yksi vastaanottoteksti, etäkontakti, lähete tai loppuarvio...",
     sourceLabel: "Tekstityyppi / esimerkin nimi",
     sourceLabelPlaceholder: "Esim. Loppuarvio, Lähete, Etäkontakti, Vastaanottokäynti, Väliarvio",
-    saveSample: "Säilytä anonymisoitu esimerkki myöhempää tyylin tarkentamista varten",
+    saveSample: "Tallenna anonymisoitu esimerkki myöhempää tyylin tarkentamista varten (vain jos haluat säilyttää sen)",
     analyze: "Lisää esimerkki tyyliin",
     save: "Tallenna AI-profiili",
     saved: "AI-profiili tallennettu.",
@@ -77,7 +77,7 @@ const dict = {
     examplePlaceholder: "Вставьте один приём, etäkontakti, направление или loppuarvio...",
     sourceLabel: "Тип текста / название образца",
     sourceLabelPlaceholder: "Например: Loppuarvio, Lähete, Etäkontakti, Vastaanottokäynti, Väliarvio",
-    saveSample: "Сохранить анонимизированный пример для дальнейшего уточнения стиля",
+    saveSample: "Сохранить анонимизированный пример для дальнейшего уточнения стиля (только если вы хотите его хранить)",
     analyze: "Добавить пример к стилю",
     save: "Сохранить AI-профиль",
     saved: "AI-профиль сохранён.",
@@ -106,7 +106,7 @@ const dict = {
     examplePlaceholder: "Paste one visit note, remote contact, referral or discharge summary...",
     sourceLabel: "Text type / sample name",
     sourceLabelPlaceholder: "For example: Loppuarvio, Lähete, Etäkontakti, Vastaanottokäynti, Väliarvio",
-    saveSample: "Keep anonymized sample for later style refinement",
+    saveSample: "Store anonymized sample for later style refinement only if you want it kept",
     analyze: "Add sample to style",
     save: "Save AI profile",
     saved: "AI profile saved.",
@@ -146,7 +146,7 @@ export default function AiProfileSettingsCard() {
   const [profile, setProfile] = useState<AiProfile>(emptyProfile());
   const [exampleText, setExampleText] = useState("");
   const [sourceLabel, setSourceLabel] = useState("");
-  const [saveAnonymizedSample, setSaveAnonymizedSample] = useState(true);
+  const [saveAnonymizedSample, setSaveAnonymizedSample] = useState(false);
   const [privacy, setPrivacy] = useState<PrivacyInfo>(null);
   const [anonymizedPreview, setAnonymizedPreview] = useState("");
   const [isLoading, setIsLoading] = useState(true);

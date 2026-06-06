@@ -26,6 +26,9 @@ Key principles:
 - raw patient text should not be logged
 - audit metadata is allowed; clinical content logging is not
 - AI behavior must remain supervised
+- long-lived AI profile storage should use stricter storage sanitization than transient chat flows
+- anonymized writing samples should be stored only through explicit user opt-in
+- persisted profile samples and AI-derived style summaries should be kept minimized rather than stored as large raw text blocks
 
 Useful commands:
 

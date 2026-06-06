@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '../../../../lib/auth';
 import { prisma } from '../../../../lib/prisma';
+import { preparePrivacyPayload } from '../../../../lib/privacy/gateway';
 
 const TEXT_FIELDS = [
   'role',
@@ -45,6 +46,10 @@ function cleanText(value: unknown) {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+function buildPrivacyBlockReply() {
+  return 'Tekstissä havaittiin tai siihen jäi automaattisen anonymisoinnin jälkeen tunnistetietoja, joita ei voida tallentaa profiiliin turvallisesti. Poista nimi-, yhteys-, tunniste- ja osoitetiedot ja yritä uudelleen.';
+}
+
 async function getUserId() {
   const session = await getServerSession(authOptions);
   const userId = Number((session?.user as any)?.id);
@@ -79,8 +84,31 @@ export async function PUT(req: Request) {
   }
 
   const body = await req.json();
-  const data = TEXT_FIELDS.reduce<Record<TextField, string | null>>((acc, field) => {
+  const rawData = TEXT_FIELDS.reduce<Record<TextField, string | null>>((acc, field) => {
     acc[field] = cleanText(body?.[field]);
+    return acc;
+  }, {} as Record<TextField, string | null>);
+  const inputPrivacy = preparePrivacyPayload(
+    TEXT_FIELDS.map((field) => ({
+      key: field,
+      value: rawData[field],
+      mode: 'persistentStorage',
+    })),
+  );
+
+  if (inputPrivacy.privacy.blocked) {
+    return NextResponse.json({
+      error: buildPrivacyBlockReply(),
+      privacy: inputPrivacy.privacy,
+      route: {
+        blockedByPrivacyGate: true,
+      },
+    }, { status: 400 });
+  }
+
+  const data = TEXT_FIELDS.reduce<Record<TextField, string | null>>((acc, field) => {
+    const sanitized = inputPrivacy.sanitized[field];
+    acc[field] = typeof sanitized === 'string' && sanitized.trim().length > 0 ? sanitized.trim() : null;
     return acc;
   }, {} as Record<TextField, string | null>);
 
@@ -106,7 +134,13 @@ export async function PUT(req: Request) {
       ) RETURNING *
     `;
 
-    return NextResponse.json({ profile: rows[0] });
+    return NextResponse.json({
+      profile: rows[0],
+      privacy: inputPrivacy.privacy,
+      route: {
+        inputSanitized: inputPrivacy.privacy.anonymized,
+      },
+    });
   }
 
   const rows = await prisma.$queryRaw<AiProfileRow[]>`
@@ -129,5 +163,11 @@ export async function PUT(req: Request) {
     RETURNING *
   `;
 
-  return NextResponse.json({ profile: rows[0] });
+  return NextResponse.json({
+    profile: rows[0],
+    privacy: inputPrivacy.privacy,
+    route: {
+      inputSanitized: inputPrivacy.privacy.anonymized,
+    },
+  });
 }
