@@ -1,8 +1,21 @@
 import type { AiTaskType } from '../taskTypes';
 
-export type AgentContextType = string;
+export type AgentContextType =
+  | 'general'
+  | 'clinicalReference'
+  | 'malli'
+  | 'aiTool'
+  | 'clinicalText'
+  | 'pikaohje';
 export type AgentUiLanguage = 'fi' | 'ru' | 'en';
-export type AgentSuggestedAction = { type: string; label: string };
+
+export type AgentSuggestedAction =
+  | { type: 'copy_draft'; label: string }
+  | { type: 'use_as_template_draft'; label: string }
+  | { type: 'open_template_editor'; label: string }
+  | { type: 'use_as_ai_tool_prompt'; label: string }
+  | { type: 'use_as_pikaohje_draft'; label: string }
+  | { type: 'review_again'; label: string };
 
 export type AgentConversationTurn = {
   userMessage: string;

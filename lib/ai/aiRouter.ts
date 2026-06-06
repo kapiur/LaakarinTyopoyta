@@ -28,6 +28,8 @@ export function profileModeForTask(taskType: AiTaskType): AiProfileMode {
   if (taskType === 'template_generation') return 'styleOnly';
   if (taskType === 'template_polish') return 'styleOnly';
   if (taskType === 'tool_design') return 'workContextOnly';
+  if (taskType === 'clinical_reference') return 'workContextOnly';
+  if (taskType === 'clinical_guideline_comparison') return 'workContextOnly';
   if (taskType === 'clinical_review') return 'workContextOnly';
   if (taskType === 'clinical_advice') return 'workContextOnly';
   if (taskType === 'clinical_source_check') return 'workContextOnly';
