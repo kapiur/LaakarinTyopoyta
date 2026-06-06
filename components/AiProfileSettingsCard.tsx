@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Bot, Loader2, Save, ShieldCheck, Sparkles } from "lucide-react";
+import { Bot, Loader2, Save, ShieldCheck, Sparkles, Trash2 } from "lucide-react";
 import PrivacyNotice from "./PrivacyNotice";
 import { useI18n } from "../lib/useI18n";
 
@@ -27,6 +27,11 @@ type PrivacyInfo = {
   findingTypes?: string[];
 } | null;
 
+type SampleStats = {
+  sampleCount: number;
+  latestSampleAt?: string | null;
+} | null;
+
 const dict = {
   fi: {
     title: "AI-profiili",
@@ -49,6 +54,11 @@ const dict = {
     sourceLabel: "Tekstityyppi / esimerkin nimi",
     sourceLabelPlaceholder: "Esim. Loppuarvio, Lähete, Etäkontakti, Vastaanottokäynti, Väliarvio",
     saveSample: "Tallenna anonymisoitu esimerkki myöhempää tyylin tarkentamista varten (vain jos haluat säilyttää sen)",
+    sampleRetention: "Tallennetut esimerkit",
+    sampleRetentionHelp: "Jos päätät säilyttää anonymisoituja esimerkkejä, järjestelmä säilyttää vain rajatun määrän viimeisimpiä esimerkkejä.",
+    sampleCount: "Tallennettuja esimerkkejä",
+    clearSamples: "Poista tallennetut esimerkit",
+    clearedSamples: "Tallennetut esimerkit poistettu.",
     analyze: "Lisää esimerkki tyyliin",
     save: "Tallenna AI-profiili",
     saved: "AI-profiili tallennettu.",
@@ -78,6 +88,11 @@ const dict = {
     sourceLabel: "Тип текста / название образца",
     sourceLabelPlaceholder: "Например: Loppuarvio, Lähete, Etäkontakti, Vastaanottokäynti, Väliarvio",
     saveSample: "Сохранить анонимизированный пример для дальнейшего уточнения стиля (только если вы хотите его хранить)",
+    sampleRetention: "Сохранённые примеры",
+    sampleRetentionHelp: "Если вы решите хранить анонимизированные примеры, система оставляет только ограниченное число самых новых.",
+    sampleCount: "Сохранено примеров",
+    clearSamples: "Удалить сохранённые примеры",
+    clearedSamples: "Сохранённые примеры удалены.",
     analyze: "Добавить пример к стилю",
     save: "Сохранить AI-профиль",
     saved: "AI-профиль сохранён.",
@@ -107,6 +122,11 @@ const dict = {
     sourceLabel: "Text type / sample name",
     sourceLabelPlaceholder: "For example: Loppuarvio, Lähete, Etäkontakti, Vastaanottokäynti, Väliarvio",
     saveSample: "Store anonymized sample for later style refinement only if you want it kept",
+    sampleRetention: "Stored samples",
+    sampleRetentionHelp: "If you choose to keep anonymized samples, the system keeps only a limited number of the most recent ones.",
+    sampleCount: "Stored samples",
+    clearSamples: "Delete stored samples",
+    clearedSamples: "Stored samples deleted.",
     analyze: "Add sample to style",
     save: "Save AI profile",
     saved: "AI profile saved.",
@@ -148,10 +168,12 @@ export default function AiProfileSettingsCard() {
   const [sourceLabel, setSourceLabel] = useState("");
   const [saveAnonymizedSample, setSaveAnonymizedSample] = useState(false);
   const [privacy, setPrivacy] = useState<PrivacyInfo>(null);
+  const [sampleStats, setSampleStats] = useState<SampleStats>(null);
   const [anonymizedPreview, setAnonymizedPreview] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isClearingSamples, setIsClearingSamples] = useState(false);
   const [message, setMessage] = useState("");
 
   const textFields = useMemo(() => [
@@ -164,6 +186,21 @@ export default function AiProfileSettingsCard() {
     ["detailLevel", t.detailLevel, "Tiivis mutta kliinisesti yksityiskohtainen"] as const,
     ["writingStyle", t.writingStyle, "Kronologinen, selkeä, ammattimainen"] as const,
   ], [t]);
+
+  const loadSampleStats = async () => {
+    try {
+      const response = await fetch("/api/profile/ai/samples");
+      if (response.ok) {
+        const data = await response.json();
+        setSampleStats({
+          sampleCount: Number(data.sampleCount || 0),
+          latestSampleAt: data.latestSampleAt || null,
+        });
+      }
+    } catch (error) {
+      console.error("AI profile sample stats loading failed", error);
+    }
+  };
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -182,6 +219,7 @@ export default function AiProfileSettingsCard() {
     };
 
     loadProfile();
+    loadSampleStats();
   }, []);
 
   const update = (key: keyof AiProfile, nextValue: string | boolean) => {
@@ -224,6 +262,12 @@ export default function AiProfileSettingsCard() {
       if (!response.ok) throw new Error(data?.error || "analysis failed");
       setPrivacy(data.privacy || null);
       setAnonymizedPreview(data.anonymizedText || "");
+      if (data?.storage) {
+        setSampleStats((current) => ({
+          sampleCount: Number(data.storage.sampleCount ?? current?.sampleCount ?? 0),
+          latestSampleAt: current?.latestSampleAt || null,
+        }));
+      }
       setProfile((current) => ({ ...current, styleSummary: data.styleSummary || current.styleSummary }));
       setExampleText("");
       setSourceLabel("");
@@ -232,6 +276,24 @@ export default function AiProfileSettingsCard() {
       setMessage(t.error);
     } finally {
       setIsAnalyzing(false);
+    }
+  };
+
+  const clearStoredSamples = async () => {
+    setIsClearingSamples(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/profile/ai/samples", {
+        method: "DELETE",
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error || "cleanup failed");
+      setSampleStats({ sampleCount: Number(data.sampleCount || 0), latestSampleAt: null });
+      setMessage(t.clearedSamples);
+    } catch (error) {
+      setMessage(t.error);
+    } finally {
+      setIsClearingSamples(false);
     }
   };
 
@@ -339,6 +401,23 @@ export default function AiProfileSettingsCard() {
           />
           {t.saveSample}
         </label>
+        <div className="rounded-2xl border border-blue-100 bg-white px-4 py-3 text-xs text-slate-600">
+          <div className="font-black uppercase tracking-wide text-slate-500">{t.sampleRetention}</div>
+          <div className="mt-1 leading-relaxed">{t.sampleRetentionHelp}</div>
+          <div className="mt-2 font-bold">
+            {t.sampleCount}: {sampleStats?.sampleCount ?? 0}
+          </div>
+          <div className="mt-3">
+            <button
+              onClick={clearStoredSamples}
+              disabled={isClearingSamples || (sampleStats?.sampleCount ?? 0) === 0}
+              className="inline-flex items-center gap-2 rounded-xl border border-rose-100 bg-rose-50 px-3 py-2 text-[11px] font-black uppercase tracking-wide text-rose-700 hover:bg-rose-100 disabled:opacity-40"
+            >
+              {isClearingSamples ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+              {t.clearSamples}
+            </button>
+          </div>
+        </div>
         <button
           onClick={analyzeStyle}
           disabled={isAnalyzing || !exampleText.trim()}

@@ -12,6 +12,7 @@ import { sanitizeJsonValue } from '../../../../../lib/privacy/structured/sanitiz
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const CURRENT_MODEL = 'gpt-5.4';
 const DEFAULT_RECENT_SAMPLE_LIMIT = 5;
+const MAX_SAVED_PROFILE_SAMPLES = 12;
 const MAX_STORED_SAMPLE_CHARS = 4000;
 const MAX_STORED_STYLE_SUMMARY_CHARS = 1200;
 
@@ -88,6 +89,30 @@ async function getRecentSamples(profileId: string, limit = DEFAULT_RECENT_SAMPLE
     WHERE "profileId" = ${profileId}
     ORDER BY "createdAt" DESC
     LIMIT ${limit}
+  `;
+}
+
+async function getStoredSampleCount(profileId: string) {
+  const rows = await prisma.$queryRaw<Array<{ count: bigint | number }>>`
+    SELECT COUNT(*) AS count
+    FROM "UserAiProfileSample"
+    WHERE "profileId" = ${profileId}
+  `;
+
+  const raw = rows[0]?.count ?? 0;
+  return typeof raw === 'bigint' ? Number(raw) : Number(raw);
+}
+
+async function trimStoredSamples(profileId: string, keepCount: number) {
+  await prisma.$executeRaw`
+    DELETE FROM "UserAiProfileSample"
+    WHERE "id" IN (
+      SELECT "id"
+      FROM "UserAiProfileSample"
+      WHERE "profileId" = ${profileId}
+      ORDER BY "createdAt" DESC
+      OFFSET ${keepCount}
+    )
   `;
 }
 
@@ -236,7 +261,10 @@ export async function POST(req: Request) {
           ${sampleId}, ${profile.id}, ${storedAnonymizedSample}, ${inputPrivacy.sanitized.sourceLabel || null}, ${safeStyleSummary}, NOW(), NOW()
         )
       `;
+      await trimStoredSamples(profile.id, MAX_SAVED_PROFILE_SAMPLES);
     }
+
+    const storedSampleCount = await getStoredSampleCount(profile.id);
 
     return NextResponse.json({
       styleSummary: safeStyleSummary,
@@ -254,6 +282,8 @@ export async function POST(req: Request) {
       },
       storage: {
         sampleStored: saveAnonymizedSample,
+        sampleCount: storedSampleCount,
+        sampleLimit: MAX_SAVED_PROFILE_SAMPLES,
         sampleTextTruncated: anonymized.sanitizedText.length > MAX_STORED_SAMPLE_CHARS,
         styleSummaryTruncated: (outputPrivacy.sanitized.styleSummary ?? styleSummary).trim().length > MAX_STORED_STYLE_SUMMARY_CHARS,
       },
