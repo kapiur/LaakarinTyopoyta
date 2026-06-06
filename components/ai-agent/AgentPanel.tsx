@@ -82,6 +82,7 @@ const localLabels = {
     conversationTitle: "Keskustelu",
     turnUser: "Käyttäjä",
     turnAssistant: "Agentti",
+    reviewAgainDraft: "Tarkista luonnos uudelleen ja keskity riskikohtiin, puuttuviin lähdetukiin ja parannusehdotuksiin.",
   },
   ru: {
     contextPikaohje: "Быстрая инструкция",
@@ -107,6 +108,7 @@ const localLabels = {
     conversationTitle: "Диалог",
     turnUser: "Пользователь",
     turnAssistant: "Агент",
+    reviewAgainDraft: "Проверь draft ещё раз и сфокусируйся на рискованных местах, нехватке source support и точках для улучшения.",
   },
   en: {
     contextPikaohje: "Quick guide",
@@ -132,6 +134,7 @@ const localLabels = {
     conversationTitle: "Conversation",
     turnUser: "User",
     turnAssistant: "Agent",
+    reviewAgainDraft: "Review the draft again and focus on risky areas, missing source support, and concrete improvements.",
   },
 } as const;
 
@@ -234,6 +237,29 @@ export default function AgentPanel({ defaultContextType = "general", initialText
     onApplyDraft(value);
     setCopied(l.appliedDraft);
     window.setTimeout(() => setCopied(null), 2500);
+  }
+
+  function handleSuggestedAction(action: AgentSuggestedAction) {
+    const draftOrReply = response?.draft || response?.reply || "";
+    if (!draftOrReply && action.type !== "review_again") return;
+
+    if (
+      onApplyDraft &&
+      (action.type === "use_as_template_draft" ||
+        action.type === "use_as_pikaohje_draft" ||
+        action.type === "use_as_ai_tool_prompt" ||
+        action.type === "open_template_editor")
+    ) {
+      applyDraft(response?.draft || response?.reply);
+      return;
+    }
+
+    if (action.type === "review_again") {
+      setFollowUpMessage(l.reviewAgainDraft);
+      return;
+    }
+
+    void copyValue(action.type, draftOrReply);
   }
 
   const canSend = userMessage.trim().length > 0 || currentText.trim().length > 0 || currentTemplate.trim().length > 0;
@@ -479,7 +505,7 @@ export default function AgentPanel({ defaultContextType = "general", initialText
                     {response.suggestedActions.map((action, index) => (
                       <button
                         key={`${action.type}-${index}`}
-                        onClick={() => copyValue(action.type, response.draft || response.reply)}
+                        onClick={() => handleSuggestedAction(action)}
                         className="px-3 py-2 rounded-xl bg-purple-50 text-purple-700 border border-purple-100 text-xs font-bold hover:bg-purple-100"
                       >
                         {action.label}
