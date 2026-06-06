@@ -73,6 +73,7 @@ const localLabels = {
     evidenceGateNotice: "Kysymys vaatii vahvistettua kliinistä evidenssiä. Agentti ei anna potilaskohtaisia suosituksia ilman lähdetukea.",
     noAutoSaveNotice: "Luonnosta ei tallenneta automaattisesti.",
     transientHistoryNotice: "Keskusteluhistoria säilyy vain tämän ikkunan ajan.",
+    unsupportedClaimsLabel: "Tarkistettavat väitteet",
     applyDraft: "Käytä luonnosta editorissa",
     appliedDraft: "Luonnos siirretty editoriin",
     followUpLabel: "Tarkenna tätä tulosta",
@@ -97,6 +98,7 @@ const localLabels = {
     evidenceGateNotice: "Запрос требует подтверждённой клинической evidence. Агент не даёт patient-specific рекомендации без источниковой поддержки.",
     noAutoSaveNotice: "Черновик не сохраняется автоматически.",
     transientHistoryNotice: "История диалога хранится только пока открыто это окно.",
+    unsupportedClaimsLabel: "Утверждения для проверки",
     applyDraft: "Применить draft в редакторе",
     appliedDraft: "Draft перенесён в редактор",
     followUpLabel: "Уточнить этот результат",
@@ -121,6 +123,7 @@ const localLabels = {
     evidenceGateNotice: "This request requires confirmed clinical evidence. The agent will not provide patient-specific recommendations without source support.",
     noAutoSaveNotice: "Drafts are not saved automatically.",
     transientHistoryNotice: "Conversation history is kept only while this window stays open.",
+    unsupportedClaimsLabel: "Claims to verify",
     applyDraft: "Use draft in editor",
     appliedDraft: "Draft moved to editor",
     followUpLabel: "Refine this result",
@@ -404,6 +407,16 @@ export default function AgentPanel({ defaultContextType = "general", initialText
                     {response.evidence.warnings && response.evidence.warnings.length > 0 && (
                       <div className="rounded-xl bg-amber-50 border border-amber-100 text-amber-800 p-3 font-semibold">
                         {response.evidence.warnings.join(" ")}
+                      </div>
+                    )}
+                    {response.evidence.unsupportedClaims && response.evidence.unsupportedClaims.length > 0 && (
+                      <div>
+                        <div className="font-bold text-slate-700 mb-1">{l.unsupportedClaimsLabel}</div>
+                        <ul className="list-disc pl-5 space-y-1 text-rose-700">
+                          {response.evidence.unsupportedClaims.map((claim, index) => (
+                            <li key={`${index}-${claim.slice(0, 20)}`}>{claim}</li>
+                          ))}
+                        </ul>
                       </div>
                     )}
                   </div>

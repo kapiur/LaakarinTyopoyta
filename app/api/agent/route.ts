@@ -9,6 +9,7 @@ import {
   buildEvidencePackageFromRetrieved,
   buildNoEvidenceReply,
 } from '../../../lib/clinical/evidence/evidencePackage';
+import { checkEvidenceConsistency } from '../../../lib/clinical/evidence/checkEvidenceConsistency';
 import { retrieveClinicalEvidence } from '../../../lib/clinical/evidence/retrieveClinicalEvidence';
 import { getUserClinicalEvidenceConfig } from '../../../lib/clinical/evidence/userClinicalSettings';
 
@@ -275,6 +276,18 @@ export async function POST(req: Request) {
       temperature: 0,
     });
 
+    const consistencyCheck = checkEvidenceConsistency({
+      taskType: plan.taskType,
+      answer: result.content,
+      evidence: localizedEvidence,
+      language: uiLanguage,
+    });
+    const finalEvidence = {
+      ...localizedEvidence,
+      warnings: [...localizedEvidence.warnings, ...consistencyCheck.warnings],
+      unsupportedClaims: consistencyCheck.unsupportedClaims,
+    };
+
     return NextResponse.json({
       reply: result.content,
       draft: parseDraftFromContent(result.content),
@@ -284,7 +297,7 @@ export async function POST(req: Request) {
       model: result.model,
       route: result.route,
       privacy: privacyResult.privacy,
-      evidence: localizedEvidence,
+      evidence: finalEvidence,
     });
   } catch (err: any) {
     console.error('Agent API error:', err?.message || err);
