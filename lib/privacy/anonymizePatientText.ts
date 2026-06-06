@@ -121,6 +121,7 @@ const NON_PERSON_NAME_PATTERNS = [
   /\bKanta\b/i,
 ];
 const SUSPICIOUS_EXPLICIT_NAME_VALUE_PATTERN = /\b(?:osoite|osoitteessa|postiosoite|address|street|ул\.?|улица|проспект|пр-т|переулок|набережная|бульвар|шоссе|кв\.?|квартира|apt|apartment|suite|ste|asunto|as)\b|\d/i;
+const PRIVACY_PLACEHOLDER_PATTERN = /\[(?:NAME|HETU|DATE_OF_BIRTH|DATE|PHONE|EMAIL|ADDRESS|PATIENT_ID|PROFESSIONAL_NAME)\]/i;
 
 function escapeRegexToken(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -277,6 +278,7 @@ function collectPatternMatches(text: string, patternRules: PatternRule[]): Inter
       const value = match[0];
       const start = match.index;
       if (!value.trim()) continue;
+      if (PRIVACY_PLACEHOLDER_PATTERN.test(value)) continue;
       if (rule.type === 'explicitName' && SUSPICIOUS_EXPLICIT_NAME_VALUE_PATTERN.test(value)) continue;
       const replacement = value.replace(rule.pattern, rule.replacement);
       findings.push(createFinding(rule.type, value, replacement, start));
