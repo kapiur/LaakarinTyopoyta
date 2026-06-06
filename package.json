@@ -10,7 +10,8 @@
     "db:sync": "ts-node scripts/sync-medicines.ts",
     "seed:pikaohjeet": "node scripts/seed_pikaohjeet.cjs",
     "test:templates": "ts-node -P tsconfig.scripts.json scripts/test-template-parser.ts",
-    "test:privacy": "ts-node -P tsconfig.scripts.json scripts/test-privacy-anonymizer.ts"
+    "test:privacy": "ts-node -P tsconfig.scripts.json scripts/test-privacy-anonymizer.ts",
+    "test:calculators": "ts-node -P tsconfig.scripts.json scripts/test-calculator-formulas.ts"
   },
   "dependencies": {
     "react": "^18",
