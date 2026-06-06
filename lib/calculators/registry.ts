@@ -5,8 +5,6 @@ export type CalculatorCategory =
   | 'cardiology'
   | 'general';
 
-export type CalculatorStatus = 'active' | 'legacy';
-
 export type CalculatorDefinition = {
   key: string;
   title: string;
@@ -14,7 +12,6 @@ export type CalculatorDefinition = {
   route: string;
   icon: 'Zap' | 'Baby' | 'ShieldAlert' | 'Wind' | 'Stethoscope' | 'Heart' | 'Activity' | 'Calculator';
   category: CalculatorCategory;
-  status: CalculatorStatus;
   defaultEnabled: boolean;
   sortOrder: number;
   tags?: string[];
@@ -28,7 +25,6 @@ export const CALCULATOR_DEFINITIONS: CalculatorDefinition[] = [
     route: '/calculators/pca',
     icon: 'Zap',
     category: 'analgesia',
-    status: 'active',
     defaultEnabled: true,
     sortOrder: 10,
     tags: ['analgesia', 'infusion'],
@@ -40,7 +36,6 @@ export const CALCULATOR_DEFINITIONS: CalculatorDefinition[] = [
     route: '/calculators/peds',
     icon: 'Baby',
     category: 'pediatrics',
-    status: 'active',
     defaultEnabled: true,
     sortOrder: 20,
     tags: ['pediatrics', 'dose'],
@@ -52,7 +47,6 @@ export const CALCULATOR_DEFINITIONS: CalculatorDefinition[] = [
     route: '/calculators/vte',
     icon: 'ShieldAlert',
     category: 'thrombosis',
-    status: 'active',
     defaultEnabled: true,
     sortOrder: 30,
     tags: ['dvt', 'wells'],
@@ -64,7 +58,6 @@ export const CALCULATOR_DEFINITIONS: CalculatorDefinition[] = [
     route: '/calculators/pe',
     icon: 'Wind',
     category: 'thrombosis',
-    status: 'active',
     defaultEnabled: true,
     sortOrder: 40,
     tags: ['embolism', 'wells'],
@@ -76,7 +69,6 @@ export const CALCULATOR_DEFINITIONS: CalculatorDefinition[] = [
     route: '/calculators/cad',
     icon: 'Stethoscope',
     category: 'cardiology',
-    status: 'active',
     defaultEnabled: true,
     sortOrder: 50,
     tags: ['cardiology', 'angina'],
@@ -88,7 +80,6 @@ export const CALCULATOR_DEFINITIONS: CalculatorDefinition[] = [
     route: '/calculators/chads',
     icon: 'Heart',
     category: 'cardiology',
-    status: 'active',
     defaultEnabled: true,
     sortOrder: 60,
     tags: ['atrial fibrillation', 'risk'],
@@ -100,7 +91,6 @@ export const CALCULATOR_DEFINITIONS: CalculatorDefinition[] = [
     route: '/calculators/bmi',
     icon: 'Activity',
     category: 'general',
-    status: 'active',
     defaultEnabled: true,
     sortOrder: 70,
     tags: ['weight', 'screening'],
@@ -112,7 +102,6 @@ export const CALCULATOR_DEFINITIONS: CalculatorDefinition[] = [
     route: '/calculators/gfr',
     icon: 'Calculator',
     category: 'general',
-    status: 'active',
     defaultEnabled: true,
     sortOrder: 80,
     tags: ['renal', 'creatinine'],

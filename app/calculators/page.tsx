@@ -14,7 +14,6 @@ type CalculatorCard = {
   route: string;
   icon: "Zap" | "Baby" | "ShieldAlert" | "Wind" | "Stethoscope" | "Heart" | "Activity" | "Calculator";
   category: "analgesia" | "pediatrics" | "thrombosis" | "cardiology" | "general";
-  status: "active" | "legacy";
   isVisible: boolean;
 };
 
@@ -39,7 +38,6 @@ const texts = {
     emptyTitle: "Ei näkyviä laskureita",
     emptyDescription: "Ota laskureita käyttöön asetuksista, niin ne tulevat näkyviin tähän näkymään.",
     open: "Avaa laskuri",
-    legacy: "Legacy",
     categories: {
       analgesia: "Analgesia",
       pediatrics: "Pediatria",
@@ -57,7 +55,6 @@ const texts = {
     emptyTitle: "Нет видимых калькуляторов",
     emptyDescription: "Включите калькуляторы в настройках, и они появятся на этой странице.",
     open: "Открыть калькулятор",
-    legacy: "Legacy",
     categories: {
       analgesia: "Аналгезия",
       pediatrics: "Педиатрия",
@@ -75,7 +72,6 @@ const texts = {
     emptyTitle: "No visible calculators",
     emptyDescription: "Enable calculators in settings and they will appear here.",
     open: "Open calculator",
-    legacy: "Legacy",
     categories: {
       analgesia: "Analgesia",
       pediatrics: "Pediatrics",
@@ -181,21 +177,14 @@ export default function CalculatorsCatalogPage() {
                       href={calculator.route}
                       className="group rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm hover:shadow-md hover:border-blue-200 transition-all"
                     >
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex items-start gap-3 min-w-0">
-                          <div className="w-11 h-11 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center group-hover:scale-105 transition-transform shrink-0">
-                            <Icon size={22} />
-                          </div>
-                          <div className="min-w-0">
-                            <div className="text-lg font-black text-slate-900">{calculator.title}</div>
-                            <p className="mt-1 text-sm text-slate-500 leading-relaxed">{calculator.description}</p>
-                          </div>
+                      <div className="flex items-start gap-3 min-w-0">
+                        <div className="w-11 h-11 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center group-hover:scale-105 transition-transform shrink-0">
+                          <Icon size={22} />
                         </div>
-                        {calculator.status === "legacy" && (
-                          <div className="rounded-xl border border-amber-100 bg-amber-50 px-2 py-1 text-[10px] font-black uppercase tracking-wide text-amber-700">
-                            {i18n.legacy}
-                          </div>
-                        )}
+                        <div className="min-w-0">
+                          <div className="text-lg font-black text-slate-900">{calculator.title}</div>
+                          <p className="mt-1 text-sm text-slate-500 leading-relaxed">{calculator.description}</p>
+                        </div>
                       </div>
                       <div className="mt-5 text-[11px] font-black uppercase tracking-[0.16em] text-blue-600">
                         {i18n.open}

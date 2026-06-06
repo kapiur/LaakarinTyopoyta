@@ -12,7 +12,6 @@ type CalculatorVisibilityItem = {
   description: string;
   icon: "Zap" | "Baby" | "ShieldAlert" | "Wind" | "Stethoscope" | "Heart" | "Activity" | "Calculator";
   category: string;
-  status: "active" | "legacy";
   route: string;
   isVisible: boolean;
 };
@@ -39,7 +38,6 @@ const texts = {
     resetFailed: "Laskurien oletusasetusten palautus epäonnistui.",
     visible: "Näkyy sinulle",
     hidden: "Piilotettu sinulta",
-    legacy: "Legacy-näkymä",
   },
   ru: {
     title: "Калькуляторы",
@@ -51,7 +49,6 @@ const texts = {
     resetFailed: "Не удалось вернуть стандартные настройки калькуляторов.",
     visible: "Показывается вам",
     hidden: "Скрыто от вас",
-    legacy: "Legacy-экран",
   },
   en: {
     title: "Calculators",
@@ -63,7 +60,6 @@ const texts = {
     resetFailed: "Could not restore calculator defaults.",
     visible: "Shown to you",
     hidden: "Hidden from you",
-    legacy: "Legacy view",
   },
 } as const;
 
@@ -175,11 +171,6 @@ export default function CalculatorVisibilitySettingsCard() {
                       <div className={`text-[10px] font-bold uppercase ${calculator.isVisible ? "text-emerald-600" : "text-slate-400"}`}>
                         {calculator.isVisible ? i18n.visible : i18n.hidden}
                       </div>
-                      {calculator.status === "legacy" && (
-                        <div className="text-[10px] font-bold uppercase text-amber-600">
-                          {i18n.legacy}
-                        </div>
-                      )}
                     </div>
                   </div>
                 </div>
