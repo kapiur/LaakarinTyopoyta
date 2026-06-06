@@ -82,6 +82,11 @@ Current state:
 - multi-provider support is partially implemented
 - some routes still call OpenAI directly as an interim state
 
+Privacy-related implementation details are documented separately in:
+
+- [privacy-architecture.md](privacy-architecture.md)
+- [privacy-operations.md](privacy-operations.md)
+
 ### 5. AI agent
 
 The agent is supervised and intentionally limited.

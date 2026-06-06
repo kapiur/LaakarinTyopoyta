@@ -106,6 +106,8 @@ See [docs/deployment-coolify.md](docs/deployment-coolify.md) for the operational
 - [docs/deployment-coolify.md](docs/deployment-coolify.md)
 - [docs/agent-architecture.md](docs/agent-architecture.md)
 - [docs/security-and-privacy.md](docs/security-and-privacy.md)
+- [docs/privacy-architecture.md](docs/privacy-architecture.md)
+- [docs/privacy-operations.md](docs/privacy-operations.md)
 - [docs/agent-roadmap.md](docs/agent-roadmap.md)
 - [docs/templates-interactive-fields.md](docs/templates-interactive-fields.md)
 

@@ -20,6 +20,11 @@ Because of that:
 
 The project already contains a privacy/anonymization layer for AI requests.
 
+For the current implementation shape, see:
+
+- [privacy-architecture.md](privacy-architecture.md)
+- [privacy-operations.md](privacy-operations.md)
+
 Key principles:
 
 - sensitive text should be sanitized server-side before external AI calls
