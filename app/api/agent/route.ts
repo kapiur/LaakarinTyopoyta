@@ -135,6 +135,18 @@ function localizedEvidenceWarnings(
   return [];
 }
 
+function buildPrivacyBlockReply(language: AgentUiLanguage) {
+  if (language === 'ru') {
+    return 'В тексте остались идентифицирующие данные после автоматической анонимизации. Агент не отправит такой текст во внешний AI. Удали имя, контакты, идентификаторы, адрес и другие персональные данные и попробуй снова.';
+  }
+
+  if (language === 'en') {
+    return 'Identifying details remain in the text after automatic anonymisation. The agent will not send this text to an external AI service. Remove names, contact details, identifiers, addresses and other personal data, then try again.';
+  }
+
+  return 'Tekstiin jäi automaattisen anonymisoinnin jälkeen tunnistetietoja. Agentti ei lähetä tällaista tekstiä ulkoiseen AI-palveluun. Poista nimet, yhteystiedot, tunnisteet, osoitteet ja muut henkilötiedot ja yritä uudelleen.';
+}
+
 export async function POST(req: Request) {
   const { session, error } = await requireAuthenticatedUser();
   if (error) return error;
@@ -169,6 +181,49 @@ export async function POST(req: Request) {
       { key: 'currentTemplate', value: currentTemplate, kind: 'templateSyntax' },
       { key: 'conversationContext', value: conversationContext, kind: inputKindForContext(contextType) },
     ]);
+
+    if (privacyResult.privacy.blocked) {
+      const reply = buildPrivacyBlockReply(uiLanguage);
+
+      await logAiRunAudit({
+        userId,
+        surface: 'agent',
+        taskType: 'privacy_block',
+        contextType,
+        privacyFindingTypes: Array.from(new Set([
+          ...privacyResult.privacy.findingTypes,
+          ...privacyResult.privacy.residualFindingTypes,
+        ])),
+        blockedByEvidenceGate: false,
+        latencyMs: Date.now() - startedAt,
+        success: true,
+      });
+
+      return NextResponse.json({
+        reply,
+        draft: reply,
+        suggestedActions: [],
+        taskType: 'privacy_block',
+        provider: null,
+        model: null,
+        route: {
+          taskType: 'privacy_block',
+          requiresEvidence: false,
+          blockedByPrivacyGate: true,
+        },
+        privacy: privacyResult.privacy,
+        evidence: {
+          status: 'not_required',
+          level: 'privacy_block',
+          clinicalCountry: '',
+          clinicalOutputLanguage: uiLanguage,
+          requiresEvidence: false,
+          sources: [],
+          warnings: [],
+          unsupportedClaims: [],
+        },
+      });
+    }
 
     const plan = createAgentPlan({
       contextType,
@@ -225,7 +280,10 @@ export async function POST(req: Request) {
         contextType,
         clinicalCountry: clinicalConfig.clinicalCountry,
         evidenceStatus: localizedEvidence.status,
-        privacyFindingTypes: privacyResult.privacy.findingTypes,
+        privacyFindingTypes: Array.from(new Set([
+          ...privacyResult.privacy.findingTypes,
+          ...privacyResult.privacy.residualFindingTypes,
+        ])),
         blockedByEvidenceGate: true,
         latencyMs: Date.now() - startedAt,
         success: true,
@@ -312,7 +370,10 @@ export async function POST(req: Request) {
       model: result.model,
       clinicalCountry: clinicalConfig.clinicalCountry,
       evidenceStatus: finalEvidence.status,
-      privacyFindingTypes: privacyResult.privacy.findingTypes,
+      privacyFindingTypes: Array.from(new Set([
+        ...privacyResult.privacy.findingTypes,
+        ...privacyResult.privacy.residualFindingTypes,
+      ])),
       blockedByEvidenceGate: false,
       latencyMs: Date.now() - startedAt,
       success: true,

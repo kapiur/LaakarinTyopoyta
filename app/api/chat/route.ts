@@ -8,7 +8,7 @@ import {
 import { authOptions } from '../../../lib/auth';
 import { logAiRunAudit } from '../../../lib/ai/audit/logAiRunAudit';
 import { prisma } from '../../../lib/prisma';
-import { anonymizePatientText, mergeAnonymizationResults } from '../../../lib/privacy/anonymizePatientText';
+import { preparePrivacyPayload } from '../../../lib/privacy/gateway';
 import { runAiCompletion } from '../../../lib/ai/runAiCompletion';
 import { DEFAULT_AI_MODEL, DEFAULT_AI_PROVIDER } from '../../../lib/ai/modelRegistry';
 import {
@@ -93,25 +93,35 @@ async function getUserAiProfile(userId: number) {
   }
 }
 
-function anonymizeMessages(messages: any[]) {
-  const anonymizationResults: ReturnType<typeof anonymizePatientText>[] = [];
+function sanitizeMessages(messages: any[]) {
+  const stringMessages = messages
+    .map((message, index) => ({ message, index }))
+    .filter(({ message }) => message && typeof message.content === 'string');
 
-  const sanitizedMessages = messages.map((message) => {
+  const gateway = preparePrivacyPayload(
+    stringMessages.map(({ message, index }) => ({
+      key: `message_${index}`,
+      value: message.content,
+      mode: 'transientClinicalChat',
+    })),
+  );
+
+  const sanitizedMessages = messages.map((message, index) => {
     if (!message || typeof message.content !== 'string') return message;
-
-    const result = anonymizePatientText(message.content, { mode: 'chat' });
-    anonymizationResults.push(result);
-
     return {
       ...message,
-      content: result.sanitizedText,
+      content: gateway.sanitized[`message_${index}`] ?? message.content,
     };
   });
 
   return {
     sanitizedMessages,
-    anonymization: mergeAnonymizationResults(anonymizationResults),
+    privacy: gateway.privacy,
   };
+}
+
+function buildPrivacyBlockReply() {
+  return 'Tekstissä havaittiin tai siihen jäi automaattisen anonymisoinnin jälkeen tunnistetietoja, joita ei voida lähettää AI-käsittelyyn turvallisesti. Poista nimi-, yhteys-, tunniste- ja osoitetiedot ja yritä uudelleen.';
 }
 
 export async function POST(req: Request) {
@@ -127,28 +137,28 @@ export async function POST(req: Request) {
 
     const body = await req.json();
     const { messages, text, mode, customPrompt } = body;
-    const inputAnonymizationResults: ReturnType<typeof anonymizePatientText>[] = [];
     const userAiProfile = await getUserAiProfile(userId);
+    const messageArray = Array.isArray(messages) ? messages : null;
 
-    const anonymizedText = anonymizePatientText(text, { mode: 'chat' });
-    inputAnonymizationResults.push(anonymizedText);
-
-    const anonymizedCustomPrompt = anonymizePatientText(customPrompt, { mode: 'storage' });
-    inputAnonymizationResults.push(anonymizedCustomPrompt);
+    const chatGateway = preparePrivacyPayload([
+      { key: 'text', value: text, mode: 'transientClinicalChat' },
+      { key: 'customPrompt', value: customPrompt, mode: 'persistentStorage' },
+    ]);
 
     let finalMessages: any[] = [];
+    let privacy = chatGateway.privacy;
 
     if (customPrompt && text) {
       finalMessages = [
-        { role: 'system', content: withPrivacyInstruction(applyProfile(anonymizedCustomPrompt.sanitizedText, userAiProfile, 'full')) },
-        { role: 'user', content: anonymizedText.sanitizedText },
+        { role: 'system', content: withPrivacyInstruction(applyProfile(chatGateway.sanitized.customPrompt, userAiProfile, 'full')) },
+        { role: 'user', content: chatGateway.sanitized.text },
       ];
     }
     else if (text && mode && DEFAULT_AI_TOOL_PROMPTS[mode as keyof typeof DEFAULT_AI_TOOL_PROMPTS]) {
       const defaultMode = defaultProfileModeForTool(mode);
       finalMessages = [
         { role: 'system', content: withPrivacyInstruction(applyProfile(DEFAULT_AI_TOOL_PROMPTS[mode as keyof typeof DEFAULT_AI_TOOL_PROMPTS], userAiProfile, defaultMode)) },
-        { role: 'user', content: anonymizedText.sanitizedText },
+        { role: 'user', content: chatGateway.sanitized.text },
       ];
     }
     else if (text && mode) {
@@ -158,23 +168,36 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: 'AI-työkalua ei löytynyt' }, { status: 404 });
       }
 
-      const anonymizedUserToolPrompt = anonymizePatientText(userTool.prompt, { mode: 'storage' });
-      inputAnonymizationResults.push(anonymizedUserToolPrompt);
+      const toolGateway = preparePrivacyPayload([
+        { key: 'userToolPrompt', value: userTool.prompt, mode: 'persistentStorage' },
+      ]);
+      privacy = {
+        ...privacy,
+        anonymized: privacy.anonymized || toolGateway.privacy.anonymized,
+        findingTypes: Array.from(new Set([...privacy.findingTypes, ...toolGateway.privacy.findingTypes])),
+        residualFindingTypes: Array.from(new Set([...privacy.residualFindingTypes, ...toolGateway.privacy.residualFindingTypes])),
+        decision: privacy.decision === 'block' || toolGateway.privacy.decision === 'block'
+          ? 'block'
+          : privacy.decision === 'warn' || toolGateway.privacy.decision === 'warn'
+            ? 'warn'
+            : 'allow',
+        severity: privacy.severity === 'critical' || toolGateway.privacy.severity === 'critical'
+          ? 'critical'
+          : privacy.severity === 'warning' || toolGateway.privacy.severity === 'warning'
+            ? 'warning'
+            : 'none',
+        blocked: privacy.blocked || toolGateway.privacy.blocked,
+      };
 
       finalMessages = [
-        { role: 'system', content: withPrivacyInstruction(applyProfile(anonymizedUserToolPrompt.sanitizedText, userAiProfile, userTool.profileMode)) },
-        { role: 'user', content: anonymizedText.sanitizedText },
+        { role: 'system', content: withPrivacyInstruction(applyProfile(toolGateway.sanitized.userToolPrompt, userAiProfile, userTool.profileMode)) },
+        { role: 'user', content: chatGateway.sanitized.text },
       ];
     }
-    else if (messages && messages.length > 0) {
-      const { sanitizedMessages, anonymization } = anonymizeMessages(messages);
+    else if (messageArray && messageArray.length > 0) {
+      const { sanitizedMessages, privacy: messagePrivacy } = sanitizeMessages(messageArray);
       const lastMessage = sanitizedMessages[sanitizedMessages.length - 1].content;
-      inputAnonymizationResults.push({
-        sanitizedText: '',
-        findings: anonymization.findings,
-        hasFindings: anonymization.hasFindings,
-        findingTypes: anonymization.findingTypes,
-      });
+      privacy = messagePrivacy;
 
       if (lastMessage.toLowerCase().startsWith('malli:')) {
         finalMessages = [{ role: 'system', content: withPrivacyInstruction(applyProfile(SYSTEM_PROMPT_MALLI, userAiProfile, 'styleOnly')) }, ...sanitizedMessages];
@@ -185,6 +208,27 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Puuttuvat tiedot' }, { status: 400 });
     }
 
+    if (privacy.blocked) {
+      await logAiRunAudit({
+        userId,
+        surface: 'chat',
+        taskType: 'general_chat',
+        contextType: typeof mode === 'string' ? mode : messageArray && messageArray.length > 0 ? 'conversation' : 'single_turn',
+        privacyFindingTypes: Array.from(new Set([...privacy.findingTypes, ...privacy.residualFindingTypes])),
+        blockedByEvidenceGate: false,
+        latencyMs: Date.now() - startedAt,
+        success: true,
+      });
+
+      return NextResponse.json({
+        content: buildPrivacyBlockReply(),
+        privacy,
+        route: {
+          blockedByPrivacyGate: true,
+        },
+      });
+    }
+
     const response = await runAiCompletion({
       userId,
       provider: DEFAULT_AI_PROVIDER,
@@ -193,8 +237,6 @@ export async function POST(req: Request) {
       temperature: 0,
     });
 
-    const anonymization = mergeAnonymizationResults(inputAnonymizationResults);
-
     await logAiRunAudit({
       userId,
       surface: 'chat',
@@ -202,7 +244,7 @@ export async function POST(req: Request) {
       contextType: typeof mode === 'string' ? mode : messages && messages.length > 0 ? 'conversation' : 'single_turn',
       provider: response.provider,
       model: response.model,
-      privacyFindingTypes: anonymization.findingTypes,
+      privacyFindingTypes: Array.from(new Set([...privacy.findingTypes, ...privacy.residualFindingTypes])),
       blockedByEvidenceGate: false,
       latencyMs: Date.now() - startedAt,
       success: true,
@@ -210,10 +252,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       content: response.content,
-      privacy: {
-        anonymized: anonymization.hasFindings,
-        findingTypes: anonymization.findingTypes,
-      },
+      privacy,
     });
   } catch (error: any) {
     console.error('AI Error:', error.message || error);

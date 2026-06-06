@@ -1,4 +1,4 @@
-import { anonymizePatientText, mergeAnonymizationResults, type AnonymizationMode, type PatientTextAnonymizationResult } from '../../privacy/anonymizePatientText';
+import { preparePrivacyPayload, type PrivacyGatewayMode } from '../../privacy/gateway';
 
 export type AgentPrivacyInputKind =
   | 'clinicalText'
@@ -18,45 +18,39 @@ export type AgentPrivacyResult = {
   privacy: {
     anonymized: boolean;
     findingTypes: string[];
+    residualFindingTypes: string[];
+    decision: 'allow' | 'warn' | 'block';
+    severity: 'none' | 'warning' | 'critical';
+    blocked: boolean;
   };
 };
 
-function modeForKind(kind: AgentPrivacyInputKind): AnonymizationMode | null {
-  if (kind === 'clinicalText') return 'chat';
-  if (kind === 'profileSample') return 'profileSample';
-  if (kind === 'storedInstruction') return 'storage';
-  if (kind === 'general') return 'chat';
-
-  // Template syntax is not anonymized because placeholders and showIf-like syntax must remain intact.
-  return null;
+function modeForKind(kind: AgentPrivacyInputKind): PrivacyGatewayMode {
+  if (kind === 'clinicalText') return 'transientClinicalChat';
+  if (kind === 'profileSample') return 'persistentSample';
+  if (kind === 'storedInstruction') return 'persistentStorage';
+  if (kind === 'templateSyntax') return 'templateSyntax';
+  return 'generalText';
 }
 
 export function sanitizeAgentInputs(inputs: AgentPrivacyInput[]): AgentPrivacyResult {
-  const sanitized: Record<string, string> = {};
-  const results: PatientTextAnonymizationResult[] = [];
-
-  for (const input of inputs) {
-    const value = input.value ?? '';
-    const kind = input.kind ?? 'general';
-    const mode = modeForKind(kind);
-
-    if (!mode) {
-      sanitized[input.key] = value;
-      continue;
-    }
-
-    const result = anonymizePatientText(value, { mode });
-    sanitized[input.key] = result.sanitizedText;
-    results.push(result);
-  }
-
-  const merged = mergeAnonymizationResults(results);
+  const gatewayResult = preparePrivacyPayload(
+    inputs.map((input) => ({
+      key: input.key,
+      value: input.value ?? '',
+      mode: modeForKind(input.kind ?? 'general'),
+    })),
+  );
 
   return {
-    sanitized,
+    sanitized: gatewayResult.sanitized,
     privacy: {
-      anonymized: merged.hasFindings,
-      findingTypes: merged.findingTypes,
+      anonymized: gatewayResult.privacy.anonymized,
+      findingTypes: gatewayResult.privacy.findingTypes,
+      residualFindingTypes: gatewayResult.privacy.residualFindingTypes,
+      decision: gatewayResult.privacy.decision,
+      severity: gatewayResult.privacy.severity,
+      blocked: gatewayResult.privacy.blocked,
     },
   };
 }
