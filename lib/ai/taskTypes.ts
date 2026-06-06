@@ -2,6 +2,8 @@ export type AiTaskType =
   | 'clinical_document'
   | 'clinical_review'
   | 'clinical_advice'
+  | 'clinical_reference'
+  | 'clinical_guideline_comparison'
   | 'clinical_source_check'
   | 'pikaohje_generation'
   | 'pikaohje_review'
@@ -27,6 +29,7 @@ export type AiTaskPolicy = {
   requiresEvidence: boolean;
   allowEvidenceOptional?: boolean;
   requiresOfficialSource?: boolean;
+  allowsRegistryOnlyReference?: boolean;
   safetyLevel: 'none' | 'low' | 'clinical' | 'high';
 };
 
@@ -47,9 +50,25 @@ export const AI_TASK_POLICY: Record<AiTaskType, AiTaskPolicy> = {
     requiresOfficialSource: true,
     safetyLevel: 'high',
   },
-  clinical_source_check: {
-    requiresEvidence: true,
+  clinical_reference: {
+    requiresEvidence: false,
+    allowEvidenceOptional: true,
     requiresOfficialSource: true,
+    allowsRegistryOnlyReference: true,
+    safetyLevel: 'clinical',
+  },
+  clinical_guideline_comparison: {
+    requiresEvidence: false,
+    allowEvidenceOptional: true,
+    requiresOfficialSource: true,
+    allowsRegistryOnlyReference: true,
+    safetyLevel: 'clinical',
+  },
+  clinical_source_check: {
+    requiresEvidence: false,
+    allowEvidenceOptional: true,
+    requiresOfficialSource: true,
+    allowsRegistryOnlyReference: true,
     safetyLevel: 'clinical',
   },
   pikaohje_generation: {
@@ -115,11 +134,17 @@ export function taskRequiresEvidence(taskType: AiTaskType) {
   return getAiTaskPolicy(taskType).requiresEvidence === true;
 }
 
+export function taskAllowsRegistryOnlyReference(taskType: AiTaskType) {
+  return getAiTaskPolicy(taskType).allowsRegistryOnlyReference === true;
+}
+
 export function normalizeAiTaskType(value: unknown): AiTaskType {
   if (
     value === 'clinical_document' ||
     value === 'clinical_review' ||
     value === 'clinical_advice' ||
+    value === 'clinical_reference' ||
+    value === 'clinical_guideline_comparison' ||
     value === 'clinical_source_check' ||
     value === 'pikaohje_generation' ||
     value === 'pikaohje_review' ||

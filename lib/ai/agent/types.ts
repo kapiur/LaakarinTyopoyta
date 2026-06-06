@@ -1,6 +1,12 @@
 import type { AiTaskType } from '../taskTypes';
 
-export type AgentContextType = 'general' | 'malli' | 'aiTool' | 'clinicalText' | 'pikaohje';
+export type AgentContextType =
+  | 'general'
+  | 'clinicalReference'
+  | 'malli'
+  | 'aiTool'
+  | 'clinicalText'
+  | 'pikaohje';
 export type AgentUiLanguage = 'fi' | 'ru' | 'en';
 
 export type AgentSuggestedAction =

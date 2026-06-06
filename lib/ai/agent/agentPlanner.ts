@@ -24,8 +24,89 @@ const redFlagTerms = [
   'опасные симптомы',
 ];
 
+const comparisonTerms = [
+  'compare',
+  'comparison',
+  'guideline comparison',
+  'difference',
+  'differences',
+  'сравни',
+  'сравнение',
+  'сравнить',
+  'vertaa',
+  'vertailu',
+];
+
+const referenceTerms = [
+  'общая информация',
+  'общие принципы',
+  'справка',
+  'обзор',
+  'explain',
+  'overview',
+  'general principles',
+  'what to compare',
+  'what should be compared',
+  'yleiskuva',
+  'selitä',
+  'periaatteet',
+  'yleiset periaatteet',
+  'guideline',
+  'recommendation',
+  'suositus',
+  'рекомендац',
+];
+
+const medicationTerms = ['lääke', 'annos', 'доза', 'препарат', 'medication', 'dose', 'dosage'];
+const urgentTerms = ['päivystys', 'kiire', 'urgent', 'срочно', 'неотлож'];
+const referralTerms = ['lähete', 'направ', 'referral'];
+const diagnosticTerms = ['diagnostiikka', 'diagnostic', 'diagnosis', 'anemia', 'diagnosti', 'диагност', 'обслед'];
+const adviceTerms = [
+  'hoito',
+  'lечение',
+  'treat',
+  'treatment',
+  'назнач',
+  'prescribe',
+  'management',
+  'how to treat',
+  'как лечить',
+  'miten hoitaa',
+];
+
+function inferRiskTask(text: string): AiTaskType | null {
+  if (includesAny(text, redFlagTerms)) return 'clinical_advice';
+  if (includesAny(text, medicationTerms)) return 'medication_guidance';
+  if (includesAny(text, urgentTerms)) return 'urgent_triage';
+  if (includesAny(text, referralTerms)) return 'referral_guidance';
+  if (includesAny(text, adviceTerms)) return 'clinical_advice';
+  return null;
+}
+
+function looksLikeReferenceQuestion(text: string) {
+  return includesAny(text, referenceTerms) || (includesAny(text, comparisonTerms) && includesAny(text, ['guideline', 'recommendation', 'suositus', 'рекомендац', 'клиническ']));
+}
+
 function inferTaskType(contextType: AgentContextType, userMessage: string): AiTaskType {
   const text = userMessage.toLowerCase();
+  const riskTask = inferRiskTask(text);
+
+  if (contextType === 'clinicalReference') {
+    if (riskTask) return riskTask;
+    if (includesAny(text, comparisonTerms)) return 'clinical_guideline_comparison';
+    return 'clinical_reference';
+  }
+
+  if (looksLikeReferenceQuestion(text)) {
+    if (includesAny(text, comparisonTerms)) return 'clinical_guideline_comparison';
+    if (includesAny(text, diagnosticTerms) || includesAny(text, ['guideline', 'recommendation', 'suositus', 'рекомендац', 'клиническ'])) {
+      return 'clinical_reference';
+    }
+  }
+
+  if (includesAny(text, comparisonTerms) && includesAny(text, ['guideline', 'recommendation', 'suositus', 'рекомендац', 'клиническ'])) {
+    return 'clinical_guideline_comparison';
+  }
 
   if (contextType === 'pikaohje') {
     if (includesAny(text, ['tarkista', 'проверь', 'review', 'lähde', 'источ', 'source'])) return 'pikaohje_review';
@@ -41,10 +122,7 @@ function inferTaskType(contextType: AgentContextType, userMessage: string): AiTa
   if (contextType === 'aiTool') return 'tool_design';
 
   if (contextType === 'clinicalText') {
-    if (includesAny(text, redFlagTerms)) return 'clinical_advice';
-    if (includesAny(text, ['lääke', 'annos', 'доза', 'препарат', 'medication'])) return 'medication_guidance';
-    if (includesAny(text, ['päivystys', 'kiire', 'urgent', 'срочно', 'неотлож'])) return 'urgent_triage';
-    if (includesAny(text, ['lähete', 'направ', 'referral'])) return 'referral_guidance';
+    if (riskTask) return riskTask;
     if (includesAny(text, ['tarkista', 'проверь', 'arvioi', 'review'])) return 'clinical_review';
     return 'clinical_document';
   }
@@ -52,10 +130,10 @@ function inferTaskType(contextType: AgentContextType, userMessage: string): AiTa
   if (includesAny(text, ['lab', 'laboratorio'])) return 'lab_format';
   if (includesAny(text, ['käännä', 'translate', 'перев'])) return 'translation';
   if (includesAny(text, ['korjaa', 'исправ', 'поправ'])) return 'text_fix';
-  if (includesAny(text, redFlagTerms)) return 'clinical_advice';
-  if (includesAny(text, ['lääke', 'annos', 'доза', 'препарат', 'medication'])) return 'medication_guidance';
-  if (includesAny(text, ['päivystys', 'kiire', 'urgent', 'срочно', 'неотлож'])) return 'urgent_triage';
-  if (includesAny(text, ['lähete', 'направ', 'referral'])) return 'referral_guidance';
+  if (riskTask) return riskTask;
+  if (includesAny(text, referenceTerms) && (includesAny(text, diagnosticTerms) || includesAny(text, ['guideline', 'recommendation', 'suositus', 'рекомендац', 'клиническ']))) {
+    return 'clinical_reference';
+  }
   if (includesAny(text, ['hoito', 'diagnostiikka', 'suositus', 'лечение', 'диагност', 'рекомендац', 'guideline'])) return 'clinical_advice';
   if (includesAny(text, ['lausunto', 'arvio'])) return 'clinical_document';
 
@@ -105,6 +183,17 @@ function clinicalSafetyInstruction() {
   ].join('\n');
 }
 
+function clinicalReferenceInstruction() {
+  return [
+    'Clinical reference mode:',
+    'The user is asking for general clinical reference information, education, or guideline comparison, not patient-specific advice.',
+    'Do not provide individual patient recommendations.',
+    'If the backend provides only a source registry without retrieved evidence excerpts, say that official sources are configured but concrete passages have not yet been automatically retrieved.',
+    'In registry-only mode, you may provide a safe structure, comparison framework, and explain what should be compared.',
+    'Do not claim exact guideline differences, target values, doses, durations, referral thresholds, contraindications, or red flags unless they are present in provided evidence excerpts.',
+  ].join('\n');
+}
+
 function systemInstructionForTask(taskType: AiTaskType, contextType: AgentContextType) {
   const base = [
     'You are a supervised AI assistant inside a clinical documentation web application for physicians.',
@@ -121,6 +210,10 @@ function systemInstructionForTask(taskType: AiTaskType, contextType: AgentContex
 
   if (taskType === 'tool_design') {
     return `${base}\nFocus on designing or improving an AI tool prompt. The prompt should be clear, constrained, safe, and reusable. For clinical tools, include a rule that clinical recommendations require official sources for the selected country.`;
+  }
+
+  if (taskType === 'clinical_reference' || taskType === 'clinical_guideline_comparison') {
+    return `${base}\n${clinicalReferenceInstruction()}`;
   }
 
   if (

@@ -4,11 +4,17 @@ import { useMemo, useState } from "react";
 import { Bot, Clipboard, Loader2, Send, ShieldCheck, Sparkles } from "lucide-react";
 import { useI18n } from "../../lib/useI18n";
 
-type AgentContextType = "general" | "malli" | "aiTool" | "clinicalText" | "pikaohje";
+type AgentContextType = "general" | "clinicalReference" | "malli" | "aiTool" | "clinicalText" | "pikaohje";
 
 type AgentSuggestedAction = {
   type: string;
   label: string;
+};
+
+type AgentRouteState = {
+  taskType: string;
+  requiresEvidence: boolean;
+  blockedByEvidenceGate?: boolean;
 };
 
 type AgentEvidence = {
@@ -34,6 +40,8 @@ type AgentResponse = {
     anonymized: boolean;
     findingTypes: string[];
   };
+  route?: AgentRouteState;
+  contextType?: AgentContextType;
 };
 
 type AgentTurn = {
@@ -53,10 +61,18 @@ const localLabels = {
   fi: {
     contextPikaohje: "Pikaohje",
     contextPikaohjeDescription: "Luo tai tarkista kliinistä pikaohjetta",
+    contextClinicalReference: "Kliininen viite",
+    contextClinicalReferenceDescription: "Turvallinen kliininen yleiskatsaus tai suositusvertailu ilman potilaskohtaisia ohjeita",
     evidenceTitle: "Näyttö",
     clinicalCountry: "Kliininen maa",
     clinicalLanguage: "Kliininen kieli",
     sources: "Lähteet",
+    modeLabel: "Tila",
+    latestDraftLabel: "Viimeisin luonnos",
+    limitedReferenceNotice: "Vastaus on rajattu turvalliseen viite-/vertailutilaan. Tarkkoja kliinisiä väitteitä ei anneta ilman haettua lähdekatkelmaa.",
+    evidenceGateNotice: "Kysymys vaatii vahvistettua kliinistä evidenssiä. Agentti ei anna potilaskohtaisia suosituksia ilman lähdetukea.",
+    noAutoSaveNotice: "Luonnosta ei tallenneta automaattisesti.",
+    transientHistoryNotice: "Keskusteluhistoria säilyy vain tämän ikkunan ajan.",
     applyDraft: "Käytä luonnosta editorissa",
     appliedDraft: "Luonnos siirretty editoriin",
     followUpLabel: "Tarkenna tätä tulosta",
@@ -69,10 +85,18 @@ const localLabels = {
   ru: {
     contextPikaohje: "Быстрая инструкция",
     contextPikaohjeDescription: "Создать или проверить клиническую карточку",
+    contextClinicalReference: "Клиническая справка",
+    contextClinicalReferenceDescription: "Безопасная клиническая справка или сравнение рекомендаций без patient-specific советов",
     evidenceTitle: "Источники",
     clinicalCountry: "Страна рекомендаций",
     clinicalLanguage: "Клинический язык",
     sources: "Источники",
+    modeLabel: "Режим",
+    latestDraftLabel: "Последний draft",
+    limitedReferenceNotice: "Ответ ограничен безопасным справочным/сравнительным режимом. Точные клинические утверждения не даются без извлечённого фрагмента источника.",
+    evidenceGateNotice: "Запрос требует подтверждённой клинической evidence. Агент не даёт patient-specific рекомендации без источниковой поддержки.",
+    noAutoSaveNotice: "Черновик не сохраняется автоматически.",
+    transientHistoryNotice: "История диалога хранится только пока открыто это окно.",
     applyDraft: "Применить draft в редакторе",
     appliedDraft: "Draft перенесён в редактор",
     followUpLabel: "Уточнить этот результат",
@@ -85,10 +109,18 @@ const localLabels = {
   en: {
     contextPikaohje: "Quick guide",
     contextPikaohjeDescription: "Create or review a clinical quick guide",
+    contextClinicalReference: "Clinical reference",
+    contextClinicalReferenceDescription: "Safe clinical overview or guideline comparison without patient-specific advice",
     evidenceTitle: "Evidence",
     clinicalCountry: "Clinical country",
     clinicalLanguage: "Clinical language",
     sources: "Sources",
+    modeLabel: "Mode",
+    latestDraftLabel: "Latest draft",
+    limitedReferenceNotice: "This answer is limited to a safe reference/comparison mode. Exact clinical claims are withheld until a source excerpt is retrieved.",
+    evidenceGateNotice: "This request requires confirmed clinical evidence. The agent will not provide patient-specific recommendations without source support.",
+    noAutoSaveNotice: "Drafts are not saved automatically.",
+    transientHistoryNotice: "Conversation history is kept only while this window stays open.",
     applyDraft: "Use draft in editor",
     appliedDraft: "Draft moved to editor",
     followUpLabel: "Refine this result",
@@ -120,6 +152,7 @@ export default function AgentPanel({ defaultContextType = "general", initialText
 
   const contextOptions = useMemo<Array<{ value: AgentContextType; label: string; description: string }>>(() => [
     { value: "general", label: t("agent.contextGeneral"), description: t("agent.contextGeneralDescription") },
+    { value: "clinicalReference", label: l.contextClinicalReference, description: l.contextClinicalReferenceDescription },
     { value: "clinicalText", label: t("agent.contextClinicalText"), description: t("agent.contextClinicalTextDescription") },
     { value: "malli", label: t("agent.contextMalli"), description: t("agent.contextMalliDescription") },
     { value: "aiTool", label: t("agent.contextAiTool"), description: t("agent.contextAiToolDescription") },
@@ -127,6 +160,7 @@ export default function AgentPanel({ defaultContextType = "general", initialText
   ], [t, l]);
 
   const selectedContext = useMemo(() => contextOptions.find((option) => option.value === contextType), [contextOptions, contextType]);
+  const contextLabelMap = useMemo(() => new Map(contextOptions.map((option) => [option.value, option.label])), [contextOptions]);
   const visibleHistory = turns.slice(0, -1);
 
   async function callAgent(message: string, previousTurns: AgentTurn[]) {
@@ -162,8 +196,9 @@ export default function AgentPanel({ defaultContextType = "general", initialText
         throw new Error(data.error || data.details || t("agent.callFailed"));
       }
 
-      setResponse(data);
-      setTurns([...previousTurns, { userMessage: message, response: data }]);
+      const nextResponse = { ...data, contextType } as AgentResponse;
+      setResponse(nextResponse);
+      setTurns([...previousTurns, { userMessage: message, response: nextResponse }]);
     } catch (err: any) {
       setError(err.message || t("agent.callFailed"));
     } finally {
@@ -200,6 +235,13 @@ export default function AgentPanel({ defaultContextType = "general", initialText
 
   const canSend = userMessage.trim().length > 0 || currentText.trim().length > 0 || currentTemplate.trim().length > 0;
   const canSendFollowUp = followUpMessage.trim().length > 0 && turns.length > 0;
+  const limitedReferenceMode = Boolean(
+    response?.taskType &&
+    ["clinical_reference", "clinical_guideline_comparison", "clinical_source_check"].includes(response.taskType) &&
+    response.evidence &&
+    response.evidence.status !== "found"
+  );
+  const blockedByEvidenceGate = response?.route?.blockedByEvidenceGate === true;
 
   return (
     <section className="bg-white border border-slate-200 rounded-[2rem] shadow-sm overflow-hidden">
@@ -275,6 +317,11 @@ export default function AgentPanel({ defaultContextType = "general", initialText
             {loading ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
             {t("agent.send")}
           </button>
+
+          <div className="rounded-2xl bg-slate-50 border border-slate-200 px-4 py-3 text-xs text-slate-600 space-y-1">
+            <p className="font-semibold text-slate-700">{l.noAutoSaveNotice}</p>
+            <p>{l.transientHistoryNotice}</p>
+          </div>
         </div>
 
         <div className="space-y-4">
@@ -310,6 +357,11 @@ export default function AgentPanel({ defaultContextType = "general", initialText
             <>
               <div className="rounded-[2rem] border border-slate-200 bg-slate-50 p-5 space-y-3">
                 <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-slate-500">
+                  {response.contextType && (
+                    <span className="px-2 py-1 rounded-full bg-white border border-slate-200">
+                      {l.modeLabel}: {contextLabelMap.get(response.contextType) ?? response.contextType}
+                    </span>
+                  )}
                   {response.taskType && <span className="px-2 py-1 rounded-full bg-white border border-slate-200">{response.taskType}</span>}
                   {response.provider && <span className="px-2 py-1 rounded-full bg-white border border-slate-200">{response.provider}</span>}
                   {response.model && <span className="px-2 py-1 rounded-full bg-white border border-slate-200">{response.model}</span>}
@@ -319,6 +371,18 @@ export default function AgentPanel({ defaultContextType = "general", initialText
                     </span>
                   )}
                 </div>
+
+                {blockedByEvidenceGate && (
+                  <div className="rounded-2xl bg-red-50 border border-red-100 text-red-800 p-4 text-sm font-semibold">
+                    {l.evidenceGateNotice}
+                  </div>
+                )}
+
+                {limitedReferenceMode && !blockedByEvidenceGate && (
+                  <div className="rounded-2xl bg-amber-50 border border-amber-100 text-amber-800 p-4 text-sm font-semibold">
+                    {l.limitedReferenceNotice}
+                  </div>
+                )}
 
                 {response.evidence && (
                   <div className="rounded-2xl bg-white border border-slate-200 p-4 space-y-2 text-xs text-slate-600">
@@ -348,6 +412,13 @@ export default function AgentPanel({ defaultContextType = "general", initialText
                 <div className="prose prose-sm max-w-none whitespace-pre-wrap text-slate-800">
                   {response.reply}
                 </div>
+
+                {response.draft && response.draft !== response.reply && (
+                  <div className="rounded-2xl bg-white border border-slate-200 p-4 space-y-2">
+                    <h3 className="text-sm font-bold text-slate-900">{l.latestDraftLabel}</h3>
+                    <div className="whitespace-pre-wrap text-sm text-slate-700">{response.draft}</div>
+                  </div>
+                )}
 
                 <div className="flex flex-wrap gap-2 pt-2">
                   <button onClick={() => copyValue("reply", response.reply)} className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-600 hover:bg-slate-50">

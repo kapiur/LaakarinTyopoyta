@@ -16,7 +16,7 @@ export default function AgentPage() {
         </p>
       </header>
 
-      <AgentPanel defaultContextType="clinicalText" />
+      <AgentPanel defaultContextType="clinicalReference" />
     </div>
   );
 }
