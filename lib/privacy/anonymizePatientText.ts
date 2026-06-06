@@ -210,7 +210,7 @@ function buildPatternRules(localeKeys: PrivacyLocaleKey[]): PatternRule[] {
     {
       type: 'address',
       replacement: '$1 [ADDRESS]',
-      pattern: /(osoite|postiosoite|asuu osoitteessa)\s*:?\s*(?!\[ADDRESS\])[^.\n]+/gi,
+      pattern: /\b(asuu osoitteessa|postiosoite|osoite)\b\s*:?\s*(?!\[ADDRESS\])[^.\n]+/gi,
     },
     {
       type: 'address',
