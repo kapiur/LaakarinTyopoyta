@@ -256,6 +256,10 @@ export function createAgentPlan(input: {
   if (input.currentText) userParts.push(`Current text:\n${input.currentText}`);
   if (input.currentTemplate) userParts.push(`Current template:\n${input.currentTemplate}`);
 
+  if (input.contextType === 'pikaohje' && input.currentTemplate) {
+    userParts.push('If you produce an updated quick-guide draft, preserve the same structured format and field labels shown in Current template.');
+  }
+
   userParts.push([
     'Return the answer in this structure when applicable:',
     '1. Brief interpretation of the task.',
