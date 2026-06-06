@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth/next";
 import { OpenAI } from "openai";
 import { authOptions } from "../../../../../lib/auth";
 import { anonymizePatientText, mergeAnonymizationResults } from "../../../../../lib/privacy/anonymizePatientText";
+import { sanitizeJsonValue } from "../../../../../lib/privacy/structured/sanitizeJsonValue";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const CURRENT_MODEL = "gpt-5.4";
@@ -21,20 +22,15 @@ function tryParseJson(content: string) {
   }
 }
 
-function anonymizeJsonLikeValue(value: unknown): { value: unknown; anonymization: ReturnType<typeof anonymizePatientText> } {
-  if (typeof value === "string") {
-    const result = anonymizePatientText(value);
-    return { value: result.sanitizedText, anonymization: result };
-  }
-
-  const serialized = JSON.stringify(value ?? null);
-  const result = anonymizePatientText(serialized);
-
-  try {
-    return { value: JSON.parse(result.sanitizedText), anonymization: result };
-  } catch {
-    return { value: result.sanitizedText, anonymization: result };
-  }
+function anonymizeJsonLikeValue(value: unknown) {
+  return sanitizeJsonValue(value, {
+    defaultMode: "clinicalBuilder",
+    modeForPath(path) {
+      const key = path[path.length - 1];
+      if (key === "sourceLabel" || key === "type" || key === "processingMode") return null;
+      return "clinicalBuilder";
+    },
+  });
 }
 
 export async function POST(req: Request) {

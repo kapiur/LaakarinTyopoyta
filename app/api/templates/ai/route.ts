@@ -5,6 +5,7 @@ import { authOptions } from '../../../../lib/auth';
 import { prisma } from '../../../../lib/prisma';
 import { getTemplateFields, validateTemplate } from '../../../../lib/templates';
 import { anonymizePatientText, mergeAnonymizationResults } from '../../../../lib/privacy/anonymizePatientText';
+import { sanitizeJsonValue } from '../../../../lib/privacy/structured/sanitizeJsonValue';
 import {
   buildUserAiProfileInstruction,
   withUserAiProfileInstruction,
@@ -244,15 +245,36 @@ function sanitizeRequest(body: TemplateAiRequest) {
   const sample = anonymizePatientText(body.sampleText || '', { mode: 'profileSample' });
   const selected = anonymizePatientText(body.selectedText || '', { mode: 'profileSample' });
   const instruction = anonymizePatientText(body.userInstruction || '', { mode: 'chat' });
+  const currentTemplate = anonymizePatientText(body.currentTemplate || '', { mode: 'clinicalTransform' });
+  const topic = anonymizePatientText(body.topic || '', { mode: 'chat' });
+  const allowedSources = sanitizeJsonValue(Array.isArray(body.allowedSources) ? body.allowedSources : [], {
+    defaultMode: 'chat',
+    modeForPath(path) {
+      const key = path[path.length - 1];
+      if (key === 'url' || key === 'sourceType') return null;
+      if (key === 'excerpt') return 'clinicalTransform';
+      return 'chat';
+    },
+  });
 
   return {
     body: {
       ...body,
+      currentTemplate: currentTemplate.sanitizedText,
       sampleText: sample.sanitizedText,
       selectedText: selected.sanitizedText,
       userInstruction: instruction.sanitizedText,
+      topic: topic.sanitizedText,
+      allowedSources: allowedSources.value as AllowedSource[],
     },
-    anonymization: mergeAnonymizationResults([sample, selected, instruction]),
+    anonymization: mergeAnonymizationResults([
+      sample,
+      selected,
+      instruction,
+      currentTemplate,
+      topic,
+      allowedSources.anonymization,
+    ]),
   };
 }
 

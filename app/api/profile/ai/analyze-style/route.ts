@@ -5,6 +5,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '../../../../../lib/auth';
 import { prisma } from '../../../../../lib/prisma';
 import { anonymizePatientText } from '../../../../../lib/privacy/anonymizePatientText';
+import { sanitizeJsonValue } from '../../../../../lib/privacy/structured/sanitizeJsonValue';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const CURRENT_MODEL = 'gpt-5.4';
@@ -79,7 +80,7 @@ function trimForPrompt(value: string | null | undefined, maxLength: number) {
 }
 
 function buildMergePromptPayload(profile: ProfileRow, recentSamples: SampleRow[], newSample: string, sourceLabel: string | null) {
-  return JSON.stringify({
+  const payload = {
     currentStyleSummary: profile.styleSummary || '',
     manuallyDefinedWritingStyle: profile.writingStyle || '',
     preferredStructure: profile.preferredStructure || '',
@@ -95,7 +96,18 @@ function buildMergePromptPayload(profile: ProfileRow, recentSamples: SampleRow[]
       text: trimForPrompt(sample.anonymizedText, 3000),
       styleNotes: trimForPrompt(sample.styleNotes, 800),
     })),
+  };
+
+  const sanitizedPayload = sanitizeJsonValue(payload, {
+    defaultMode: 'persistentSample',
+    modeForPath(path) {
+      const key = path[path.length - 1];
+      if (key === 'sourceLabel') return 'chat';
+      return 'persistentSample';
+    },
   });
+
+  return JSON.stringify(sanitizedPayload.value);
 }
 
 async function createMergedStyleSummary(profile: ProfileRow, recentSamples: SampleRow[], anonymizedText: string, sourceLabel: string | null) {
