@@ -6,5 +6,7 @@ export type PrivacyLocalePack = {
   dateOfBirthLabels: string[];
   explicitNameLabels: string[];
   patientIdLabels: string[];
+  phoneLabels: string[];
+  phoneValuePatterns: string[];
   notes?: string;
 };

@@ -38,5 +38,9 @@ export const privacyPackRu: PrivacyLocalePack = {
     'ф\\.и\\.о\\.',
   ],
   patientIdLabels: ['номер пациента', 'id пациента', 'номер карты'],
+  phoneLabels: ['телефон', 'тел\\.', 'моб\\.', 'мобильный', 'номер телефона'],
+  phoneValuePatterns: [
+    '(?:\\+7|8)\\s*(?:\\(\\s*\\d{3}\\s*\\)|\\d{3})[\\s-]*\\d{3}[\\s-]*\\d{2}[\\s-]*\\d{2}',
+  ],
   notes: 'Russian privacy pack for imported or mixed-language notes.',
 };

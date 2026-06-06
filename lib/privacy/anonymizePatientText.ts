@@ -96,6 +96,7 @@ const localeRegexCache = new Map<string, {
   dateOfBirthPattern: RegExp;
   patientIdPattern: RegExp;
   explicitNamePattern: RegExp;
+  labeledPhonePattern: RegExp;
 }>();
 
 const NON_PERSON_NAME_PATTERNS = [
@@ -119,6 +120,7 @@ const NON_PERSON_NAME_PATTERNS = [
   /\bTerveysportti\b/i,
   /\bKanta\b/i,
 ];
+const SUSPICIOUS_EXPLICIT_NAME_VALUE_PATTERN = /\b(?:osoite|osoitteessa|postiosoite|address|street|ул\.?|улица|проспект|пр-т|переулок|набережная|бульвар|шоссе|кв\.?|квартира|apt|apartment|suite|ste|asunto|as)\b|\d/i;
 
 function escapeRegexToken(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -134,6 +136,8 @@ function buildLocaleRegexSet(localeKeys: PrivacyLocaleKey[]) {
   const dateOfBirthLabels = packs.flatMap((pack) => pack.dateOfBirthLabels);
   const explicitNameLabels = packs.flatMap((pack) => pack.explicitNameLabels);
   const patientIdLabels = packs.flatMap((pack) => pack.patientIdLabels);
+  const phoneLabels = packs.flatMap((pack) => pack.phoneLabels);
+  const phoneValuePatterns = packs.flatMap((pack) => pack.phoneValuePatterns);
 
   const personContextPattern = new RegExp(
     `${UNICODE_LETTER_BOUNDARY_LEFT}(?:${[...personContextWords, STAFF_CONTEXT_WORDS].join('|')})${UNICODE_LETTER_BOUNDARY_RIGHT}`,
@@ -155,11 +159,17 @@ function buildLocaleRegexSet(localeKeys: PrivacyLocaleKey[]) {
     'giu',
   );
 
+  const labeledPhonePattern = new RegExp(
+    `${UNICODE_LETTER_BOUNDARY_LEFT}(${phoneLabels.map(escapeRegexToken).join('|')})\\s*:?\\s*((?:${phoneValuePatterns.join('|')}))`,
+    'giu',
+  );
+
   const built = {
     personContextPattern,
     dateOfBirthPattern,
     patientIdPattern,
     explicitNamePattern,
+    labeledPhonePattern,
   };
   localeRegexCache.set(key, built);
   return built;
@@ -172,6 +182,11 @@ function buildPatternRules(localeKeys: PrivacyLocaleKey[]): PatternRule[] {
     { type: 'hetu', replacement: '[HETU]', pattern: HETU_PATTERN },
     { type: 'email', replacement: '[EMAIL]', pattern: EMAIL_PATTERN },
     { type: 'phone', replacement: '[PHONE]', pattern: PHONE_PATTERN },
+    {
+      type: 'phone',
+      replacement: '$1 [PHONE]',
+      pattern: localeRegex.labeledPhonePattern,
+    },
     {
       type: 'dateOfBirth',
       replacement: '$1 [DATE_OF_BIRTH]',
@@ -190,12 +205,22 @@ function buildPatternRules(localeKeys: PrivacyLocaleKey[]): PatternRule[] {
     {
       type: 'address',
       replacement: '[ADDRESS]',
-      pattern: /\b[A-ZÅÄÖ][A-Za-zÅÄÖåäö'’-]+(?:\s+[A-ZÅÄÖ][A-Za-zÅÄÖåäö'’-]+){0,2}(?:katu|tie|kuja|polku|rinne|raitti|kaari|aukio|gatan|vägen|gränden|stigen|platsen)\s+\d{1,4}(?:\s?[-–]\s?\d{1,4})?(?:\s?[A-Za-zÅÄÖåäö])?(?:\s+(?:as|asunto|apt)\.?\s*\d{1,4})?(?:,?\s*\d{5}\s+[A-ZÅÄÖ][A-Za-zÅÄÖåäö'’-]+)?\b/g,
+      pattern: /\b(?:(?:[A-ZÅÄÖ][A-Za-zÅÄÖåäö'’-]+(?:\s+[A-ZÅÄÖ][A-Za-zÅÄÖåäö'’-]+){0,2}\s+(?:katu|tie|kuja|polku|rinne|raitti|kaari|aukio|gatan|vägen|gränden|stigen|platsen))|(?:(?:[A-ZÅÄÖ][A-Za-zÅÄÖåäö'’-]+\s+){0,2}[A-ZÅÄÖ][A-Za-zÅÄÖåäö'’-]+(?:katu|tie|kuja|polku|rinne|raitti|kaari|aukio|gatan|vägen|gränden|stigen|platsen)))\s+\d{1,4}(?:\s?[-–]\s?\d{1,4})?(?:\s?[A-Za-zÅÄÖåäö])?(?:\s+(?:as|asunto|apt)\.?\s*\d{1,4})?(?:,?\s*\d{5}\s+[A-ZÅÄÖ][A-Za-zÅÄÖåäö'’-]+)?\b/g,
     },
     {
       type: 'address',
       replacement: '$1 [ADDRESS]',
-      pattern: /\b(osoite|postiosoite|asuu osoitteessa|address|street address|адрес)\s*:?\s*(?:\d{1,5}\s+[A-ZÅÄÖА-ЯЁ][A-Za-zÅÄÖåäöА-Яа-яЁё'’-]+(?:\s+[A-ZÅÄÖА-ЯЁ][A-Za-zÅÄÖåäöА-Яа-яЁё'’-]+){0,3}\s+(?:street|st|road|rd|avenue|ave|lane|ln|drive|dr|boulevard|blvd|way|court|ct)|(?:ул\.?|улица|проспект|пр-т|пер\.?|переулок|наб\.?|набережная|бул\.?|бульвар|шоссе)\s+[A-ZÅÄÖА-ЯЁ][A-Za-zÅÄÖåäöА-Яа-яЁё'’-]+(?:\s+[A-ZÅÄÖА-ЯЁ][A-Za-zÅÄÖåäöА-Яа-яЁё'’-]+){0,2}\s+\d{1,4}(?:\s*,?\s*(?:кв\.?|квартира)\s*\d{1,4})?|[A-ZÅÄÖ][A-Za-zÅÄÖåäö'’-]+(?:\s+[A-ZÅÄÖ][A-Za-zÅÄÖåäö'’-]+){0,3}\s+\d{1,4}(?:\s?[A-Za-zÅÄÖåäö])?)\b/gi,
+      pattern: /(osoite|postiosoite|asuu osoitteessa)\s*:?\s*[^.\n]+/gi,
+    },
+    {
+      type: 'address',
+      replacement: '$1 [ADDRESS]',
+      pattern: /\b(address|street address)\s*:?\s*\d{1,5}\s+[A-ZÅÄÖ][A-Za-zÅÄÖåäö'’-]+(?:\s+[A-ZÅÄÖ][A-Za-zÅÄÖåäö'’-]+){0,2}\s+(?:Street|St|Road|Rd|Avenue|Ave|Lane|Ln|Drive|Dr|Boulevard|Blvd|Way|Court|Ct)\b(?:,?\s*(?:Apt|Apartment|Suite|Ste)\.?\s*\w+)?/gi,
+    },
+    {
+      type: 'address',
+      replacement: '$1 [ADDRESS]',
+      pattern: /(адрес)\s*:?\s*(?:ул\.?|улица|проспект|пр-т|пер\.?|переулок|наб\.?|набережная|бул\.?|бульвар|шоссе)\s+[A-ZÅÄÖА-ЯЁ][A-Za-zÅÄÖåäöА-Яа-яЁё'’-]+(?:\s+[A-ZÅÄÖА-ЯЁ][A-Za-zÅÄÖåäöА-Яа-яЁё'’-]+){0,2}\s+\d{1,4}(?:\s*,?\s*(?:кв\.?|квартира)\s*\d{1,4})?\b/gi,
     },
     {
       type: 'address',
@@ -252,6 +277,7 @@ function collectPatternMatches(text: string, patternRules: PatternRule[]): Inter
       const value = match[0];
       const start = match.index;
       if (!value.trim()) continue;
+      if (rule.type === 'explicitName' && SUSPICIOUS_EXPLICIT_NAME_VALUE_PATTERN.test(value)) continue;
       const replacement = value.replace(rule.pattern, rule.replacement);
       findings.push(createFinding(rule.type, value, replacement, start));
     }

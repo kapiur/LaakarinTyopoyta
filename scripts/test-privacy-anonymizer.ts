@@ -13,6 +13,8 @@ const syntheticModernHetu = '01' + '0120' + 'B' + '123A';
 const syntheticEmail = 'patient.name' + '@' + 'example.com';
 const syntheticPhone = '+358' + ' 40 ' + '123 ' + '4567';
 const syntheticLocalPhone = '045' + '117' + '4031';
+const syntheticRuPhone = '+7' + ' 999 ' + '123-45-67';
+const syntheticEnPhone = '+44' + ' 20 ' + '7946 ' + '0958';
 const syntheticDob = '13' + '.10' + '.1952';
 const syntheticBareDob = '10' + '.11' + '.1980';
 const syntheticName = 'Matti' + ' ' + 'Meikalainen';
@@ -55,6 +57,18 @@ const cases: TestCase[] = [
     forbiddenFragments: [syntheticPhone],
   },
   {
+    name: 'Russian labelled phone number is redacted',
+    input: `Телефон: ${syntheticRuPhone}.`,
+    expectedFragments: ['Телефон [PHONE]'],
+    forbiddenFragments: [syntheticRuPhone],
+  },
+  {
+    name: 'English labelled phone number is redacted',
+    input: `Phone: ${syntheticEnPhone}.`,
+    expectedFragments: ['Phone [PHONE]'],
+    forbiddenFragments: [syntheticEnPhone],
+  },
+  {
     name: 'Date of birth with context is redacted',
     input: `Potilas synt. ${syntheticDob}, tulee kontrolliin.`,
     expectedFragments: ['synt. [DATE_OF_BIRTH]'],
@@ -63,7 +77,7 @@ const cases: TestCase[] = [
   {
     name: 'Explicit patient name is redacted',
     input: `Potilas: ${syntheticName}. Oireena huimaus.`,
-    expectedFragments: ['Potilas: [NAME]'],
+    expectedFragments: ['Potilas [NAME]'],
     forbiddenFragments: [syntheticName],
   },
   {
@@ -101,6 +115,18 @@ const cases: TestCase[] = [
     input: `Potilas asuu osoitteessa ${syntheticLongAddress}.`,
     expectedFragments: ['asuu osoitteessa [ADDRESS]'],
     forbiddenFragments: [syntheticLongAddress],
+  },
+  {
+    name: 'Russian labelled patient details are redacted',
+    input: 'Имя пациента: Юрий Капустин. Дата рождения 1980-11-10. Адрес: ул Ленина 15, кв 8.',
+    expectedFragments: ['Имя пациента [NAME]', 'Дата рождения [DATE_OF_BIRTH]', 'Адрес [ADDRESS]'],
+    forbiddenFragments: ['Юрий Капустин', '1980-11-10', 'ул Ленина 15, кв 8'],
+  },
+  {
+    name: 'English address is redacted',
+    input: 'Address: 45 King Street, Apt 3.',
+    expectedFragments: ['Address [ADDRESS]'],
+    forbiddenFragments: ['45 King Street, Apt 3'],
   },
   {
     name: 'Clinical dates are preserved in chat mode without identifying context',
