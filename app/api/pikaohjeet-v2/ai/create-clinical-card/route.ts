@@ -2,7 +2,10 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { OpenAI } from "openai";
 import { authOptions } from "../../../../../lib/auth";
-import { anonymizePatientText, mergeAnonymizationResults } from "../../../../../lib/privacy/anonymizePatientText";
+import { mergeAnonymizationResults } from "../../../../../lib/privacy/anonymizePatientText";
+import { preparePrivacyPayload } from "../../../../../lib/privacy/gateway";
+import { hasCriticalPrivacyFindingTypes } from "../../../../../lib/privacy/gateway/decision";
+import { sanitizeJsonValue } from "../../../../../lib/privacy/structured/sanitizeJsonValue";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const CURRENT_MODEL = "gpt-5.4";
@@ -111,6 +114,46 @@ PALAUTA VAIN validi JSON:
 `;
 }
 
+function buildPrivacyBlockReply() {
+  return "Tekstissä havaittiin tai siihen jäi automaattisen anonymisoinnin jälkeen tunnistetietoja, joita ei voida lähettää AI-käsittelyyn turvallisesti. Poista nimi-, yhteys-, tunniste- ja osoitetiedot ja yritä uudelleen.";
+}
+
+function buildPrivacyOutputBlockReply() {
+  return "AI-vastaus sisälsi henkilötietoihin viittaavia tietoja, joten sitä ei näytetä turvallisuussyistä. Muokkaa pyyntöä yleisemmäksi ilman tunnistetietoja ja yritä uudelleen.";
+}
+
+function sanitizeChunkSummaryValue(value: unknown) {
+  return sanitizeJsonValue(value, {
+    defaultMode: "storage",
+    modeForPath(path) {
+      const key = path[path.length - 1];
+      if (key === "chunkIndex" || key === "topic") return null;
+      return "storage";
+    },
+  });
+}
+
+function sanitizeClinicalCardValue(value: unknown) {
+  return sanitizeJsonValue(value, {
+    defaultMode: "storage",
+    modeForPath(path) {
+      const key = path[path.length - 1];
+      if (
+        key === "type" ||
+        key === "status" ||
+        key === "visibility" ||
+        key === "sourceStatus" ||
+        key === "kind" ||
+        key === "verified" ||
+        key === "processingMode"
+      ) {
+        return null;
+      }
+      return "storage";
+    },
+  });
+}
+
 async function createClinicalDraftDirect(params: { topic: string; rawText: string; sourceText: string }) {
   const response = await openai.chat.completions.create({
     model: CURRENT_MODEL,
@@ -122,7 +165,7 @@ async function createClinicalDraftDirect(params: { topic: string; rawText: strin
   });
 
   const content = response.choices[0]?.message?.content || "";
-  return tryParseJson(content);
+  return sanitizeClinicalCardValue(tryParseJson(content)).value;
 }
 
 async function extractChunkSummary(params: {
@@ -160,7 +203,7 @@ Palauta tiivis suomenkielinen JSON:
   });
 
   const content = response.choices[0]?.message?.content || "";
-  return tryParseJson(content);
+  return sanitizeChunkSummaryValue(tryParseJson(content)).value;
 }
 
 async function runInBatches<T, R>(items: T[], batchSize: number, fn: (item: T, index: number) => Promise<R>) {
@@ -204,7 +247,7 @@ async function createClinicalDraftChunked(params: { topic: string; rawText: stri
   });
 
   const content = response.choices[0]?.message?.content || "";
-  const parsed = tryParseJson(content);
+  const parsed = sanitizeClinicalCardValue(tryParseJson(content)).value as Record<string, unknown>;
 
   return {
     ...parsed,
@@ -242,29 +285,60 @@ export async function POST(req: Request) {
       );
     }
 
-    const anonymizedTopic = anonymizePatientText(topic);
-    const anonymizedRawText = anonymizePatientText(rawText);
-    const anonymizedSourceText = anonymizePatientText(sourceText);
-    const anonymization = mergeAnonymizationResults([anonymizedTopic, anonymizedRawText, anonymizedSourceText]);
+    const inputPrivacy = preparePrivacyPayload([
+      { key: "topic", value: topic, mode: "generalText" },
+      { key: "rawText", value: rawText, mode: "clinicalBuilder" },
+      { key: "sourceText", value: sourceText, mode: "clinicalBuilder" },
+    ]);
 
-    const totalInputLength = anonymizedRawText.sanitizedText.length + anonymizedSourceText.sanitizedText.length;
-    const parsed = totalInputLength <= DIRECT_MODE_MAX_CHARS
+    if (inputPrivacy.privacy.blocked) {
+      return NextResponse.json({
+        error: buildPrivacyBlockReply(),
+        privacy: inputPrivacy.privacy,
+        route: {
+          blockedByPrivacyGate: true,
+        },
+      }, { status: 400 });
+    }
+
+    const totalInputLength = inputPrivacy.sanitized.rawText.length + inputPrivacy.sanitized.sourceText.length;
+    const parsed = (totalInputLength <= DIRECT_MODE_MAX_CHARS
       ? await createClinicalDraftDirect({
-          topic: anonymizedTopic.sanitizedText,
-          rawText: anonymizedRawText.sanitizedText,
-          sourceText: anonymizedSourceText.sanitizedText,
+          topic: inputPrivacy.sanitized.topic,
+          rawText: inputPrivacy.sanitized.rawText,
+          sourceText: inputPrivacy.sanitized.sourceText,
         })
       : await createClinicalDraftChunked({
-          topic: anonymizedTopic.sanitizedText,
-          rawText: anonymizedRawText.sanitizedText,
-          sourceText: anonymizedSourceText.sanitizedText,
-        });
+          topic: inputPrivacy.sanitized.topic,
+          rawText: inputPrivacy.sanitized.rawText,
+          sourceText: inputPrivacy.sanitized.sourceText,
+        })) as Record<string, unknown>;
+    const outputPrivacy = preparePrivacyPayload([
+      { key: "card", value: JSON.stringify(parsed), mode: "persistentStorage" },
+    ]);
+
+    if (
+      outputPrivacy.privacy.blocked &&
+      hasCriticalPrivacyFindingTypes([
+        ...outputPrivacy.privacy.findingTypes,
+        ...outputPrivacy.privacy.residualFindingTypes,
+      ])
+    ) {
+      return NextResponse.json({
+        error: buildPrivacyOutputBlockReply(),
+        privacy: inputPrivacy.privacy,
+        route: {
+          blockedByPrivacyGate: true,
+          blockedByOutputPrivacyGate: true,
+        },
+      }, { status: 400 });
+    }
 
     return NextResponse.json({
       ...parsed,
-      privacy: {
-        anonymized: anonymization.hasFindings,
-        findingTypes: anonymization.findingTypes,
+      privacy: inputPrivacy.privacy,
+      route: {
+        outputSanitized: outputPrivacy.privacy.anonymized,
       },
     });
   } catch (error: any) {

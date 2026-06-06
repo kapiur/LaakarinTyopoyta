@@ -5,6 +5,8 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '../../../../../lib/auth';
 import { prisma } from '../../../../../lib/prisma';
 import { anonymizePatientText } from '../../../../../lib/privacy/anonymizePatientText';
+import { preparePrivacyPayload } from '../../../../../lib/privacy/gateway';
+import { hasCriticalPrivacyFindingTypes } from '../../../../../lib/privacy/gateway/decision';
 import { sanitizeJsonValue } from '../../../../../lib/privacy/structured/sanitizeJsonValue';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -27,6 +29,14 @@ type SampleRow = {
   styleNotes: string | null;
   createdAt: Date;
 };
+
+function buildPrivacyBlockReply() {
+  return 'Tekstissä havaittiin tai siihen jäi automaattisen anonymisoinnin jälkeen tunnistetietoja, joita ei voida lähettää AI-käsittelyyn turvallisesti. Poista nimi-, yhteys-, tunniste- ja osoitetiedot ja yritä uudelleen.';
+}
+
+function buildPrivacyOutputBlockReply() {
+  return 'AI-vastaus sisälsi henkilötietoihin viittaavia tietoja, joten sitä ei näytetä turvallisuussyistä. Muokkaa pyyntöä yleisemmäksi ilman tunnistetietoja ja yritä uudelleen.';
+}
 
 async function getUserId() {
   const session = await getServerSession(authOptions);
@@ -161,14 +171,50 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Text is required' }, { status: 400 });
     }
 
-    const anonymized = anonymizePatientText(exampleText, { mode: 'profileSample' });
+    const inputPrivacy = preparePrivacyPayload([
+      { key: 'exampleText', value: exampleText, mode: 'persistentSample' },
+      { key: 'sourceLabel', value: sourceLabel, mode: 'generalText' },
+    ]);
+
+    if (inputPrivacy.privacy.blocked) {
+      return NextResponse.json({
+        error: buildPrivacyBlockReply(),
+        privacy: inputPrivacy.privacy,
+        route: {
+          blockedByPrivacyGate: true,
+        },
+      }, { status: 400 });
+    }
+
+    const anonymized = anonymizePatientText(inputPrivacy.sanitized.exampleText, { mode: 'profileSample' });
     const profile = await ensureProfile(userId);
     const recentSamples = await getRecentSamples(profile.id);
-    const styleSummary = await createMergedStyleSummary(profile, recentSamples, anonymized.sanitizedText, sourceLabel);
+    const styleSummary = await createMergedStyleSummary(profile, recentSamples, anonymized.sanitizedText, inputPrivacy.sanitized.sourceLabel || null);
+    const outputPrivacy = preparePrivacyPayload([
+      { key: 'styleSummary', value: styleSummary, mode: 'persistentStorage' },
+    ]);
+    const safeStyleSummary = outputPrivacy.sanitized.styleSummary ?? styleSummary;
+
+    if (
+      outputPrivacy.privacy.blocked &&
+      hasCriticalPrivacyFindingTypes([
+        ...outputPrivacy.privacy.findingTypes,
+        ...outputPrivacy.privacy.residualFindingTypes,
+      ])
+    ) {
+      return NextResponse.json({
+        error: buildPrivacyOutputBlockReply(),
+        privacy: inputPrivacy.privacy,
+        route: {
+          blockedByPrivacyGate: true,
+          blockedByOutputPrivacyGate: true,
+        },
+      }, { status: 400 });
+    }
 
     await prisma.$executeRaw`
       UPDATE "UserAiProfile"
-      SET "styleSummary" = ${styleSummary}, "updatedAt" = NOW()
+      SET "styleSummary" = ${safeStyleSummary}, "updatedAt" = NOW()
       WHERE "id" = ${profile.id}
     `;
 
@@ -178,23 +224,25 @@ export async function POST(req: Request) {
         INSERT INTO "UserAiProfileSample" (
           "id", "profileId", "anonymizedText", "sourceLabel", "styleNotes", "createdAt", "updatedAt"
         ) VALUES (
-          ${sampleId}, ${profile.id}, ${anonymized.sanitizedText}, ${sourceLabel}, ${styleSummary}, NOW(), NOW()
+          ${sampleId}, ${profile.id}, ${anonymized.sanitizedText}, ${inputPrivacy.sanitized.sourceLabel || null}, ${safeStyleSummary}, NOW(), NOW()
         )
       `;
     }
 
     return NextResponse.json({
-      styleSummary,
+      styleSummary: safeStyleSummary,
       anonymizedText: anonymized.sanitizedText,
       privacy: {
-        anonymized: anonymized.hasFindings,
-        findingTypes: anonymized.findingTypes,
+        ...inputPrivacy.privacy,
         findings: anonymized.findings,
       },
       savedSample: saveAnonymizedSample,
       mergeMode: 'incremental',
       previousStyleSummary: profile.styleSummary || '',
       recentSamplesUsed: recentSamples.length,
+      route: {
+        outputSanitized: outputPrivacy.privacy.anonymized,
+      },
     });
   } catch (error: any) {
     console.error('AI profile style analysis error:', error.message || error);
