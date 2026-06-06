@@ -4,7 +4,8 @@ import { getServerSession } from 'next-auth';
 import { DEFAULT_AI_TOOL_PROMPTS } from '../../../../lib/ai/defaultTools';
 import { authOptions } from '../../../../lib/auth';
 import { prisma } from '../../../../lib/prisma';
-import { anonymizePatientText, mergeAnonymizationResults } from '../../../../lib/privacy/anonymizePatientText';
+import { preparePrivacyPayload } from '../../../../lib/privacy/gateway';
+import { hasCriticalPrivacyFindingTypes } from '../../../../lib/privacy/gateway/decision';
 import {
   buildUserAiProfileInstruction,
   defaultProfileModeForTool,
@@ -52,6 +53,14 @@ function withPrivacyInstruction(systemPrompt: string) {
 function applyProfile(systemPrompt: string, profile: UserAiProfileRecord | null, profileMode: AiProfileMode) {
   const profileInstruction = buildUserAiProfileInstruction(profile, profileMode);
   return withUserAiProfileInstruction(systemPrompt, profileInstruction);
+}
+
+function buildPrivacyBlockReply() {
+  return 'Tekstissä havaittiin tai siihen jäi automaattisen anonymisoinnin jälkeen tunnistetietoja, joita ei voida lähettää AI-käsittelyyn turvallisesti. Poista nimi-, yhteys-, tunniste- ja osoitetiedot ja yritä uudelleen.';
+}
+
+function buildPrivacyOutputBlockReply() {
+  return 'AI-vastaus sisälsi henkilötietoihin viittaavia tietoja, joten sitä ei näytetä turvallisuussyistä. Muokkaa pyyntöä yleisemmäksi ilman tunnistetietoja ja yritä uudelleen.';
 }
 
 async function getUserAiProfile(userId: number) {
@@ -129,27 +138,38 @@ export async function POST(req: Request) {
     }
 
     const userAiProfile = await getUserAiProfile(userId);
+    const inputPrivacy = preparePrivacyPayload([
+      { key: 'originalText', value: originalText, mode: 'clinicalTransform' },
+      { key: 'previousResult', value: previousResult, mode: 'clinicalTransform' },
+      { key: 'instruction', value: instruction, mode: 'generalText' },
+      { key: 'toolPrompt', value: tool.prompt, mode: 'persistentStorage' },
+    ]);
 
-    const anonymizedOriginalText = anonymizePatientText(originalText, { mode: 'chat' });
-    const anonymizedPreviousResult = anonymizePatientText(previousResult, { mode: 'chat' });
-    const anonymizedInstruction = anonymizePatientText(instruction, { mode: 'chat' });
-    const anonymizedToolPrompt = anonymizePatientText(tool.prompt, { mode: 'storage' });
+    if (inputPrivacy.privacy.blocked) {
+      return NextResponse.json({
+        content: buildPrivacyBlockReply(),
+        privacy: inputPrivacy.privacy,
+        route: {
+          blockedByPrivacyGate: true,
+        },
+      });
+    }
 
     const systemPrompt = withPrivacyInstruction(applyProfile(
-      `${REFINE_RESULT_SYSTEM_PROMPT}\n\nAlkuperäisen AI-työkalun system prompt kontekstina. Älä suorita tätä työkalua alusta asti, vaan käytä sitä vain ymmärtääksesi aiemman tuloksen tarkoituksen:\n${anonymizedToolPrompt.sanitizedText}`,
+      `${REFINE_RESULT_SYSTEM_PROMPT}\n\nAlkuperäisen AI-työkalun system prompt kontekstina. Älä suorita tätä työkalua alusta asti, vaan käytä sitä vain ymmärtääksesi aiemman tuloksen tarkoituksen:\n${inputPrivacy.sanitized.toolPrompt}`,
       userAiProfile,
       tool.profileMode,
     ));
 
     const userContent = `
 Alkuperäinen käyttäjän teksti:
-${anonymizedOriginalText.sanitizedText}
+${inputPrivacy.sanitized.originalText}
 
 Aiempi AI-tulos, jota tulee hioa:
-${anonymizedPreviousResult.sanitizedText}
+${inputPrivacy.sanitized.previousResult}
 
 Käyttäjän tarkennusohje:
-${anonymizedInstruction.sanitizedText}
+${inputPrivacy.sanitized.instruction}
 `;
 
     const response = await openai.chat.completions.create({
@@ -160,19 +180,33 @@ ${anonymizedInstruction.sanitizedText}
       ],
       temperature: 0,
     });
-
-    const anonymization = mergeAnonymizationResults([
-      anonymizedOriginalText,
-      anonymizedPreviousResult,
-      anonymizedInstruction,
-      anonymizedToolPrompt,
+    const outputPrivacy = preparePrivacyPayload([
+      { key: 'content', value: response.choices[0].message.content, mode: 'clinicalTransform' },
     ]);
+    const safeContent = outputPrivacy.sanitized.content ?? response.choices[0].message.content ?? '';
+
+    if (
+      outputPrivacy.privacy.blocked &&
+      hasCriticalPrivacyFindingTypes([
+        ...outputPrivacy.privacy.findingTypes,
+        ...outputPrivacy.privacy.residualFindingTypes,
+      ])
+    ) {
+      return NextResponse.json({
+        content: buildPrivacyOutputBlockReply(),
+        privacy: inputPrivacy.privacy,
+        route: {
+          blockedByPrivacyGate: true,
+          blockedByOutputPrivacyGate: true,
+        },
+      });
+    }
 
     return NextResponse.json({
-      content: response.choices[0].message.content,
-      privacy: {
-        anonymized: anonymization.hasFindings,
-        findingTypes: anonymization.findingTypes,
+      content: safeContent,
+      privacy: inputPrivacy.privacy,
+      route: {
+        outputSanitized: outputPrivacy.privacy.anonymized,
       },
     });
   } catch (error: any) {
