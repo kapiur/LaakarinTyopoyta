@@ -145,8 +145,9 @@ export async function POST(req: Request) {
     const userAiProfile = await getUserAiProfile(userId);
     const messageArray = Array.isArray(messages) ? messages : null;
 
+    const directTextMode = typeof mode === 'string' ? 'clinicalTransform' as const : 'transientClinicalChat' as const;
     const chatGateway = preparePrivacyPayload([
-      { key: 'text', value: text, mode: 'transientClinicalChat' },
+      { key: 'text', value: text, mode: directTextMode },
       { key: 'customPrompt', value: customPrompt, mode: 'persistentStorage' },
     ]);
 

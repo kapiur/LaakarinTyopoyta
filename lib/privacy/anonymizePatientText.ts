@@ -7,7 +7,16 @@ export type PatientDataFindingType =
   | 'explicitName'
   | 'address';
 
-export type AnonymizationMode = 'chat' | 'profileSample' | 'storage';
+export type AnonymizationMode =
+  | 'chat'
+  | 'profileSample'
+  | 'storage'
+  | 'transientClinicalChat'
+  | 'generalText'
+  | 'clinicalTransform'
+  | 'clinicalBuilder'
+  | 'persistentSample'
+  | 'strictStorage';
 
 export type AnonymizationOptions = {
   mode?: AnonymizationMode;
@@ -36,6 +45,25 @@ type PatternRule = {
   replacement: string;
   pattern: RegExp;
 };
+
+function isStorageLikeMode(mode: AnonymizationMode) {
+  return mode === 'storage' || mode === 'strictStorage' || mode === 'persistentSample';
+}
+
+function isStrictContextMode(mode: AnonymizationMode) {
+  return (
+    mode === 'profileSample' ||
+    mode === 'storage' ||
+    mode === 'clinicalTransform' ||
+    mode === 'clinicalBuilder' ||
+    mode === 'persistentSample' ||
+    mode === 'strictStorage'
+  );
+}
+
+function shouldRedactExactDates(mode: AnonymizationMode) {
+  return isStorageLikeMode(mode) || mode === 'clinicalTransform' || mode === 'clinicalBuilder';
+}
 
 const CONTEXT_WINDOW_CHARS = 120;
 const STRICT_CONTEXT_WINDOW_CHARS = 180;
@@ -181,7 +209,7 @@ function collectStaffNames(text: string): InternalFinding[] {
 function collectBareDatesNearIdentifiers(text: string, mode: AnonymizationMode): InternalFinding[] {
   const findings: InternalFinding[] = [];
   const regex = new RegExp(DATE_PATTERN.source, DATE_PATTERN.flags);
-  const strictMode = mode === 'profileSample' || mode === 'storage';
+  const strictMode = isStrictContextMode(mode);
   let match: RegExpExecArray | null;
 
   while ((match = regex.exec(text)) !== null) {
@@ -200,7 +228,7 @@ function collectBareDatesNearIdentifiers(text: string, mode: AnonymizationMode):
 function collectBareNamesNearIdentifiers(text: string, mode: AnonymizationMode): InternalFinding[] {
   const findings: InternalFinding[] = [];
   const regex = new RegExp(BARE_NAME_PATTERN.source, BARE_NAME_PATTERN.flags);
-  const strictMode = mode === 'profileSample' || mode === 'storage';
+  const strictMode = isStrictContextMode(mode);
   let match: RegExpExecArray | null;
 
   while ((match = regex.exec(text)) !== null) {
@@ -240,7 +268,7 @@ function collectBareNamesNearIdentifiers(text: string, mode: AnonymizationMode):
 }
 
 function collectStrictDates(text: string, mode: AnonymizationMode): InternalFinding[] {
-  if (mode === 'chat') return [];
+  if (!shouldRedactExactDates(mode)) return [];
 
   const findings: InternalFinding[] = [];
   const regex = new RegExp(DATE_PATTERN.source, DATE_PATTERN.flags);
@@ -251,7 +279,7 @@ function collectStrictDates(text: string, mode: AnonymizationMode): InternalFind
     const start = match.index;
     const end = start + value.length;
 
-    if (hasNearbyIdentifier(text, start, end, true) || mode === 'storage') {
+    if (hasNearbyIdentifier(text, start, end, true) || shouldRedactExactDates(mode)) {
       findings.push(createFinding('dateOfBirth', value, '[DATE]', start));
     }
   }

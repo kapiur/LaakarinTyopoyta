@@ -26,7 +26,7 @@ export type AgentPrivacyResult = {
 };
 
 function modeForKind(kind: AgentPrivacyInputKind): PrivacyGatewayMode {
-  if (kind === 'clinicalText') return 'transientClinicalChat';
+  if (kind === 'clinicalText') return 'clinicalTransform';
   if (kind === 'profileSample') return 'persistentSample';
   if (kind === 'storedInstruction') return 'persistentStorage';
   if (kind === 'templateSyntax') return 'templateSyntax';

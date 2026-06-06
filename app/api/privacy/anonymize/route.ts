@@ -7,9 +7,18 @@ import {
 } from '../../../../lib/privacy/anonymizePatientText';
 
 const ALLOWED_MODES: AnonymizationMode[] = ['chat', 'profileSample', 'storage'];
+const EXTENDED_ALLOWED_MODES: AnonymizationMode[] = [
+  ...ALLOWED_MODES,
+  'transientClinicalChat',
+  'generalText',
+  'clinicalTransform',
+  'clinicalBuilder',
+  'persistentSample',
+  'strictStorage',
+];
 
 function normalizeMode(value: unknown): AnonymizationMode {
-  if (typeof value === 'string' && ALLOWED_MODES.includes(value as AnonymizationMode)) {
+  if (typeof value === 'string' && EXTENDED_ALLOWED_MODES.includes(value as AnonymizationMode)) {
     return value as AnonymizationMode;
   }
 
