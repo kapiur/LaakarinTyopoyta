@@ -6,6 +6,7 @@ import {
   SYSTEM_PROMPT_MEDICAL,
 } from '../../../lib/ai/defaultTools';
 import { authOptions } from '../../../lib/auth';
+import { logAiRunAudit } from '../../../lib/ai/audit/logAiRunAudit';
 import { prisma } from '../../../lib/prisma';
 import { anonymizePatientText, mergeAnonymizationResults } from '../../../lib/privacy/anonymizePatientText';
 import { runAiCompletion } from '../../../lib/ai/runAiCompletion';
@@ -114,9 +115,11 @@ function anonymizeMessages(messages: any[]) {
 }
 
 export async function POST(req: Request) {
+  const startedAt = Date.now();
+  let userId: number | null = null;
   try {
     const session = await getServerSession(authOptions);
-    const userId = Number((session?.user as any)?.id);
+    userId = Number((session?.user as any)?.id);
 
     if (!Number.isFinite(userId)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -192,6 +195,19 @@ export async function POST(req: Request) {
 
     const anonymization = mergeAnonymizationResults(inputAnonymizationResults);
 
+    await logAiRunAudit({
+      userId,
+      surface: 'chat',
+      taskType: 'general_chat',
+      contextType: typeof mode === 'string' ? mode : messages && messages.length > 0 ? 'conversation' : 'single_turn',
+      provider: response.provider,
+      model: response.model,
+      privacyFindingTypes: anonymization.findingTypes,
+      blockedByEvidenceGate: false,
+      latencyMs: Date.now() - startedAt,
+      success: true,
+    });
+
     return NextResponse.json({
       content: response.content,
       privacy: {
@@ -201,6 +217,16 @@ export async function POST(req: Request) {
     });
   } catch (error: any) {
     console.error('AI Error:', error.message || error);
+    if (Number.isFinite(userId)) {
+      await logAiRunAudit({
+        userId: Number(userId),
+        surface: 'chat',
+        taskType: 'general_chat',
+        success: false,
+        latencyMs: Date.now() - startedAt,
+        errorCode: error.message || 'chat_error',
+      });
+    }
     return NextResponse.json({
       error: 'AI-palvelinvirhe',
       details: error.message,

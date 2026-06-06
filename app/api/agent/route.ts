@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireAuthenticatedUser } from '../../../lib/admin-auth';
 import { sanitizeAgentInputs } from '../../../lib/ai/agent/agentPrivacy';
 import { createAgentPlan } from '../../../lib/ai/agent/agentPlanner';
+import { logAiRunAudit } from '../../../lib/ai/audit/logAiRunAudit';
 import type { AgentContextType, AgentRequestBody, AgentUiLanguage } from '../../../lib/ai/agent/types';
 import { runRoutedAiCompletion } from '../../../lib/ai/runRoutedAiCompletion';
 import { taskAllowsRegistryOnlyReference, taskRequiresEvidence } from '../../../lib/ai/taskTypes';
@@ -137,6 +138,7 @@ function localizedEvidenceWarnings(
 export async function POST(req: Request) {
   const { session, error } = await requireAuthenticatedUser();
   if (error) return error;
+  const startedAt = Date.now();
 
   const userId = Number((session?.user as any)?.id);
 
@@ -216,6 +218,19 @@ export async function POST(req: Request) {
         sources: evidence.sources,
       });
 
+      await logAiRunAudit({
+        userId,
+        surface: 'agent',
+        taskType: plan.taskType,
+        contextType,
+        clinicalCountry: clinicalConfig.clinicalCountry,
+        evidenceStatus: localizedEvidence.status,
+        privacyFindingTypes: privacyResult.privacy.findingTypes,
+        blockedByEvidenceGate: true,
+        latencyMs: Date.now() - startedAt,
+        success: true,
+      });
+
       return NextResponse.json({
         reply,
         draft: reply,
@@ -288,6 +303,21 @@ export async function POST(req: Request) {
       unsupportedClaims: consistencyCheck.unsupportedClaims,
     };
 
+    await logAiRunAudit({
+      userId,
+      surface: 'agent',
+      taskType: plan.taskType,
+      contextType,
+      provider: result.provider,
+      model: result.model,
+      clinicalCountry: clinicalConfig.clinicalCountry,
+      evidenceStatus: finalEvidence.status,
+      privacyFindingTypes: privacyResult.privacy.findingTypes,
+      blockedByEvidenceGate: false,
+      latencyMs: Date.now() - startedAt,
+      success: true,
+    });
+
     return NextResponse.json({
       reply: result.content,
       draft: parseDraftFromContent(result.content),
@@ -301,6 +331,15 @@ export async function POST(req: Request) {
     });
   } catch (err: any) {
     console.error('Agent API error:', err?.message || err);
+    if (Number.isFinite(userId)) {
+      await logAiRunAudit({
+        userId,
+        surface: 'agent',
+        success: false,
+        latencyMs: Date.now() - startedAt,
+        errorCode: err?.message || 'agent_error',
+      });
+    }
     return NextResponse.json({ error: 'AI-agentin virhe', details: err?.message }, { status: 500 });
   }
 }

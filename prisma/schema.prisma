@@ -37,6 +37,7 @@ model User {
   pedsDrugs       PedsDrug[]
   pedsIndications PedsIndication[]
   history         AIHistory[]
+  aiRunAuditLogs  AiRunAuditLog[]
   aiTools         AiTool[]
   aiProfile       UserAiProfile?
   clinicalSettings UserClinicalSettings?
@@ -151,6 +152,30 @@ model AIHistory {
   resultText   String   @db.Text
 
   @@index([userId])
+}
+
+model AiRunAuditLog {
+  id                   String   @id @default(cuid())
+  createdAt            DateTime @default(now())
+  userId               Int
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  surface              String
+  taskType             String?
+  contextType          String?
+  provider             String?
+  model                String?
+  clinicalCountry      String?
+  evidenceStatus       String?
+  privacyFindingTypes  String   @default("[]") @db.Text
+  blockedByEvidenceGate Boolean @default(false)
+  latencyMs            Int?
+  success              Boolean  @default(true)
+  errorCode            String?  @db.Text
+
+  @@index([userId, createdAt])
+  @@index([surface, createdAt])
+  @@index([taskType])
+  @@index([clinicalCountry])
 }
 
 enum AiToolScope {
