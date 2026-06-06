@@ -4,7 +4,9 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '../../../../lib/auth';
 import { prisma } from '../../../../lib/prisma';
 import { getTemplateFields, validateTemplate } from '../../../../lib/templates';
-import { anonymizePatientText, mergeAnonymizationResults } from '../../../../lib/privacy/anonymizePatientText';
+import { mergeAnonymizationResults } from '../../../../lib/privacy/anonymizePatientText';
+import { preparePrivacyPayload } from '../../../../lib/privacy/gateway';
+import { hasCriticalPrivacyFindingTypes } from '../../../../lib/privacy/gateway/decision';
 import { sanitizeJsonValue } from '../../../../lib/privacy/structured/sanitizeJsonValue';
 import {
   buildUserAiProfileInstruction,
@@ -100,6 +102,14 @@ function normalizeLanguage(value: unknown): UiLanguage {
 
 function jsonError(message: string, status = 400) {
   return NextResponse.json({ error: message }, { status });
+}
+
+function buildPrivacyBlockReply() {
+  return 'Tekstissä havaittiin tai siihen jäi automaattisen anonymisoinnin jälkeen tunnistetietoja, joita ei voida lähettää AI-käsittelyyn turvallisesti. Poista nimi-, yhteys-, tunniste- ja osoitetiedot ja yritä uudelleen.';
+}
+
+function buildPrivacyOutputBlockReply() {
+  return 'AI-vastaus sisälsi henkilötietoihin viittaavia tietoja, joten sitä ei näytetä turvallisuussyistä. Muokkaa pyyntöä yleisemmäksi ilman tunnistetietoja ja yritä uudelleen.';
 }
 
 function looksLikeHtml(raw: string) {
@@ -242,11 +252,13 @@ Additional rules for mode create_base_template_from_topic:
 }
 
 function sanitizeRequest(body: TemplateAiRequest) {
-  const sample = anonymizePatientText(body.sampleText || '', { mode: 'profileSample' });
-  const selected = anonymizePatientText(body.selectedText || '', { mode: 'profileSample' });
-  const instruction = anonymizePatientText(body.userInstruction || '', { mode: 'chat' });
-  const currentTemplate = anonymizePatientText(body.currentTemplate || '', { mode: 'clinicalTransform' });
-  const topic = anonymizePatientText(body.topic || '', { mode: 'chat' });
+  const textGateway = preparePrivacyPayload([
+    { key: 'sampleText', value: body.sampleText || '', mode: 'persistentSample' },
+    { key: 'selectedText', value: body.selectedText || '', mode: 'persistentSample' },
+    { key: 'userInstruction', value: body.userInstruction || '', mode: 'generalText' },
+    { key: 'currentTemplate', value: body.currentTemplate || '', mode: 'clinicalTransform' },
+    { key: 'topic', value: body.topic || '', mode: 'generalText' },
+  ]);
   const allowedSources = sanitizeJsonValue(Array.isArray(body.allowedSources) ? body.allowedSources : [], {
     defaultMode: 'chat',
     modeForPath(path) {
@@ -256,25 +268,37 @@ function sanitizeRequest(body: TemplateAiRequest) {
       return 'chat';
     },
   });
+  const allowedSourcesGateway = preparePrivacyPayload([
+    {
+      key: 'allowedSourcesPayload',
+      value: JSON.stringify(allowedSources.value),
+      mode: 'clinicalBuilder',
+    },
+  ]);
+  const findingTypes = Array.from(new Set([
+    ...textGateway.privacy.findingTypes,
+    ...textGateway.privacy.residualFindingTypes,
+    ...allowedSources.anonymization.findingTypes,
+    ...allowedSourcesGateway.privacy.findingTypes,
+    ...allowedSourcesGateway.privacy.residualFindingTypes,
+  ]));
+  const blocked = textGateway.privacy.blocked || allowedSourcesGateway.privacy.blocked;
 
   return {
     body: {
       ...body,
-      currentTemplate: currentTemplate.sanitizedText,
-      sampleText: sample.sanitizedText,
-      selectedText: selected.sanitizedText,
-      userInstruction: instruction.sanitizedText,
-      topic: topic.sanitizedText,
+      currentTemplate: textGateway.sanitized.currentTemplate,
+      sampleText: textGateway.sanitized.sampleText,
+      selectedText: textGateway.sanitized.selectedText,
+      userInstruction: textGateway.sanitized.userInstruction,
+      topic: textGateway.sanitized.topic,
       allowedSources: allowedSources.value as AllowedSource[],
     },
-    anonymization: mergeAnonymizationResults([
-      sample,
-      selected,
-      instruction,
-      currentTemplate,
-      topic,
-      allowedSources.anonymization,
-    ]),
+    privacy: {
+      anonymized: textGateway.privacy.anonymized || allowedSources.anonymization.hasFindings || allowedSourcesGateway.privacy.anonymized,
+      findingTypes,
+      blocked,
+    },
   };
 }
 
@@ -394,16 +418,66 @@ export async function POST(req: Request) {
     const requestError = validateRequest(originalBody);
     if (requestError || !isMode(originalBody.mode)) return jsonError(requestError || 'Invalid mode.', 400);
 
-    const { body, anonymization } = sanitizeRequest(originalBody);
+    const { body, privacy } = sanitizeRequest(originalBody);
+    if (privacy.blocked) {
+      return NextResponse.json({
+        error: buildPrivacyBlockReply(),
+        privacy,
+        route: {
+          blockedByPrivacyGate: true,
+        },
+      }, { status: 400 });
+    }
     const profile = await getUserAiProfile(userId);
     const profileInstruction = buildUserAiProfileInstruction(profile, 'styleOnly');
-    const privacy = {
-      anonymized: anonymization.hasFindings,
-      findingTypes: anonymization.findingTypes,
-    };
-
     const normalized = await runTemplateAiCompletion(body, profileInstruction, privacy);
-    return NextResponse.json(normalized);
+    const sanitizedOutput = sanitizeJsonValue(normalized, {
+      defaultMode: 'storage',
+      modeForPath(path) {
+        const key = path[path.length - 1];
+        if (
+          key === 'ok' ||
+          key === 'status' ||
+          key === 'mode' ||
+          key === 'type' ||
+          key === 'verified'
+        ) {
+          return null;
+        }
+        return 'storage';
+      },
+    });
+    const outputPrivacy = preparePrivacyPayload([
+      {
+        key: 'templateResponse',
+        value: JSON.stringify(sanitizedOutput.value),
+        mode: 'persistentStorage',
+      },
+    ]);
+
+    if (
+      outputPrivacy.privacy.blocked &&
+      hasCriticalPrivacyFindingTypes([
+        ...outputPrivacy.privacy.findingTypes,
+        ...outputPrivacy.privacy.residualFindingTypes,
+      ])
+    ) {
+      return NextResponse.json({
+        error: buildPrivacyOutputBlockReply(),
+        privacy,
+        route: {
+          blockedByPrivacyGate: true,
+          blockedByOutputPrivacyGate: true,
+        },
+      }, { status: 400 });
+    }
+
+    return NextResponse.json({
+      ...(sanitizedOutput.value as TemplateAiResponse),
+      route: {
+        outputSanitized: sanitizedOutput.anonymization.hasFindings || outputPrivacy.privacy.anonymized,
+      },
+    });
   } catch (error: any) {
     console.error('Template AI Error:', error?.message || error);
     const response: TemplateAiResponse = {

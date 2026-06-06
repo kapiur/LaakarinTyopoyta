@@ -3,6 +3,8 @@ import { getServerSession } from "next-auth/next";
 import { OpenAI } from "openai";
 import { authOptions } from "../../../../../lib/auth";
 import { anonymizePatientText, mergeAnonymizationResults } from "../../../../../lib/privacy/anonymizePatientText";
+import { preparePrivacyPayload } from "../../../../../lib/privacy/gateway";
+import { hasCriticalPrivacyFindingTypes } from "../../../../../lib/privacy/gateway/decision";
 import { sanitizeJsonValue } from "../../../../../lib/privacy/structured/sanitizeJsonValue";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -33,6 +35,14 @@ function anonymizeJsonLikeValue(value: unknown) {
   });
 }
 
+function buildPrivacyBlockReply() {
+  return "Tekstissä havaittiin tai siihen jäi automaattisen anonymisoinnin jälkeen tunnistetietoja, joita ei voida lähettää AI-käsittelyyn turvallisesti. Poista nimi-, yhteys-, tunniste- ja osoitetiedot ja yritä uudelleen.";
+}
+
+function buildPrivacyOutputBlockReply() {
+  return "AI-vastaus sisälsi henkilötietoihin viittaavia tietoja, joten sitä ei näytetä turvallisuussyistä. Muokkaa pyyntöä yleisemmäksi ilman tunnistetietoja ja yritä uudelleen.";
+}
+
 export async function POST(req: Request) {
   try {
     const session = await getServerSession(authOptions);
@@ -46,19 +56,49 @@ export async function POST(req: Request) {
 
     if (materialSummaries.length === 0) return NextResponse.json({ error: "Yhteenvedot puuttuvat" }, { status: 400 });
 
-    const anonymizedTopic = anonymizePatientText(topic);
+    const topicGateway = preparePrivacyPayload([
+      { key: "topic", value: topic, mode: "generalText" },
+    ]);
     const anonymizedMaterialSummaries = anonymizeJsonLikeValue(materialSummaries);
     const anonymizedSourceSummaries = anonymizeJsonLikeValue(sourceSummaries);
     const anonymizedMeta = anonymizeJsonLikeValue(meta);
+    const structuredGateway = preparePrivacyPayload([
+      { key: "materialSummariesPayload", value: JSON.stringify(anonymizedMaterialSummaries.value), mode: "clinicalBuilder" },
+      { key: "sourceSummariesPayload", value: JSON.stringify(anonymizedSourceSummaries.value), mode: "clinicalBuilder" },
+      { key: "metaPayload", value: JSON.stringify(anonymizedMeta.value), mode: "clinicalBuilder" },
+    ]);
     const anonymization = mergeAnonymizationResults([
-      anonymizedTopic,
+      {
+        sanitizedText: topicGateway.sanitized.topic ?? "",
+        findings: [],
+        hasFindings: topicGateway.privacy.anonymized,
+        findingTypes: [...topicGateway.privacy.findingTypes, ...topicGateway.privacy.residualFindingTypes],
+      },
       anonymizedMaterialSummaries.anonymization,
       anonymizedSourceSummaries.anonymization,
       anonymizedMeta.anonymization,
     ]);
+    const privacyBlocked = topicGateway.privacy.blocked || structuredGateway.privacy.blocked;
+
+    if (privacyBlocked) {
+      return NextResponse.json({
+        error: buildPrivacyBlockReply(),
+        privacy: {
+          anonymized: anonymization.hasFindings || structuredGateway.privacy.anonymized,
+          findingTypes: Array.from(new Set([
+            ...anonymization.findingTypes,
+            ...structuredGateway.privacy.findingTypes,
+            ...structuredGateway.privacy.residualFindingTypes,
+          ])),
+        },
+        route: {
+          blockedByPrivacyGate: true,
+        },
+      }, { status: 400 });
+    }
 
     const payload = JSON.stringify({
-      topic: anonymizedTopic.sanitizedText,
+      topic: topicGateway.sanitized.topic,
       materialSummaries: anonymizedMaterialSummaries.value,
       sourceSummaries: anonymizedSourceSummaries.value,
       meta: anonymizedMeta.value,
@@ -129,12 +169,65 @@ PALAUTA VAIN validi JSON:
 
     const content = response.choices[0]?.message?.content || "";
     const parsed = tryParseJson(content);
+    const sanitizedOutput = sanitizeJsonValue(parsed, {
+      defaultMode: "storage",
+      modeForPath(path) {
+        const key = path[path.length - 1];
+        if (
+          key === "type" ||
+          key === "status" ||
+          key === "visibility" ||
+          key === "sourceStatus" ||
+          key === "kind" ||
+          key === "verified" ||
+          key === "processingMode"
+        ) {
+          return null;
+        }
+        return "storage";
+      },
+    });
+    const outputPrivacy = preparePrivacyPayload([
+      { key: "synthesizedCard", value: JSON.stringify(sanitizedOutput.value), mode: "persistentStorage" },
+    ]);
+
+    if (
+      outputPrivacy.privacy.blocked &&
+      hasCriticalPrivacyFindingTypes([
+        ...outputPrivacy.privacy.findingTypes,
+        ...outputPrivacy.privacy.residualFindingTypes,
+      ])
+    ) {
+      return NextResponse.json({
+        error: buildPrivacyOutputBlockReply(),
+        privacy: {
+          anonymized: anonymization.hasFindings || structuredGateway.privacy.anonymized,
+          findingTypes: Array.from(new Set([
+            ...anonymization.findingTypes,
+            ...structuredGateway.privacy.findingTypes,
+            ...structuredGateway.privacy.residualFindingTypes,
+          ])),
+        },
+        route: {
+          blockedByPrivacyGate: true,
+          blockedByOutputPrivacyGate: true,
+        },
+      }, { status: 400 });
+    }
+
     return NextResponse.json({
-      ...parsed,
-      meta: { ...(parsed.meta || {}), processingMode: "client_chunked_two_pass", ...meta },
+      ...(sanitizedOutput.value as Record<string, unknown>),
+      meta: { ...(((sanitizedOutput.value as Record<string, unknown>).meta as Record<string, unknown>) || {}), processingMode: "client_chunked_two_pass", ...meta },
       privacy: {
-        anonymized: anonymization.hasFindings,
-        findingTypes: anonymization.findingTypes,
+        anonymized: anonymization.hasFindings || structuredGateway.privacy.anonymized,
+        findingTypes: Array.from(new Set([
+          ...anonymization.findingTypes,
+          ...structuredGateway.privacy.findingTypes,
+          ...structuredGateway.privacy.residualFindingTypes,
+        ])),
+      },
+      route: {
+        outputSanitized: sanitizedOutput.anonymization.hasFindings || outputPrivacy.privacy.anonymized,
       },
     });
   } catch (error: any) {
