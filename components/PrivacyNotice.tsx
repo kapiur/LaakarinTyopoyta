@@ -23,21 +23,24 @@ const labels: Record<string, Record<UiLang, string>> = {
 const text = {
   fi: {
     title: "AI-tietosuoja",
-    body: "Älä syötä potilaan tunnistetietoja. Palvelin poistaa tunnistetietoja automaattisesti ennen AI-käsittelyä.",
-    done: "Tunnistetietoja poistettu ennen AI-käsittelyä",
-    none: "Tunnistetietoja ei havaittu automaattisessa tarkistuksessa",
+    body: "Vältä potilaan tunnistetietojen syöttämistä aina kun mahdollista. Palvelin tekee automaattisen tarkistuksen ja yrittää poistaa tai estää tunnistetietoja ennen AI-käsittelyä.",
+    done: "Automaattinen tarkistus löysi ja käsitteli tunnistetietoja ennen AI-käsittelyä",
+    none: "Automaattinen tarkistus ei havainnut tunnettuja tunnistetietoja",
+    caution: "Automaattinen tarkistus ei takaa, että kaikki tunnistetiedot havaitaan. Tee aina myös oma ammatillinen arvio ennen lähettämistä tai tallentamista.",
   },
   ru: {
     title: "Защита данных при AI-обработке",
-    body: "Не вводите идентифицирующие данные пациента. Сервер автоматически удаляет найденные идентификаторы перед отправкой в AI.",
-    done: "Перед AI-обработкой были удалены идентификаторы",
-    none: "Автоматическая проверка не обнаружила идентификаторов",
+    body: "По возможности не вводите идентифицирующие данные пациента. Сервер выполняет автоматическую проверку и пытается удалить или заблокировать идентификаторы перед AI-обработкой.",
+    done: "Автоматическая проверка обнаружила и обработала идентификаторы перед AI-обработкой",
+    none: "Автоматическая проверка не обнаружила известных идентификаторов",
+    caution: "Автоматическая проверка не гарантирует, что будут найдены все идентификаторы. Перед отправкой или сохранением все равно нужен ваш ручной контроль.",
   },
   en: {
     title: "AI privacy protection",
-    body: "Do not enter patient identifiers. The server automatically removes detected identifiers before AI processing.",
-    done: "Identifiers were removed before AI processing",
-    none: "No identifiers were detected by the automatic check",
+    body: "Avoid entering patient identifiers whenever possible. The server runs an automatic check and tries to remove or block identifiers before AI processing.",
+    done: "The automatic check detected and handled identifiers before AI processing",
+    none: "The automatic check did not detect known identifiers",
+    caution: "The automatic check does not guarantee that every identifier will be found. Manual review is still required before sending or saving text.",
   },
 };
 
@@ -52,9 +55,13 @@ export default function PrivacyNotice({ privacy, compact = false }: { privacy?: 
   const findingTypes = Array.from(new Set(privacy?.findingTypes || []));
   const hasResult = Boolean(privacy);
   const anonymized = Boolean(privacy?.anonymized && findingTypes.length > 0);
+  const wrapperClassName = anonymized
+    ? "border-amber-100 bg-amber-50 text-amber-900"
+    : "border-slate-200 bg-slate-50 text-slate-800";
+  const cautionClassName = anonymized ? "text-amber-800/90" : "text-slate-500";
 
   return (
-    <div className={`rounded-2xl border px-4 py-3 text-xs font-bold ${anonymized ? "border-blue-100 bg-blue-50 text-blue-800" : "border-emerald-100 bg-emerald-50 text-emerald-800"}`}>
+    <div className={`rounded-2xl border px-4 py-3 text-xs font-bold ${wrapperClassName}`}>
       <div className="flex items-start gap-2">
         <ShieldCheck size={compact ? 14 : 16} className="mt-0.5 shrink-0" />
         <div className="min-w-0 space-y-1">
@@ -67,6 +74,9 @@ export default function PrivacyNotice({ privacy, compact = false }: { privacy?: 
               {anonymized && findingTypes.map((type) => localizeFinding(type, lang)).join(", ")}
             </div>
           )}
+          <div className={`pt-1 text-[11px] leading-relaxed font-semibold ${cautionClassName}`}>
+            {dict.caution}
+          </div>
         </div>
       </div>
     </div>
