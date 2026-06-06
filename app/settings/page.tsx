@@ -6,6 +6,7 @@ import { Bot, BrainCircuit, DatabaseZap, KeyRound, KeySquare, Settings, Shield, 
 import LanguageSettingsCard from "../../components/LanguageSettingsCard";
 import AiProfileSettingsCard from "../../components/AiProfileSettingsCard";
 import AiProviderSettingsCard from "../../components/AiProviderSettingsCard";
+import CalculatorVisibilitySettingsCard from "../../components/CalculatorVisibilitySettingsCard";
 import ClinicalEvidenceSettingsCard from "../../components/ClinicalEvidenceSettingsCard";
 import { useI18n } from "../../lib/useI18n";
 
@@ -34,6 +35,7 @@ export default function SettingsPage() {
       </header>
 
       <LanguageSettingsCard />
+      <CalculatorVisibilitySettingsCard />
       <AiProfileSettingsCard />
       <AiProviderSettingsCard />
       <ClinicalEvidenceSettingsCard />

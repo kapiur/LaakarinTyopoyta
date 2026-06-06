@@ -37,6 +37,7 @@ model User {
   pcaDrugs        PcaDrug[]
   pedsDrugs       PedsDrug[]
   pedsIndications PedsIndication[]
+  calculatorPreferences UserCalculatorPreference[]
   history         AIHistory[]
   aiRunAuditLogs  AiRunAuditLog[]
   aiTools         AiTool[]
@@ -141,6 +142,19 @@ model PedsDrugIndication {
 
   @@id([drugId, indicationId])
   @@index([indicationId])
+}
+
+model UserCalculatorPreference {
+  id            String   @id @default(cuid())
+  userId        Int
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  calculatorKey String
+  isVisible     Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([userId, calculatorKey])
+  @@index([userId])
 }
 
 model AIHistory {
