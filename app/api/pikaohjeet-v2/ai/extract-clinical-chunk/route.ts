@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { OpenAI } from "openai";
 import { authOptions } from "../../../../../lib/auth";
-import { anonymizePatientText, mergeAnonymizationResults } from "../../../../../lib/privacy/anonymizePatientText";
+import { preparePrivacyPayload } from "../../../../../lib/privacy/gateway";
+import { hasCriticalPrivacyFindingTypes } from "../../../../../lib/privacy/gateway/decision";
+import { sanitizeJsonValue } from "../../../../../lib/privacy/structured/sanitizeJsonValue";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const CURRENT_MODEL = "gpt-5.4";
@@ -19,6 +21,14 @@ function tryParseJson(content: string) {
     if (first >= 0 && last > first) return JSON.parse(content.slice(first, last + 1));
     throw new Error("AI response was not valid JSON");
   }
+}
+
+function buildPrivacyBlockReply() {
+  return "Tekstissä havaittiin tai siihen jäi automaattisen anonymisoinnin jälkeen tunnistetietoja, joita ei voida lähettää AI-käsittelyyn turvallisesti. Poista nimi-, yhteys-, tunniste- ja osoitetiedot ja yritä uudelleen.";
+}
+
+function buildPrivacyOutputBlockReply() {
+  return "AI-vastaus sisälsi henkilötietoihin viittaavia tietoja, joten sitä ei näytetä turvallisuussyistä. Muokkaa pyyntöä yleisemmäksi ilman tunnistetietoja ja yritä uudelleen.";
 }
 
 export async function POST(req: Request) {
@@ -38,9 +48,20 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: `Fragmentti on liian pitkä. Enimmäispituus on ${MAX_CHUNK_CHARS} merkkiä.` }, { status: 400 });
     }
 
-    const anonymizedTopic = anonymizePatientText(topic);
-    const anonymizedChunk = anonymizePatientText(chunk);
-    const anonymization = mergeAnonymizationResults([anonymizedTopic, anonymizedChunk]);
+    const inputPrivacy = preparePrivacyPayload([
+      { key: "topic", value: topic, mode: "generalText" },
+      { key: "chunk", value: chunk, mode: "clinicalBuilder" },
+    ]);
+
+    if (inputPrivacy.privacy.blocked) {
+      return NextResponse.json({
+        error: buildPrivacyBlockReply(),
+        privacy: inputPrivacy.privacy,
+        route: {
+          blockedByPrivacyGate: true,
+        },
+      }, { status: 400 });
+    }
 
     const systemPrompt = `
 Olet kliininen tekstin tiivistäjä. Poimi annetusta fragmentista vain asiat, joista on hyötyä Terveysasema-lääkärin nopeassa Pikaohjeessa.
@@ -68,8 +89,8 @@ Palauta tiivis suomenkielinen JSON:
         {
           role: "user",
           content: JSON.stringify({
-            topic: anonymizedTopic.sanitizedText,
-            chunk: anonymizedChunk.sanitizedText,
+            topic: inputPrivacy.sanitized.topic,
+            chunk: inputPrivacy.sanitized.chunk,
             index,
             total,
             isSource,
@@ -80,11 +101,42 @@ Palauta tiivis suomenkielinen JSON:
 
     const content = response.choices[0]?.message?.content || "";
     const parsed = tryParseJson(content);
+    const sanitizedOutput = sanitizeJsonValue(parsed, {
+      defaultMode: "storage",
+      modeForPath: (path) => {
+        const leaf = path[path.length - 1];
+        if (leaf === "chunkIndex") {
+          return null;
+        }
+        return "storage";
+      },
+    });
+    const outputPrivacy = preparePrivacyPayload([
+      { key: "output", value: JSON.stringify(sanitizedOutput.value), mode: "persistentStorage" },
+    ]);
+
+    if (
+      outputPrivacy.privacy.blocked &&
+      hasCriticalPrivacyFindingTypes([
+        ...outputPrivacy.privacy.findingTypes,
+        ...outputPrivacy.privacy.residualFindingTypes,
+      ])
+    ) {
+      return NextResponse.json({
+        error: buildPrivacyOutputBlockReply(),
+        privacy: inputPrivacy.privacy,
+        route: {
+          blockedByPrivacyGate: true,
+          blockedByOutputPrivacyGate: true,
+        },
+      }, { status: 400 });
+    }
+
     return NextResponse.json({
-      ...parsed,
-      privacy: {
-        anonymized: anonymization.hasFindings,
-        findingTypes: anonymization.findingTypes,
+      ...(sanitizedOutput.value as Record<string, unknown>),
+      privacy: inputPrivacy.privacy,
+      route: {
+        outputSanitized: sanitizedOutput.anonymization.hasFindings || outputPrivacy.privacy.anonymized,
       },
     });
   } catch (error: any) {

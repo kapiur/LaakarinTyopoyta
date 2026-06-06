@@ -2,6 +2,8 @@ import { OpenAI } from 'openai';
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '../../../../lib/auth';
+import { preparePrivacyPayload } from '../../../../lib/privacy/gateway';
+import { hasCriticalPrivacyFindingTypes } from '../../../../lib/privacy/gateway/decision';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -61,6 +63,14 @@ Vastaussäännöt:
 - Jos käyttäjä pyytää parantamaan olemassa olevaa promptia, säilytä sen ydintarkoitus mutta lisää vain tarvittavat puuttuvat turvallisuus-, anonymisointi-, kirjoitustyylin säilyttämis- ja kliiniset säännöt.
 `;
 
+function buildPrivacyBlockReply() {
+  return 'Tekstissä havaittiin tai siihen jäi automaattisen anonymisoinnin jälkeen tunnistetietoja, joita ei voida lähettää AI-käsittelyyn turvallisesti. Poista nimi-, yhteys-, tunniste- ja osoitetiedot ja yritä uudelleen.';
+}
+
+function buildPrivacyOutputBlockReply() {
+  return 'AI-vastaus sisälsi henkilötietoihin viittaavia tietoja, joten sitä ei näytetä turvallisuussyistä. Muokkaa pyyntöä yleisemmäksi ilman tunnistetietoja ja yritä uudelleen.';
+}
+
 export async function POST(req: Request) {
   try {
     const session = await getServerSession(authOptions);
@@ -78,13 +88,28 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'description or currentPrompt is required' }, { status: 400 });
     }
 
+    const inputPrivacy = preparePrivacyPayload([
+      { key: 'description', value: description, mode: 'generalText' },
+      { key: 'currentPrompt', value: currentPrompt, mode: 'persistentStorage' },
+    ]);
+
+    if (inputPrivacy.privacy.blocked) {
+      return NextResponse.json({
+        error: buildPrivacyBlockReply(),
+        privacy: inputPrivacy.privacy,
+        route: {
+          blockedByPrivacyGate: true,
+        },
+      }, { status: 400 });
+    }
+
     const userContent = [
       `Toimintatila: ${mode}`,
-      description
-        ? `Käyttäjän ohje. Ohje voi olla millä tahansa kielellä, mutta valmis system prompt pitää palauttaa suomeksi:\n${description}`
+      inputPrivacy.sanitized.description
+        ? `Käyttäjän ohje. Ohje voi olla millä tahansa kielellä, mutta valmis system prompt pitää palauttaa suomeksi:\n${inputPrivacy.sanitized.description}`
         : 'Käyttäjä ei antanut erillistä muutosohjetta. Jos nykyinen prompt on annettu, tee vain varovainen turvallisuus- ja selkeysparannus säilyttäen nykyinen rakenne.',
-      currentPrompt
-        ? `Nykyinen prompt. Tämä on ensisijainen pohjateksti. Säilytä sen rakenne, tarkoitus, tyyli ja olemassa olevat säännöt. Älä kirjoita sitä alusta uudelleen, vaan muuta vain käyttäjän ohjeen kannalta tarpeelliset kohdat:\n${currentPrompt}`
+      inputPrivacy.sanitized.currentPrompt
+        ? `Nykyinen prompt. Tämä on ensisijainen pohjateksti. Säilytä sen rakenne, tarkoitus, tyyli ja olemassa olevat säännöt. Älä kirjoita sitä alusta uudelleen, vaan muuta vain käyttäjän ohjeen kannalta tarpeelliset kohdat:\n${inputPrivacy.sanitized.currentPrompt}`
         : '',
     ].filter(Boolean).join('\n\n');
 
@@ -97,9 +122,35 @@ export async function POST(req: Request) {
       ],
     });
 
+    const outputPrivacy = preparePrivacyPayload([
+      { key: 'prompt', value: response.choices[0].message.content, mode: 'persistentStorage' },
+    ]);
+    const safePrompt = outputPrivacy.sanitized.prompt ?? response.choices[0].message.content ?? '';
+
+    if (
+      outputPrivacy.privacy.blocked &&
+      hasCriticalPrivacyFindingTypes([
+        ...outputPrivacy.privacy.findingTypes,
+        ...outputPrivacy.privacy.residualFindingTypes,
+      ])
+    ) {
+      return NextResponse.json({
+        error: buildPrivacyOutputBlockReply(),
+        privacy: inputPrivacy.privacy,
+        route: {
+          blockedByPrivacyGate: true,
+          blockedByOutputPrivacyGate: true,
+        },
+      }, { status: 400 });
+    }
+
     return NextResponse.json({
-      prompt: response.choices[0].message.content ?? '',
+      prompt: safePrompt,
       mode,
+      privacy: inputPrivacy.privacy,
+      route: {
+        outputSanitized: outputPrivacy.privacy.anonymized,
+      },
     });
   } catch (error: any) {
     console.error('Prompt assistant error:', error.message || error);
