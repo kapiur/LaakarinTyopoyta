@@ -9,8 +9,8 @@
     "lint": "next lint",
     "db:sync": "ts-node scripts/sync-medicines.ts",
     "seed:pikaohjeet": "node scripts/seed_pikaohjeet.cjs",
-    "test:templates": "ts-node --compiler-options '{\"module\":\"commonjs\"}' scripts/test-template-parser.ts",
-    "test:privacy": "ts-node --compiler-options '{\"module\":\"commonjs\"}' scripts/test-privacy-anonymizer.ts"
+    "test:templates": "ts-node --project tsconfig.scripts.json scripts/test-template-parser.ts",
+    "test:privacy": "ts-node --project tsconfig.scripts.json scripts/test-privacy-anonymizer.ts"
   },
   "dependencies": {
     "react": "^18",
