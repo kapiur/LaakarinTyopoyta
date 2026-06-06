@@ -246,9 +246,10 @@ export async function POST(req: Request) {
     const outputPrivacy = preparePrivacyPayload([
       { key: 'output', value: response.content, mode: 'persistentStorage' },
     ]);
+    const safeOutputContent = outputPrivacy.sanitized.output ?? response.content;
 
     if (
-      outputPrivacy.privacy.anonymized &&
+      outputPrivacy.privacy.blocked &&
       hasCriticalPrivacyFindingTypes([
         ...outputPrivacy.privacy.findingTypes,
         ...outputPrivacy.privacy.residualFindingTypes,
@@ -301,8 +302,11 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json({
-      content: response.content,
+      content: safeOutputContent,
       privacy,
+      route: {
+        outputSanitized: outputPrivacy.privacy.anonymized,
+      },
     });
   } catch (error: any) {
     console.error('AI Error:', error.message || error);

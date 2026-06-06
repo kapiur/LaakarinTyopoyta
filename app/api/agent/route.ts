@@ -366,9 +366,10 @@ export async function POST(req: Request) {
     const outputPrivacy = preparePrivacyPayload([
       { key: 'output', value: result.content, mode: 'persistentStorage' },
     ]);
+    const safeOutputContent = outputPrivacy.sanitized.output ?? result.content;
 
     if (
-      outputPrivacy.privacy.anonymized &&
+      outputPrivacy.privacy.blocked &&
       hasCriticalPrivacyFindingTypes([
         ...outputPrivacy.privacy.findingTypes,
         ...outputPrivacy.privacy.residualFindingTypes,
@@ -416,7 +417,7 @@ export async function POST(req: Request) {
 
     const consistencyCheck = checkEvidenceConsistency({
       taskType: plan.taskType,
-      answer: result.content,
+      answer: safeOutputContent,
       evidence: localizedEvidence,
       language: uiLanguage,
     });
@@ -447,13 +448,16 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json({
-      reply: result.content,
-      draft: parseDraftFromContent(result.content),
+      reply: safeOutputContent,
+      draft: parseDraftFromContent(safeOutputContent),
       suggestedActions: plan.suggestedActions,
       taskType: plan.taskType,
       provider: result.provider,
       model: result.model,
-      route: result.route,
+      route: {
+        ...result.route,
+        outputSanitized: outputPrivacy.privacy.anonymized,
+      },
       privacy: privacyResult.privacy,
       evidence: finalEvidence,
     });
