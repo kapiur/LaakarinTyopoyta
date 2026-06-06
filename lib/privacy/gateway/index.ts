@@ -10,6 +10,7 @@ export function preparePrivacyPayload(inputs: PrivacyGatewayInput[]): PrivacyGat
   const residual = scanResidualPrivacyRisk(sanitizedPayload.fields);
   const decision = decisionForResidualFindings(residual.findingTypes);
   const severity = severityForResidualFindings(residual.findingTypes);
+  const localeKeys = Array.from(new Set(sanitizedPayload.fields.flatMap((field) => field.localeKeys)));
 
   return {
     sanitized: sanitizedPayload.sanitized,
@@ -21,6 +22,7 @@ export function preparePrivacyPayload(inputs: PrivacyGatewayInput[]): PrivacyGat
       decision,
       severity,
       blocked: decision === 'block',
+      localeKeys,
     },
   };
 }

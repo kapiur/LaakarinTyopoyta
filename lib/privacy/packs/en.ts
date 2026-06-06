@@ -1,0 +1,32 @@
+import type { PrivacyLocalePack } from './types';
+
+export const privacyPackEn: PrivacyLocalePack = {
+  locale: 'en',
+  personContextWords: [
+    'patient',
+    'patient name',
+    'name',
+    'dob',
+    'date of birth',
+    'birth date',
+    'email',
+    'e-mail',
+    'phone',
+    'telephone',
+    'address',
+    'wife',
+    'spouse',
+    'husband',
+    'boy',
+    'girl',
+    'child',
+    'mother',
+    'father',
+    'relative',
+    'guardian',
+  ],
+  dateOfBirthLabels: ['dob', 'date of birth', 'birth date'],
+  explicitNameLabels: ['patient', 'patient name', 'name'],
+  patientIdLabels: ['patient id', 'client id', 'case id', 'record id'],
+  notes: 'English privacy pack for imported records and prompts.',
+};

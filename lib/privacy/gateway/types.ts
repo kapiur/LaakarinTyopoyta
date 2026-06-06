@@ -3,6 +3,7 @@ import type {
   PatientDataFindingType,
   PatientTextAnonymizationResult,
 } from '../anonymizePatientText';
+import type { PrivacyLocaleKey } from '../packs';
 
 export type PrivacyGatewayMode =
   | 'transientClinicalChat'
@@ -17,6 +18,7 @@ export type PrivacyGatewayInput = {
   key: string;
   value?: string | null;
   mode?: PrivacyGatewayMode;
+  localeKeys?: PrivacyLocaleKey[];
 };
 
 export type PrivacyDecision = 'allow' | 'warn' | 'block';
@@ -27,6 +29,7 @@ export type PrivacyPreparedField = {
   originalValue: string;
   sanitizedValue: string;
   gatewayMode: PrivacyGatewayMode;
+  localeKeys: PrivacyLocaleKey[];
   primaryMode: AnonymizationMode | null;
   residualMode: AnonymizationMode | null;
   primaryResult?: PatientTextAnonymizationResult;
@@ -42,5 +45,6 @@ export type PrivacyGatewayResult = {
     decision: PrivacyDecision;
     severity: PrivacySeverity;
     blocked: boolean;
+    localeKeys: PrivacyLocaleKey[];
   };
 };

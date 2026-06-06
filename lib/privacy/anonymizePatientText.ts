@@ -1,3 +1,9 @@
+import {
+  DEFAULT_PRIVACY_LOCALE_KEYS,
+  resolvePrivacyLocalePacks,
+  type PrivacyLocaleKey,
+} from './packs';
+
 export type PatientDataFindingType =
   | 'hetu'
   | 'email'
@@ -20,6 +26,7 @@ export type AnonymizationMode =
 
 export type AnonymizationOptions = {
   mode?: AnonymizationMode;
+  localeKeys?: PrivacyLocaleKey[];
 };
 
 export type PatientDataFinding = {
@@ -73,7 +80,6 @@ const DATE_PATTERN = /\b\d{1,4}[.,\/-]\d{1,2}[.,\/-]\d{1,4}\b/g;
 const PHONE_PATTERN = /(?<!\d)(?:\+358|0)\s?(?:4\d|[1-9]\d?)\s?(?:\d\s?){5,8}(?!\d)/g;
 const EMAIL_PATTERN = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
 const STAFF_CONTEXT_WORDS = 'lääkäri|laakari|hoitaja|sairaanhoitaja|terveydenhoitaja|lähihoitaja|lahihoitaja|fysioterapeutti|fysioterapeuti|toimintaterapeutti|puheterapeutti|psykologi|psykiatri|sosiaalityöntekijä|sosiaalityontekija|ravitsemusterapeutti|farmaseutti|proviisori|hammaslääkäri|hammaslaakari|suuhygienisti|kätilö|katilo|ensihoitaja|laboratoriohoitaja|röntgenhoitaja|rontgenhoitaja|ammattilainen|ammattihenkilö|ammattihenkilo';
-const PERSON_CONTEXT_PATTERN = new RegExp(`\\b(?:potilas|potilaan|patient|patient name|nimi|name|имя|пациент|пациента|дата рождения|д\\.р\\.|syntynyt|synt\\.|s\\.|dob|date of birth|birth date|henkilötunnus|hetu|email|e-mail|sähköposti|почта|phone|telephone|puhelin|телефон|тел\\.|vaimo|puoliso|aviopuoliso|mies|nainen|tyttö|poika|lapsi|äiti|isä|tytär|veli|sisko|sisar|omainen|lähiomainen|huoltaja|${STAFF_CONTEXT_WORDS})\\b`, 'i');
 const RELATIVE_CONTEXT_WORD_PATTERN = /^(?:vaimo|puoliso|aviopuoliso|äiti|isä|tytär|veli|sisko|sisar|omainen|lähiomainen|huoltaja)$/i;
 const DEMOGRAPHIC_CONTEXT_WORD_PATTERN = /^(?:mies|nainen|tyttö|poika|lapsi)$/i;
 const STAFF_CONTEXT_WORD_PATTERN = new RegExp(`^(?:${STAFF_CONTEXT_WORDS})$`, 'i');
@@ -83,6 +89,12 @@ const NAME_SEQUENCE = `${NAME_TOKEN}(?:\\s+${NAME_TOKEN}){1,3}`;
 const NAME_AFTER_ROLE_PATTERN = new RegExp(`^\\s+${NAME_SEQUENCE}\\b`);
 const BARE_NAME_PATTERN = new RegExp(`\\b${NAME_TOKEN}(?:\\s+${NAME_TOKEN})+\\b`, 'g');
 const STANDALONE_FULL_NAME_PATTERN = new RegExp(`^\\s*${NAME_SEQUENCE}\\s*$`);
+const localeRegexCache = new Map<string, {
+  personContextPattern: RegExp;
+  dateOfBirthPattern: RegExp;
+  patientIdPattern: RegExp;
+  explicitNamePattern: RegExp;
+}>();
 
 const NON_PERSON_NAME_PATTERNS = [
   /\bKeski\s+Uudenmaan\b/i,
@@ -106,41 +118,90 @@ const NON_PERSON_NAME_PATTERNS = [
   /\bKanta\b/i,
 ];
 
-const PATTERN_RULES: PatternRule[] = [
-  { type: 'hetu', replacement: '[HETU]', pattern: HETU_PATTERN },
-  { type: 'email', replacement: '[EMAIL]', pattern: EMAIL_PATTERN },
-  { type: 'phone', replacement: '[PHONE]', pattern: PHONE_PATTERN },
-  {
-    type: 'dateOfBirth',
-    replacement: '$1 [DATE_OF_BIRTH]',
-    pattern: /\b(syntynyt|synt\.|s\.|dob|date of birth|birth date|syntymäaika|дата рождения|д\.р\.)\s*:?\s*\d{1,4}[.,\/-]\d{1,2}[.,\/-]\d{1,4}\b/gi,
-  },
-  {
-    type: 'patientId',
-    replacement: '$1 [PATIENT_ID]',
-    pattern: /\b(potilasnumero|potilasnro|henkilönumero|henkilönro|asiakasnumero|asiakasnro|patient id)\s*:?\s*[A-Z0-9-]{4,}\b/gi,
-  },
-  {
-    type: 'explicitName',
-    replacement: '$1 [NAME]',
-    pattern: /\b(potilas|potilaan nimi|patient|patient name|nimi|name|пациент|имя)\s*:?\s*[A-ZÅÄÖIА-ЯЁ][A-Za-zÅÄÖåäöА-Яа-яЁё'’-]+(?:\s+[A-ZÅÄÖIА-ЯЁ][A-Za-zÅÄÖåäöА-Яа-яЁё'’-]+)+\b/gi,
-  },
-  {
-    type: 'address',
-    replacement: '[ADDRESS]',
-    pattern: /\b[A-ZÅÄÖ][A-Za-zÅÄÖåäö'’-]+(?:\s+[A-ZÅÄÖ][A-Za-zÅÄÖåäö'’-]+){0,2}(?:katu|tie|kuja|polku|rinne|raitti|kaari|aukio|gatan|vägen|gränden|stigen|platsen)\s+\d{1,4}(?:\s?[-–]\s?\d{1,4})?(?:\s?[A-Za-zÅÄÖåäö])?(?:\s+(?:as|asunto|apt)\.?\s*\d{1,4})?(?:,?\s*\d{5}\s+[A-ZÅÄÖ][A-Za-zÅÄÖåäö'’-]+)?\b/g,
-  },
-  {
-    type: 'address',
-    replacement: '$1 [ADDRESS]',
-    pattern: /\b(osoite|postiosoite|asuu osoitteessa)\s*:?\s*[A-ZÅÄÖ][A-Za-zÅÄÖåäö'’-]+(?:\s+[A-ZÅÄÖ][A-Za-zÅÄÖåäö'’-]+){0,3}\s+\d{1,4}(?:\s?[A-Za-zÅÄÖåäö])?\b/gi,
-  },
-  {
-    type: 'address',
-    replacement: '[ADDRESS]',
-    pattern: /\bPL\s*\d{1,6}\s*,?\s*\d{5}\s+[A-ZÅÄÖ][A-Za-zÅÄÖåäö'’-]+\b/g,
-  },
-];
+function escapeRegexToken(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function buildLocaleRegexSet(localeKeys: PrivacyLocaleKey[]) {
+  const key = localeKeys.slice().sort().join('|');
+  const cached = localeRegexCache.get(key);
+  if (cached) return cached;
+
+  const packs = resolvePrivacyLocalePacks(localeKeys);
+  const personContextWords = packs.flatMap((pack) => pack.personContextWords);
+  const dateOfBirthLabels = packs.flatMap((pack) => pack.dateOfBirthLabels);
+  const explicitNameLabels = packs.flatMap((pack) => pack.explicitNameLabels);
+  const patientIdLabels = packs.flatMap((pack) => pack.patientIdLabels);
+
+  const personContextPattern = new RegExp(
+    `\\b(?:${[...personContextWords, STAFF_CONTEXT_WORDS].join('|')})\\b`,
+    'i',
+  );
+
+  const dateOfBirthPattern = new RegExp(
+    `\\b(${dateOfBirthLabels.join('|')})\\s*:?\\s*\\d{1,4}[.,\\/-]\\d{1,2}[.,\\/-]\\d{1,4}\\b`,
+    'gi',
+  );
+
+  const patientIdPattern = new RegExp(
+    `\\b(${patientIdLabels.map(escapeRegexToken).join('|')})\\s*:?\\s*[A-Z0-9-]{4,}\\b`,
+    'gi',
+  );
+
+  const explicitNamePattern = new RegExp(
+    `\\b(${explicitNameLabels.map(escapeRegexToken).join('|')})\\s*:?\\s*[A-ZÅÄÖIА-ЯЁ][A-Za-zÅÄÖåäöА-Яа-яЁё'’-]+(?:\\s+[A-ZÅÄÖIА-ЯЁ][A-Za-zÅÄÖåäöА-Яа-яЁё'’-]+)+\\b`,
+    'gi',
+  );
+
+  const built = {
+    personContextPattern,
+    dateOfBirthPattern,
+    patientIdPattern,
+    explicitNamePattern,
+  };
+  localeRegexCache.set(key, built);
+  return built;
+}
+
+function buildPatternRules(localeKeys: PrivacyLocaleKey[]): PatternRule[] {
+  const localeRegex = buildLocaleRegexSet(localeKeys);
+
+  return [
+    { type: 'hetu', replacement: '[HETU]', pattern: HETU_PATTERN },
+    { type: 'email', replacement: '[EMAIL]', pattern: EMAIL_PATTERN },
+    { type: 'phone', replacement: '[PHONE]', pattern: PHONE_PATTERN },
+    {
+      type: 'dateOfBirth',
+      replacement: '$1 [DATE_OF_BIRTH]',
+      pattern: localeRegex.dateOfBirthPattern,
+    },
+    {
+      type: 'patientId',
+      replacement: '$1 [PATIENT_ID]',
+      pattern: localeRegex.patientIdPattern,
+    },
+    {
+      type: 'explicitName',
+      replacement: '$1 [NAME]',
+      pattern: localeRegex.explicitNamePattern,
+    },
+    {
+      type: 'address',
+      replacement: '[ADDRESS]',
+      pattern: /\b[A-ZÅÄÖ][A-Za-zÅÄÖåäö'’-]+(?:\s+[A-ZÅÄÖ][A-Za-zÅÄÖåäö'’-]+){0,2}(?:katu|tie|kuja|polku|rinne|raitti|kaari|aukio|gatan|vägen|gränden|stigen|platsen)\s+\d{1,4}(?:\s?[-–]\s?\d{1,4})?(?:\s?[A-Za-zÅÄÖåäö])?(?:\s+(?:as|asunto|apt)\.?\s*\d{1,4})?(?:,?\s*\d{5}\s+[A-ZÅÄÖ][A-Za-zÅÄÖåäö'’-]+)?\b/g,
+    },
+    {
+      type: 'address',
+      replacement: '$1 [ADDRESS]',
+      pattern: /\b(osoite|postiosoite|asuu osoitteessa)\s*:?\s*[A-ZÅÄÖ][A-Za-zÅÄÖåäö'’-]+(?:\s+[A-ZÅÄÖ][A-Za-zÅÄÖåäö'’-]+){0,3}\s+\d{1,4}(?:\s?[A-Za-zÅÄÖåäö])?\b/gi,
+    },
+    {
+      type: 'address',
+      replacement: '[ADDRESS]',
+      pattern: /\bPL\s*\d{1,6}\s*,?\s*\d{5}\s+[A-ZÅÄÖ][A-Za-zÅÄÖåäö'’-]+\b/g,
+    },
+  ];
+}
 
 function createFinding(type: PatientDataFindingType, value: string, replacement: string, start: number): InternalFinding {
   return { type, value, replacement, start, end: start + value.length };
@@ -154,7 +215,7 @@ function isLikelyOrganizationOrTerm(value: string) {
   return NON_PERSON_NAME_PATTERNS.some((pattern) => pattern.test(value));
 }
 
-function hasNearbyIdentifier(text: string, start: number, end: number, strict = false) {
+function hasNearbyIdentifier(text: string, start: number, end: number, personContextPattern: RegExp, strict = false) {
   const windowSize = strict ? STRICT_CONTEXT_WINDOW_CHARS : CONTEXT_WINDOW_CHARS;
   const windowStart = Math.max(0, start - windowSize);
   const windowEnd = Math.min(text.length, end + windowSize);
@@ -164,14 +225,14 @@ function hasNearbyIdentifier(text: string, start: number, end: number, strict = 
     regexMatches(HETU_PATTERN, nearby) ||
     regexMatches(PHONE_PATTERN, nearby) ||
     regexMatches(EMAIL_PATTERN, nearby) ||
-    PERSON_CONTEXT_PATTERN.test(nearby)
+    personContextPattern.test(nearby)
   );
 }
 
-function collectPatternMatches(text: string): InternalFinding[] {
+function collectPatternMatches(text: string, patternRules: PatternRule[]): InternalFinding[] {
   const findings: InternalFinding[] = [];
 
-  for (const rule of PATTERN_RULES) {
+  for (const rule of patternRules) {
     const regex = new RegExp(rule.pattern.source, rule.pattern.flags);
     let match: RegExpExecArray | null;
 
@@ -206,7 +267,7 @@ function collectStaffNames(text: string): InternalFinding[] {
   return findings;
 }
 
-function collectBareDatesNearIdentifiers(text: string, mode: AnonymizationMode): InternalFinding[] {
+function collectBareDatesNearIdentifiers(text: string, mode: AnonymizationMode, personContextPattern: RegExp): InternalFinding[] {
   const findings: InternalFinding[] = [];
   const regex = new RegExp(DATE_PATTERN.source, DATE_PATTERN.flags);
   const strictMode = isStrictContextMode(mode);
@@ -217,7 +278,7 @@ function collectBareDatesNearIdentifiers(text: string, mode: AnonymizationMode):
     const start = match.index;
     const end = start + value.length;
 
-    if (hasNearbyIdentifier(text, start, end, strictMode)) {
+    if (hasNearbyIdentifier(text, start, end, personContextPattern, strictMode)) {
       findings.push(createFinding('dateOfBirth', value, strictMode ? '[DATE]' : '[DATE_OF_BIRTH]', start));
     }
   }
@@ -225,7 +286,7 @@ function collectBareDatesNearIdentifiers(text: string, mode: AnonymizationMode):
   return findings;
 }
 
-function collectBareNamesNearIdentifiers(text: string, mode: AnonymizationMode): InternalFinding[] {
+function collectBareNamesNearIdentifiers(text: string, mode: AnonymizationMode, personContextPattern: RegExp): InternalFinding[] {
   const findings: InternalFinding[] = [];
   const regex = new RegExp(BARE_NAME_PATTERN.source, BARE_NAME_PATTERN.flags);
   const strictMode = isStrictContextMode(mode);
@@ -237,7 +298,7 @@ function collectBareNamesNearIdentifiers(text: string, mode: AnonymizationMode):
     const end = start + value.length;
 
     if (isLikelyOrganizationOrTerm(value)) continue;
-    if (!hasNearbyIdentifier(text, start, end, strictMode)) continue;
+    if (!hasNearbyIdentifier(text, start, end, personContextPattern, strictMode)) continue;
 
     const [firstWord, ...remainingWords] = value.split(/\s+/);
     const isRelativeWord = remainingWords.length > 0 && RELATIVE_CONTEXT_WORD_PATTERN.test(firstWord);
@@ -267,7 +328,7 @@ function collectBareNamesNearIdentifiers(text: string, mode: AnonymizationMode):
   return findings;
 }
 
-function collectStrictDates(text: string, mode: AnonymizationMode): InternalFinding[] {
+function collectStrictDates(text: string, mode: AnonymizationMode, personContextPattern: RegExp): InternalFinding[] {
   if (!shouldRedactExactDates(mode)) return [];
 
   const findings: InternalFinding[] = [];
@@ -279,7 +340,7 @@ function collectStrictDates(text: string, mode: AnonymizationMode): InternalFind
     const start = match.index;
     const end = start + value.length;
 
-    if (hasNearbyIdentifier(text, start, end, true) || shouldRedactExactDates(mode)) {
+    if (hasNearbyIdentifier(text, start, end, personContextPattern, true) || shouldRedactExactDates(mode)) {
       findings.push(createFinding('dateOfBirth', value, '[DATE]', start));
     }
   }
@@ -298,13 +359,15 @@ function collectStandaloneFullInputName(text: string, mode: AnonymizationMode): 
   return [createFinding('explicitName', trimmed, '[NAME]', start)];
 }
 
-function collectMatches(text: string, mode: AnonymizationMode): InternalFinding[] {
+function collectMatches(text: string, mode: AnonymizationMode, localeKeys: PrivacyLocaleKey[]): InternalFinding[] {
+  const localeRegex = buildLocaleRegexSet(localeKeys);
+  const patternRules = buildPatternRules(localeKeys);
   const findings = [
-    ...collectPatternMatches(text),
+    ...collectPatternMatches(text, patternRules),
     ...collectStaffNames(text),
-    ...collectBareDatesNearIdentifiers(text, mode),
-    ...collectBareNamesNearIdentifiers(text, mode),
-    ...collectStrictDates(text, mode),
+    ...collectBareDatesNearIdentifiers(text, mode, localeRegex.personContextPattern),
+    ...collectBareNamesNearIdentifiers(text, mode, localeRegex.personContextPattern),
+    ...collectStrictDates(text, mode, localeRegex.personContextPattern),
     ...collectStandaloneFullInputName(text, mode),
   ];
 
@@ -330,7 +393,8 @@ function removeOverlaps(findings: InternalFinding[]) {
 export function anonymizePatientText(input: unknown, options: AnonymizationOptions = {}): PatientTextAnonymizationResult {
   const original = typeof input === 'string' ? input : '';
   const mode = options.mode ?? 'chat';
-  const findings = removeOverlaps(collectMatches(original, mode));
+  const localeKeys = options.localeKeys ?? DEFAULT_PRIVACY_LOCALE_KEYS;
+  const findings = removeOverlaps(collectMatches(original, mode, localeKeys));
 
   if (findings.length === 0) {
     return { sanitizedText: original, findings: [], hasFindings: false, findingTypes: [] };
