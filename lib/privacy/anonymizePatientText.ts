@@ -84,11 +84,13 @@ const RELATIVE_CONTEXT_WORD_PATTERN = /^(?:vaimo|puoliso|aviopuoliso|äiti|isä|
 const DEMOGRAPHIC_CONTEXT_WORD_PATTERN = /^(?:mies|nainen|tyttö|poika|lapsi)$/i;
 const STAFF_CONTEXT_WORD_PATTERN = new RegExp(`^(?:${STAFF_CONTEXT_WORDS})$`, 'i');
 const STAFF_ROLE_PATTERN = new RegExp(`\\b(?:${STAFF_CONTEXT_WORDS})\\b`, 'gi');
-const NAME_TOKEN = "[A-ZÅÄÖIА-ЯЁ][A-Za-zÅÄÖåäöА-Яа-яЁё'’-]+";
+const UNICODE_LETTER_BOUNDARY_LEFT = '(?<![\\p{L}])';
+const UNICODE_LETTER_BOUNDARY_RIGHT = '(?![\\p{L}])';
+const NAME_TOKEN = "[\\p{Lu}][\\p{L}'’-]+";
 const NAME_SEQUENCE = `${NAME_TOKEN}(?:\\s+${NAME_TOKEN}){1,3}`;
-const NAME_AFTER_ROLE_PATTERN = new RegExp(`^\\s+${NAME_SEQUENCE}\\b`);
-const BARE_NAME_PATTERN = new RegExp(`\\b${NAME_TOKEN}(?:\\s+${NAME_TOKEN})+\\b`, 'g');
-const STANDALONE_FULL_NAME_PATTERN = new RegExp(`^\\s*${NAME_SEQUENCE}\\s*$`);
+const NAME_AFTER_ROLE_PATTERN = new RegExp(`^\\s+${NAME_SEQUENCE}${UNICODE_LETTER_BOUNDARY_RIGHT}`, 'u');
+const BARE_NAME_PATTERN = new RegExp(`${UNICODE_LETTER_BOUNDARY_LEFT}${NAME_SEQUENCE}${UNICODE_LETTER_BOUNDARY_RIGHT}`, 'gu');
+const STANDALONE_FULL_NAME_PATTERN = new RegExp(`^\\s*${NAME_SEQUENCE}\\s*$`, 'u');
 const localeRegexCache = new Map<string, {
   personContextPattern: RegExp;
   dateOfBirthPattern: RegExp;
@@ -134,23 +136,23 @@ function buildLocaleRegexSet(localeKeys: PrivacyLocaleKey[]) {
   const patientIdLabels = packs.flatMap((pack) => pack.patientIdLabels);
 
   const personContextPattern = new RegExp(
-    `\\b(?:${[...personContextWords, STAFF_CONTEXT_WORDS].join('|')})\\b`,
-    'i',
+    `${UNICODE_LETTER_BOUNDARY_LEFT}(?:${[...personContextWords, STAFF_CONTEXT_WORDS].join('|')})${UNICODE_LETTER_BOUNDARY_RIGHT}`,
+    'iu',
   );
 
   const dateOfBirthPattern = new RegExp(
-    `\\b(${dateOfBirthLabels.join('|')})\\s*:?\\s*\\d{1,4}[.,\\/-]\\d{1,2}[.,\\/-]\\d{1,4}\\b`,
-    'gi',
+    `${UNICODE_LETTER_BOUNDARY_LEFT}(${dateOfBirthLabels.join('|')})\\s*:?\\s*\\d{1,4}[.,\\/-]\\d{1,2}[.,\\/-]\\d{1,4}\\b`,
+    'giu',
   );
 
   const patientIdPattern = new RegExp(
-    `\\b(${patientIdLabels.map(escapeRegexToken).join('|')})\\s*:?\\s*[A-Z0-9-]{4,}\\b`,
-    'gi',
+    `${UNICODE_LETTER_BOUNDARY_LEFT}(${patientIdLabels.map(escapeRegexToken).join('|')})\\s*:?\\s*[A-Z0-9-]{4,}\\b`,
+    'giu',
   );
 
   const explicitNamePattern = new RegExp(
-    `\\b(${explicitNameLabels.map(escapeRegexToken).join('|')})\\s*:?\\s*[A-ZÅÄÖIА-ЯЁ][A-Za-zÅÄÖåäöА-Яа-яЁё'’-]+(?:\\s+[A-ZÅÄÖIА-ЯЁ][A-Za-zÅÄÖåäöА-Яа-яЁё'’-]+)+\\b`,
-    'gi',
+    `${UNICODE_LETTER_BOUNDARY_LEFT}(${explicitNameLabels.map(escapeRegexToken).join('|')})\\s*:?\\s*${NAME_SEQUENCE}${UNICODE_LETTER_BOUNDARY_RIGHT}`,
+    'giu',
   );
 
   const built = {
