@@ -1,4 +1,5 @@
 import type { AiTaskType } from '../../ai/taskTypes';
+import type { RetrievedEvidence } from './retrieveClinicalEvidence';
 import type { UserClinicalEvidenceConfig } from './userClinicalSettings';
 
 export type EvidenceStatus = 'found' | 'partial' | 'not_found' | 'not_required';
@@ -17,6 +18,13 @@ export type EvidencePackage = {
     sourceType: string;
     trustLevel: string;
     baseUrl?: string;
+  }>;
+  excerpts: Array<{
+    sourceId: string;
+    title?: string;
+    url?: string;
+    text: string;
+    retrievedAt: string;
   }>;
   warnings: string[];
   unsupportedClaims: string[];
@@ -51,6 +59,7 @@ export function buildInitialEvidencePackage(input: {
       evidenceStrictness: input.config.evidenceStrictness,
       requiresEvidence: false,
       sources,
+      excerpts: [],
       warnings: [],
       unsupportedClaims: [],
     };
@@ -65,6 +74,7 @@ export function buildInitialEvidencePackage(input: {
       evidenceStrictness: input.config.evidenceStrictness,
       requiresEvidence: true,
       sources,
+      excerpts: [],
       warnings: ['No enabled official clinical sources are available for the selected country.'],
       unsupportedClaims: [],
     };
@@ -82,10 +92,46 @@ export function buildInitialEvidencePackage(input: {
     evidenceStrictness: input.config.evidenceStrictness,
     requiresEvidence: true,
     sources,
+    excerpts: [],
     warnings: [
       'Official source registry is available, but this MVP does not yet retrieve guideline passages. Do not provide concrete clinical recommendations unless the user provides source text or a later retrieval layer supplies evidence facts.',
     ],
     unsupportedClaims: [],
+  };
+}
+
+export function buildEvidencePackageFromRetrieved(input: {
+  taskType: AiTaskType;
+  requiresEvidence: boolean;
+  config: UserClinicalEvidenceConfig;
+  retrieved: RetrievedEvidence;
+}): EvidencePackage {
+  const fallback = buildInitialEvidencePackage({
+    taskType: input.taskType,
+    requiresEvidence: input.requiresEvidence,
+    config: input.config,
+  });
+
+  if (!input.requiresEvidence) {
+    return {
+      ...fallback,
+      status: 'not_required',
+      sources: input.retrieved.sources.length > 0 ? input.retrieved.sources : fallback.sources,
+      excerpts: input.retrieved.excerpts,
+      warnings: input.retrieved.warnings,
+    };
+  }
+
+  const sourceLevels = input.retrieved.sources.map((source) => sourceLevel(source.trustLevel));
+  const highestLevel = sourceLevels.find((level) => level === 'official_guideline' || level === 'official_reference') ?? fallback.level;
+
+  return {
+    ...fallback,
+    status: input.retrieved.status,
+    level: input.retrieved.excerpts.length > 0 ? highestLevel : fallback.level,
+    sources: input.retrieved.sources.length > 0 ? input.retrieved.sources : fallback.sources,
+    excerpts: input.retrieved.excerpts,
+    warnings: input.retrieved.warnings.length > 0 ? input.retrieved.warnings : fallback.warnings,
   };
 }
 

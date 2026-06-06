@@ -6,10 +6,10 @@ import type { AgentContextType, AgentRequestBody, AgentUiLanguage } from '../../
 import { runRoutedAiCompletion } from '../../../lib/ai/runRoutedAiCompletion';
 import { taskAllowsRegistryOnlyReference, taskRequiresEvidence } from '../../../lib/ai/taskTypes';
 import {
-  buildInitialEvidencePackage,
+  buildEvidencePackageFromRetrieved,
   buildNoEvidenceReply,
-  type EvidencePackage,
 } from '../../../lib/clinical/evidence/evidencePackage';
+import { retrieveClinicalEvidence } from '../../../lib/clinical/evidence/retrieveClinicalEvidence';
 import { getUserClinicalEvidenceConfig } from '../../../lib/clinical/evidence/userClinicalSettings';
 
 function normalizeContextType(value: unknown): AgentContextType {
@@ -133,85 +133,6 @@ function localizedEvidenceWarnings(
   return [];
 }
 
-function userProvidedEvidenceWarning(language: AgentUiLanguage) {
-  if (language === 'ru') {
-    return 'Используется фрагмент источника, вставленный пользователем. Он не был независимо проверен системой. Агент должен отвечать только в пределах этого фрагмента.';
-  }
-
-  if (language === 'fi') {
-    return 'Käytössä on käyttäjän liittämä lähdekatkelma. Järjestelmä ei ole tarkistanut sitä itsenäisesti. Agentin tulee vastata vain tämän katkelman perusteella.';
-  }
-
-  return 'Using a source excerpt pasted by the user. It has not been independently verified by the system. The agent must answer only within this excerpt.';
-}
-
-function hasPotentialUserProvidedEvidence(text: string) {
-  const normalized = text.toLowerCase();
-  const compactLength = normalized.replace(/\s+/g, ' ').trim().length;
-
-  if (compactLength < 300) return false;
-
-  const sourceMarkers = [
-    'käypä hoito',
-    'kaypahoito',
-    'terveyskirjasto',
-    'lääkärikirja',
-    'duodecim',
-    'thl',
-    'hus',
-    'keusote',
-    'minzdrav',
-    'минздрав',
-    'клинические рекомендации',
-    'государственный реестр лекарственных средств',
-    'грлс',
-    'rospotrebnadzor',
-    'роспотребнадзор',
-    'suositus',
-    'hoitosuositus',
-    'ohje',
-    'lähde',
-    'source',
-    'guideline',
-    'recommendation',
-    'рекомендац',
-    'инструкция',
-    'официальн',
-  ];
-
-  return sourceMarkers.some((marker) => normalized.includes(marker));
-}
-
-function applyUserProvidedEvidence(input: {
-  evidence: EvidencePackage;
-  sourceText: string;
-  uiLanguage: AgentUiLanguage;
-}): EvidencePackage {
-  if (!input.evidence.requiresEvidence && input.evidence.status !== 'partial') return input.evidence;
-  if (!hasPotentialUserProvidedEvidence(input.sourceText)) return input.evidence;
-
-  return {
-    ...input.evidence,
-    status: 'found',
-    level: 'official_reference',
-    sources: [
-      {
-        id: 'user-provided-source-excerpt',
-        name:
-          input.uiLanguage === 'ru'
-            ? 'Фрагмент источника, вставленный пользователем'
-            : input.uiLanguage === 'fi'
-              ? 'Käyttäjän liittämä lähdekatkelma'
-              : 'User-provided source excerpt',
-        sourceType: 'user_provided_excerpt',
-        trustLevel: 'user_provided_not_independently_verified',
-        baseUrl: undefined,
-      },
-    ],
-    warnings: [userProvidedEvidenceWarning(input.uiLanguage)],
-  };
-}
-
 export async function POST(req: Request) {
   const { session, error } = await requireAuthenticatedUser();
   if (error) return error;
@@ -256,17 +177,19 @@ export async function POST(req: Request) {
     const clinicalConfig = await getUserClinicalEvidenceConfig(userId);
     const requiresEvidence = taskRequiresEvidence(plan.taskType);
     const allowsRegistryOnlyReference = taskAllowsRegistryOnlyReference(plan.taskType);
-
-    const initialEvidence = buildInitialEvidencePackage({
+    const retrievedEvidence = await retrieveClinicalEvidence({
       taskType: plan.taskType,
       requiresEvidence: requiresEvidence || allowsRegistryOnlyReference,
       config: clinicalConfig,
+      userMessage: privacyResult.sanitized.userMessage,
+      currentText: privacyResult.sanitized.currentText,
+      currentTemplate: privacyResult.sanitized.currentTemplate,
     });
-
-    const evidence = applyUserProvidedEvidence({
-      evidence: initialEvidence,
-      sourceText: privacyResult.sanitized.currentText,
-      uiLanguage,
+    const evidence = buildEvidencePackageFromRetrieved({
+      taskType: plan.taskType,
+      requiresEvidence: requiresEvidence || allowsRegistryOnlyReference,
+      config: clinicalConfig,
+      retrieved: retrievedEvidence,
     });
 
     const isRegistryOnlyReference =
@@ -317,19 +240,21 @@ export async function POST(req: Request) {
       `Evidence status: ${evidence.status}`,
       `Registry-only reference mode: ${isRegistryOnlyReference ? 'yes' : 'no'}`,
       `Used sources: ${evidence.sources.map((source) => `${source.name} (${source.trustLevel})`).join(', ') || 'none'}`,
+      evidence.excerpts.length > 0
+        ? [
+            'Retrieved evidence excerpts:',
+            ...evidence.excerpts.map((excerpt, index) => [
+              `Excerpt ${index + 1}: ${excerpt.title || excerpt.sourceId}`,
+              excerpt.url ? `URL: ${excerpt.url}` : '',
+              excerpt.text,
+            ].filter(Boolean).join('\n')),
+          ].join('\n\n')
+        : '',
       isRegistryOnlyReference
         ? [
             'The official source registry is configured, but concrete source excerpts have not been automatically retrieved.',
             'For clinical reference or guideline comparison tasks, provide only a safe general framework, structure, and list of items to compare.',
             'Do not state exact guideline differences, target values, medication choices, dosages, treatment durations, red flags, contraindications, or referral thresholds unless they are present in retrieved evidence or a user-provided source excerpt.',
-          ].join('\n')
-        : '',
-      hasPotentialUserProvidedEvidence(privacyResult.sanitized.currentText)
-        ? [
-            'User-provided evidence excerpt is present below.',
-            'Use it as the only clinical evidence for concrete recommendations.',
-            'Do not add clinical claims, dosages, referral criteria, red flags or treatment instructions that are not supported by the excerpt.',
-            `User-provided evidence excerpt:\n${privacyResult.sanitized.currentText}`,
           ].join('\n')
         : '',
     ].filter(Boolean).join('\n\n');
