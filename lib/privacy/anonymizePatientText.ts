@@ -210,17 +210,17 @@ function buildPatternRules(localeKeys: PrivacyLocaleKey[]): PatternRule[] {
     {
       type: 'address',
       replacement: '$1 [ADDRESS]',
-      pattern: /(osoite|postiosoite|asuu osoitteessa)\s*:?\s*[^.\n]+/gi,
+      pattern: /(osoite|postiosoite|asuu osoitteessa)\s*:?\s*(?!\[ADDRESS\])[^.\n]+/gi,
     },
     {
       type: 'address',
       replacement: '$1 [ADDRESS]',
-      pattern: /\b(address|street address)\s*:?\s*\d{1,5}\s+[A-ZÅÄÖ][A-Za-zÅÄÖåäö'’-]+(?:\s+[A-ZÅÄÖ][A-Za-zÅÄÖåäö'’-]+){0,2}\s+(?:Street|St|Road|Rd|Avenue|Ave|Lane|Ln|Drive|Dr|Boulevard|Blvd|Way|Court|Ct)\b(?:,?\s*(?:Apt|Apartment|Suite|Ste)\.?\s*\w+)?/gi,
+      pattern: /\b(address|street address)\s*:?\s*(?!\[ADDRESS\])\d{1,5}\s+[A-ZÅÄÖ][A-Za-zÅÄÖåäö'’-]+(?:\s+[A-ZÅÄÖ][A-Za-zÅÄÖåäö'’-]+){0,2}\s+(?:Street|St|Road|Rd|Avenue|Ave|Lane|Ln|Drive|Dr|Boulevard|Blvd|Way|Court|Ct)\b(?:,?\s*(?:Apt|Apartment|Suite|Ste)\.?\s*\w+)?/gi,
     },
     {
       type: 'address',
       replacement: '$1 [ADDRESS]',
-      pattern: /(адрес)\s*:?\s*(?:ул\.?|улица|проспект|пр-т|пер\.?|переулок|наб\.?|набережная|бул\.?|бульвар|шоссе)\s+[A-ZÅÄÖА-ЯЁ][A-Za-zÅÄÖåäöА-Яа-яЁё'’-]+(?:\s+[A-ZÅÄÖА-ЯЁ][A-Za-zÅÄÖåäöА-Яа-яЁё'’-]+){0,2}\s+\d{1,4}(?:\s*,?\s*(?:кв\.?|квартира)\s*\d{1,4})?\b/gi,
+      pattern: /(адрес)\s*:?\s*(?!\[ADDRESS\])(?:ул\.?|улица|проспект|пр-т|пер\.?|переулок|наб\.?|набережная|бул\.?|бульвар|шоссе)\s+[A-ZÅÄÖА-ЯЁ][A-Za-zÅÄÖåäöА-Яа-яЁё'’-]+(?:\s+[A-ZÅÄÖА-ЯЁ][A-Za-zÅÄÖåäöА-Яа-яЁё'’-]+){0,2}\s+\d{1,4}(?:\s*,?\s*(?:кв\.?|квартира)\s*\d{1,4})?\b/gi,
     },
     {
       type: 'address',

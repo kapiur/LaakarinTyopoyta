@@ -129,6 +129,12 @@ const cases: TestCase[] = [
     forbiddenFragments: ['45 King Street, Apt 3'],
   },
   {
+    name: 'Already sanitized labelled address is not re-detected',
+    input: 'Potilas asuu osoitteessa [ADDRESS].',
+    expectedFragments: ['Potilas asuu osoitteessa [ADDRESS].'],
+    forbiddenFragments: [],
+  },
+  {
     name: 'Clinical dates are preserved in chat mode without identifying context',
     input: `Leikkaus tehty 12.3.2024. Kontrolli 15.4.2024.`,
     mode: 'chat',
