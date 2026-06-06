@@ -7,7 +7,13 @@ const CRITICAL_TYPES = new Set<PatientDataFindingType>([
   'phone',
   'patientId',
   'address',
+  'explicitName',
+  'dateOfBirth',
 ]);
+
+export function hasCriticalPrivacyFindingTypes(findingTypes: PatientDataFindingType[]) {
+  return findingTypes.some((type) => CRITICAL_TYPES.has(type));
+}
 
 export function severityForResidualFindings(findingTypes: PatientDataFindingType[]): PrivacySeverity {
   if (findingTypes.length === 0) return 'none';

@@ -9,6 +9,7 @@ import { authOptions } from '../../../lib/auth';
 import { logAiRunAudit } from '../../../lib/ai/audit/logAiRunAudit';
 import { prisma } from '../../../lib/prisma';
 import { preparePrivacyPayload } from '../../../lib/privacy/gateway';
+import { hasCriticalPrivacyFindingTypes } from '../../../lib/privacy/gateway/decision';
 import { runAiCompletion } from '../../../lib/ai/runAiCompletion';
 import { DEFAULT_AI_MODEL, DEFAULT_AI_PROVIDER } from '../../../lib/ai/modelRegistry';
 import {
@@ -124,6 +125,10 @@ function buildPrivacyBlockReply() {
   return 'Tekstissä havaittiin tai siihen jäi automaattisen anonymisoinnin jälkeen tunnistetietoja, joita ei voida lähettää AI-käsittelyyn turvallisesti. Poista nimi-, yhteys-, tunniste- ja osoitetiedot ja yritä uudelleen.';
 }
 
+function buildPrivacyOutputBlockReply() {
+  return 'AI-vastaus sisälsi henkilötietoihin viittaavia tietoja, joten sitä ei näytetä turvallisuussyistä. Muokkaa pyyntöä yleisemmäksi ilman tunnistetietoja ja yritä uudelleen.';
+}
+
 export async function POST(req: Request) {
   const startedAt = Date.now();
   let userId: number | null = null;
@@ -237,6 +242,45 @@ export async function POST(req: Request) {
       temperature: 0,
     });
 
+    const outputPrivacy = preparePrivacyPayload([
+      { key: 'output', value: response.content, mode: 'persistentStorage' },
+    ]);
+
+    if (
+      outputPrivacy.privacy.anonymized &&
+      hasCriticalPrivacyFindingTypes([
+        ...outputPrivacy.privacy.findingTypes,
+        ...outputPrivacy.privacy.residualFindingTypes,
+      ])
+    ) {
+      await logAiRunAudit({
+        userId,
+        surface: 'chat',
+        taskType: 'general_chat',
+        contextType: typeof mode === 'string' ? mode : messageArray && messageArray.length > 0 ? 'conversation' : 'single_turn',
+        provider: response.provider,
+        model: response.model,
+        privacyFindingTypes: Array.from(new Set([
+          ...privacy.findingTypes,
+          ...privacy.residualFindingTypes,
+          ...outputPrivacy.privacy.findingTypes,
+          ...outputPrivacy.privacy.residualFindingTypes,
+        ])),
+        blockedByEvidenceGate: false,
+        latencyMs: Date.now() - startedAt,
+        success: true,
+      });
+
+      return NextResponse.json({
+        content: buildPrivacyOutputBlockReply(),
+        privacy,
+        route: {
+          blockedByPrivacyGate: true,
+          blockedByOutputPrivacyGate: true,
+        },
+      });
+    }
+
     await logAiRunAudit({
       userId,
       surface: 'chat',
@@ -244,7 +288,12 @@ export async function POST(req: Request) {
       contextType: typeof mode === 'string' ? mode : messages && messages.length > 0 ? 'conversation' : 'single_turn',
       provider: response.provider,
       model: response.model,
-      privacyFindingTypes: Array.from(new Set([...privacy.findingTypes, ...privacy.residualFindingTypes])),
+      privacyFindingTypes: Array.from(new Set([
+        ...privacy.findingTypes,
+        ...privacy.residualFindingTypes,
+        ...outputPrivacy.privacy.findingTypes,
+        ...outputPrivacy.privacy.residualFindingTypes,
+      ])),
       blockedByEvidenceGate: false,
       latencyMs: Date.now() - startedAt,
       success: true,

@@ -5,6 +5,8 @@ import { createAgentPlan } from '../../../lib/ai/agent/agentPlanner';
 import { logAiRunAudit } from '../../../lib/ai/audit/logAiRunAudit';
 import type { AgentContextType, AgentRequestBody, AgentUiLanguage } from '../../../lib/ai/agent/types';
 import { runRoutedAiCompletion } from '../../../lib/ai/runRoutedAiCompletion';
+import { preparePrivacyPayload } from '../../../lib/privacy/gateway';
+import { hasCriticalPrivacyFindingTypes } from '../../../lib/privacy/gateway/decision';
 import { taskAllowsRegistryOnlyReference, taskRequiresEvidence } from '../../../lib/ai/taskTypes';
 import {
   buildEvidencePackageFromRetrieved,
@@ -145,6 +147,18 @@ function buildPrivacyBlockReply(language: AgentUiLanguage) {
   }
 
   return 'Tekstiin jäi automaattisen anonymisoinnin jälkeen tunnistetietoja. Agentti ei lähetä tällaista tekstiä ulkoiseen AI-palveluun. Poista nimet, yhteystiedot, tunnisteet, osoitteet ja muut henkilötiedot ja yritä uudelleen.';
+}
+
+function buildPrivacyOutputBlockReply(language: AgentUiLanguage) {
+  if (language === 'ru') {
+    return 'Ответ агента содержал данные, похожие на персональные, поэтому он скрыт по соображениям безопасности. Переформулируй запрос более общо и без идентификаторов.';
+  }
+
+  if (language === 'en') {
+    return 'The agent response appeared to contain personal data, so it has been withheld for safety. Please reformulate the request more generally and without identifiers.';
+  }
+
+  return 'Agentin vastaus sisälsi henkilötietoihin viittaavia tietoja, joten sitä ei näytetä turvallisuussyistä. Muotoile pyyntö yleisemmin ilman tunnistetietoja ja yritä uudelleen.';
 }
 
 export async function POST(req: Request) {
@@ -349,6 +363,57 @@ export async function POST(req: Request) {
       temperature: 0,
     });
 
+    const outputPrivacy = preparePrivacyPayload([
+      { key: 'output', value: result.content, mode: 'persistentStorage' },
+    ]);
+
+    if (
+      outputPrivacy.privacy.anonymized &&
+      hasCriticalPrivacyFindingTypes([
+        ...outputPrivacy.privacy.findingTypes,
+        ...outputPrivacy.privacy.residualFindingTypes,
+      ])
+    ) {
+      const reply = buildPrivacyOutputBlockReply(uiLanguage);
+
+      await logAiRunAudit({
+        userId,
+        surface: 'agent',
+        taskType: 'privacy_output_block',
+        contextType,
+        provider: result.provider,
+        model: result.model,
+        clinicalCountry: clinicalConfig.clinicalCountry,
+        evidenceStatus: localizedEvidence.status,
+        privacyFindingTypes: Array.from(new Set([
+          ...privacyResult.privacy.findingTypes,
+          ...privacyResult.privacy.residualFindingTypes,
+          ...outputPrivacy.privacy.findingTypes,
+          ...outputPrivacy.privacy.residualFindingTypes,
+        ])),
+        blockedByEvidenceGate: false,
+        latencyMs: Date.now() - startedAt,
+        success: true,
+      });
+
+      return NextResponse.json({
+        reply,
+        draft: reply,
+        suggestedActions: [],
+        taskType: 'privacy_output_block',
+        provider: null,
+        model: null,
+        route: {
+          taskType: 'privacy_output_block',
+          requiresEvidence: false,
+          blockedByPrivacyGate: true,
+          blockedByOutputPrivacyGate: true,
+        },
+        privacy: privacyResult.privacy,
+        evidence: localizedEvidence,
+      });
+    }
+
     const consistencyCheck = checkEvidenceConsistency({
       taskType: plan.taskType,
       answer: result.content,
@@ -373,6 +438,8 @@ export async function POST(req: Request) {
       privacyFindingTypes: Array.from(new Set([
         ...privacyResult.privacy.findingTypes,
         ...privacyResult.privacy.residualFindingTypes,
+        ...outputPrivacy.privacy.findingTypes,
+        ...outputPrivacy.privacy.residualFindingTypes,
       ])),
       blockedByEvidenceGate: false,
       latencyMs: Date.now() - startedAt,

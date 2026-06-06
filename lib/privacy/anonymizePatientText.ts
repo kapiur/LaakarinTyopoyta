@@ -41,19 +41,20 @@ const CONTEXT_WINDOW_CHARS = 120;
 const STRICT_CONTEXT_WINDOW_CHARS = 180;
 
 const HETU_PATTERN = /\b\d{2}(?:0[1-9]|1[0-2])\d{2}(?:[+\-A-FU-Y])\d{3}[0-9A-Z]\b/g;
-const DATE_PATTERN = /\b\d{1,2}\.\d{1,2}\.\d{2,4}\b/g;
+const DATE_PATTERN = /\b\d{1,4}[.,\/-]\d{1,2}[.,\/-]\d{1,4}\b/g;
 const PHONE_PATTERN = /(?<!\d)(?:\+358|0)\s?(?:4\d|[1-9]\d?)\s?(?:\d\s?){5,8}(?!\d)/g;
 const EMAIL_PATTERN = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
 const STAFF_CONTEXT_WORDS = 'lääkäri|laakari|hoitaja|sairaanhoitaja|terveydenhoitaja|lähihoitaja|lahihoitaja|fysioterapeutti|fysioterapeuti|toimintaterapeutti|puheterapeutti|psykologi|psykiatri|sosiaalityöntekijä|sosiaalityontekija|ravitsemusterapeutti|farmaseutti|proviisori|hammaslääkäri|hammaslaakari|suuhygienisti|kätilö|katilo|ensihoitaja|laboratoriohoitaja|röntgenhoitaja|rontgenhoitaja|ammattilainen|ammattihenkilö|ammattihenkilo';
-const PERSON_CONTEXT_PATTERN = new RegExp(`\\b(?:potilas|nimi|name|syntynyt|synt\\.|s\\.|dob|henkilötunnus|hetu|vaimo|puoliso|aviopuoliso|mies|nainen|tyttö|poika|lapsi|äiti|isä|tytär|veli|sisko|sisar|omainen|lähiomainen|huoltaja|${STAFF_CONTEXT_WORDS})\\b`, 'i');
+const PERSON_CONTEXT_PATTERN = new RegExp(`\\b(?:potilas|potilaan|patient|patient name|nimi|name|имя|пациент|пациента|дата рождения|д\\.р\\.|syntynyt|synt\\.|s\\.|dob|date of birth|birth date|henkilötunnus|hetu|email|e-mail|sähköposti|почта|phone|telephone|puhelin|телефон|тел\\.|vaimo|puoliso|aviopuoliso|mies|nainen|tyttö|poika|lapsi|äiti|isä|tytär|veli|sisko|sisar|omainen|lähiomainen|huoltaja|${STAFF_CONTEXT_WORDS})\\b`, 'i');
 const RELATIVE_CONTEXT_WORD_PATTERN = /^(?:vaimo|puoliso|aviopuoliso|äiti|isä|tytär|veli|sisko|sisar|omainen|lähiomainen|huoltaja)$/i;
 const DEMOGRAPHIC_CONTEXT_WORD_PATTERN = /^(?:mies|nainen|tyttö|poika|lapsi)$/i;
 const STAFF_CONTEXT_WORD_PATTERN = new RegExp(`^(?:${STAFF_CONTEXT_WORDS})$`, 'i');
 const STAFF_ROLE_PATTERN = new RegExp(`\\b(?:${STAFF_CONTEXT_WORDS})\\b`, 'gi');
-const NAME_TOKEN = "[A-ZÅÄÖI][A-Za-zÅÄÖåäö'’-]+";
+const NAME_TOKEN = "[A-ZÅÄÖIА-ЯЁ][A-Za-zÅÄÖåäöА-Яа-яЁё'’-]+";
 const NAME_SEQUENCE = `${NAME_TOKEN}(?:\\s+${NAME_TOKEN}){1,3}`;
 const NAME_AFTER_ROLE_PATTERN = new RegExp(`^\\s+${NAME_SEQUENCE}\\b`);
 const BARE_NAME_PATTERN = new RegExp(`\\b${NAME_TOKEN}(?:\\s+${NAME_TOKEN})+\\b`, 'g');
+const STANDALONE_FULL_NAME_PATTERN = new RegExp(`^\\s*${NAME_SEQUENCE}\\s*$`);
 
 const NON_PERSON_NAME_PATTERNS = [
   /\bKeski\s+Uudenmaan\b/i,
@@ -84,7 +85,7 @@ const PATTERN_RULES: PatternRule[] = [
   {
     type: 'dateOfBirth',
     replacement: '$1 [DATE_OF_BIRTH]',
-    pattern: /\b(syntynyt|synt\.|s\.|dob|date of birth|birth date|syntymäaika)\s*:?\s*\d{1,2}\.\d{1,2}\.\d{2,4}\b/gi,
+    pattern: /\b(syntynyt|synt\.|s\.|dob|date of birth|birth date|syntymäaika|дата рождения|д\.р\.)\s*:?\s*\d{1,4}[.,\/-]\d{1,2}[.,\/-]\d{1,4}\b/gi,
   },
   {
     type: 'patientId',
@@ -94,7 +95,7 @@ const PATTERN_RULES: PatternRule[] = [
   {
     type: 'explicitName',
     replacement: '$1 [NAME]',
-    pattern: /\b(potilas|nimi|name)\s*:?\s*[A-ZÅÄÖI][A-Za-zÅÄÖåäö'’-]+(?:\s+[A-ZÅÄÖI][A-Za-zÅÄÖåäö'’-]+)+\b/g,
+    pattern: /\b(potilas|potilaan nimi|patient|patient name|nimi|name|пациент|имя)\s*:?\s*[A-ZÅÄÖIА-ЯЁ][A-Za-zÅÄÖåäöА-Яа-яЁё'’-]+(?:\s+[A-ZÅÄÖIА-ЯЁ][A-Za-zÅÄÖåäöА-Яа-яЁё'’-]+)+\b/gi,
   },
   {
     type: 'address',
@@ -258,6 +259,17 @@ function collectStrictDates(text: string, mode: AnonymizationMode): InternalFind
   return findings;
 }
 
+function collectStandaloneFullInputName(text: string, mode: AnonymizationMode): InternalFinding[] {
+  const trimmed = text.trim();
+  if (!trimmed || !STANDALONE_FULL_NAME_PATTERN.test(trimmed)) return [];
+  if (isLikelyOrganizationOrTerm(trimmed)) return [];
+
+  const start = text.indexOf(trimmed);
+  if (start < 0) return [];
+
+  return [createFinding('explicitName', trimmed, '[NAME]', start)];
+}
+
 function collectMatches(text: string, mode: AnonymizationMode): InternalFinding[] {
   const findings = [
     ...collectPatternMatches(text),
@@ -265,6 +277,7 @@ function collectMatches(text: string, mode: AnonymizationMode): InternalFinding[
     ...collectBareDatesNearIdentifiers(text, mode),
     ...collectBareNamesNearIdentifiers(text, mode),
     ...collectStrictDates(text, mode),
+    ...collectStandaloneFullInputName(text, mode),
   ];
 
   return findings.sort((a, b) => {
