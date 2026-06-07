@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import { NextResponse } from "next/server";
+import bcrypt from "bcryptjs";
 import { requireAdmin } from "../../../../../lib/admin-auth";
 
 const prisma = new PrismaClient();
@@ -13,6 +14,10 @@ function parseUserId(value: string) {
   return Number.isInteger(userId) ? userId : null;
 }
 
+function validatePassword(value: unknown) {
+  return typeof value === "string" && value.length >= 8;
+}
+
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
   const { session, error } = await requireAdmin();
   if (error) return error;
@@ -23,7 +28,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   }
 
   try {
-    const { email, name, isActive, mustChangePassword } = await req.json();
+    const { email, name, isActive, mustChangePassword, newPassword } = await req.json();
 
     const currentUserId = Number((session?.user as any)?.id);
     const targetUser = await prisma.user.findUnique({ where: { id: userId } });
@@ -57,6 +62,14 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
     if (typeof mustChangePassword === "boolean") {
       data.mustChangePassword = mustChangePassword;
+    }
+
+    if (typeof newPassword === "string" && newPassword.trim().length > 0) {
+      if (!validatePassword(newPassword)) {
+        return NextResponse.json({ error: "Uuden salasanan tulee olla vähintään 8 merkkiä" }, { status: 400 });
+      }
+
+      data.password = await bcrypt.hash(newPassword, 12);
     }
 
     const updatedUser = await prisma.user.update({
