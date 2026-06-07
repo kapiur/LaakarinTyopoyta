@@ -5,6 +5,8 @@ import { prisma } from '../../../../lib/prisma';
 import { normalizeUiLanguage } from '../../../../lib/i18n/config';
 import { getPracticeCountryDefaults, normalizePracticeCountry, PRACTICE_COUNTRIES } from '../../../../lib/clinical/practice/practiceCountryRegistry';
 import { normalizeClinicalCountry, normalizeClinicalOutputLanguage, normalizeEvidenceStrictness } from '../../../../lib/clinical/countries/countryRegistry';
+import { ensureClinicalSourceSeeds } from '../../../../lib/clinical/sources/ensureClinicalSources';
+import { applyCountryDefaultSourcePreferences } from '../../../../lib/clinical/sources/applyCountryDefaultSourcePreferences';
 
 function getUserId(session: unknown) {
   const userId = Number((session as any)?.user?.id);
@@ -67,6 +69,7 @@ export async function PUT(req: Request) {
     const practiceCountry = normalizePracticeCountry(body?.practiceCountry);
     const usePracticeCountryDefaults = body?.usePracticeCountryDefaults !== false;
     const defaults = getPracticeCountryDefaults(practiceCountry);
+    await ensureClinicalSourceSeeds();
 
     await prisma.$transaction(async (tx) => {
       await tx.userClinicalSettings.upsert({
@@ -90,12 +93,13 @@ export async function PUT(req: Request) {
           clinicalCountry: defaults.defaultClinicalCountry,
           clinicalOutputLanguage: defaults.defaultClinicalOutputLanguage,
           evidenceStrictness: defaults.defaultEvidenceStrictness,
-          allowLocalSources: true,
-          allowSupplementarySources: false,
+              allowLocalSources: true,
+              allowSupplementarySources: false,
         },
       });
 
       if (usePracticeCountryDefaults) {
+        await applyCountryDefaultSourcePreferences(tx, userId, defaults.defaultClinicalCountry);
         await tx.user.update({
           where: { id: userId },
           data: { uiLanguage: defaults.defaultUiLanguage },

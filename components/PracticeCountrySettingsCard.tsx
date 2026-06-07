@@ -128,6 +128,7 @@ export default function PracticeCountrySettingsCard() {
       if (!res.ok) throw new Error(data.error || l.failed);
       setSettings(data.settings);
       setLanguage(data.settings.uiLanguage);
+      window.dispatchEvent(new CustomEvent("workspace-context-updated", { detail: data.settings }));
       setMessage(l.saved);
     } catch (error) {
       console.error(error);

@@ -185,6 +185,18 @@ export default function ClinicalEvidenceSettingsCard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    function handleWorkspaceContextUpdated() {
+      loadSettings();
+    }
+
+    window.addEventListener("workspace-context-updated", handleWorkspaceContextUpdated);
+    return () => {
+      window.removeEventListener("workspace-context-updated", handleWorkspaceContextUpdated);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function saveSettings(nextSettings = settings) {
     if (!nextSettings) return;
     setSaving(true);
