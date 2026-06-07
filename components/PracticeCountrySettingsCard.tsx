@@ -38,6 +38,9 @@ const labels = {
     clinicalCountry: "Kliininen maa",
     clinicalLanguage: "Kliinisen tekstin kieli",
     mode: "Lähdetila",
+    current: "Nykyinen tila",
+    fromCountry: "Maan oletus käytössä",
+    custom: "Yliajettu käsin",
     save: "Tallenna työympäristö",
     saved: "Työympäristö tallennettu.",
     failed: "Työympäristön tallennus epäonnistui.",
@@ -54,6 +57,9 @@ const labels = {
     clinicalCountry: "Клиническая страна",
     clinicalLanguage: "Язык клинического текста",
     mode: "Режим источников",
+    current: "Текущее состояние",
+    fromCountry: "По умолчанию от страны",
+    custom: "Переопределено вручную",
     save: "Сохранить рабочий контекст",
     saved: "Рабочий контекст сохранен.",
     failed: "Не удалось сохранить рабочий контекст.",
@@ -70,6 +76,9 @@ const labels = {
     clinicalCountry: "Clinical country",
     clinicalLanguage: "Clinical text language",
     mode: "Evidence mode",
+    current: "Current behavior",
+    fromCountry: "Using country default",
+    custom: "Manually overridden",
     save: "Save workspace context",
     saved: "Workspace context saved.",
     failed: "Could not save workspace context.",
@@ -91,6 +100,40 @@ export default function PracticeCountrySettingsCard() {
     () => countries.find((country) => country.code === settings?.practiceCountry) ?? null,
     [countries, settings?.practiceCountry]
   );
+  const fieldStatuses = useMemo(() => {
+    if (!settings || !selectedCountry) return [];
+
+    return [
+      {
+        key: "uiLanguage",
+        label: l.uiLanguage,
+        currentValue: settings.uiLanguage,
+        followsDefault: settings.usePracticeCountryDefaults && settings.uiLanguage === selectedCountry.defaultUiLanguage,
+      },
+      {
+        key: "clinicalCountry",
+        label: l.clinicalCountry,
+        currentValue: settings.clinicalCountry,
+        followsDefault: settings.usePracticeCountryDefaults && settings.clinicalCountry === selectedCountry.defaultClinicalCountry,
+      },
+      {
+        key: "clinicalOutputLanguage",
+        label: l.clinicalLanguage,
+        currentValue: settings.clinicalOutputLanguage,
+        followsDefault:
+          settings.usePracticeCountryDefaults &&
+          settings.clinicalOutputLanguage === selectedCountry.defaultClinicalOutputLanguage,
+      },
+      {
+        key: "evidenceStrictness",
+        label: l.mode,
+        currentValue: settings.evidenceStrictness,
+        followsDefault:
+          settings.usePracticeCountryDefaults &&
+          settings.evidenceStrictness === selectedCountry.defaultEvidenceStrictness,
+      },
+    ];
+  }, [l.clinicalCountry, l.clinicalLanguage, l.mode, l.uiLanguage, selectedCountry, settings]);
 
   async function loadContext() {
     setLoading(true);
@@ -191,7 +234,7 @@ export default function PracticeCountrySettingsCard() {
       </div>
 
       {selectedCountry && (
-        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-4">
           <div className="text-xs font-bold uppercase tracking-wider text-slate-500">{l.recommended}</div>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 text-sm">
             <div>
@@ -209,6 +252,27 @@ export default function PracticeCountrySettingsCard() {
             <div>
               <div className="text-[11px] font-bold uppercase tracking-wide text-slate-400">{l.mode}</div>
               <div className="font-semibold text-slate-800">{selectedCountry.defaultEvidenceStrictness}</div>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <div className="text-xs font-bold uppercase tracking-wider text-slate-500">{l.current}</div>
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 text-sm">
+              {fieldStatuses.map((field) => (
+                <div key={field.key} className="rounded-xl border border-slate-200 bg-white px-3 py-3 space-y-2">
+                  <div className="text-[11px] font-bold uppercase tracking-wide text-slate-400">{field.label}</div>
+                  <div className="font-semibold text-slate-900">{field.currentValue}</div>
+                  <span
+                    className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-bold ${
+                      field.followsDefault
+                        ? "border border-emerald-200 bg-emerald-50 text-emerald-700"
+                        : "border border-amber-200 bg-amber-50 text-amber-800"
+                    }`}
+                  >
+                    {field.followsDefault ? l.fromCountry : l.custom}
+                  </span>
+                </div>
+              ))}
             </div>
           </div>
         </div>

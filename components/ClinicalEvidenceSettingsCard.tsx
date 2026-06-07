@@ -15,6 +15,8 @@ type ClinicalCountry = {
 type EvidenceStrictness = "strict" | "balanced" | "local-aware";
 
 type ClinicalSettings = {
+  practiceCountry?: "FI" | "RU";
+  usePracticeCountryDefaults?: boolean;
   clinicalCountry: "FI" | "RU";
   clinicalOutputLanguage: string;
   evidenceStrictness: EvidenceStrictness;
@@ -44,6 +46,8 @@ const labels = {
     country: "Kliininen maa",
     clinicalLanguage: "Kliinisen tekstin kieli",
     strictness: "Miten tiukasti lähteitä käytetään",
+    fromCountry: "Maan oletus käytössä",
+    custom: "Yliajettu käsin",
     strictnessHelp: "Suositus: pidä turvallisin tila päällä kliinisessä työssä. Agentti ei saa antaa hoito-ohjeita ilman virallista lähdetukea.",
     allowLocal: "Salli paikalliset ohjeet",
     allowSupplementary: "Salli täydentävät lähteet",
@@ -78,6 +82,8 @@ const labels = {
     country: "Страна рекомендаций",
     clinicalLanguage: "Язык клинического текста",
     strictness: "Как строго использовать источники",
+    fromCountry: "По умолчанию от страны работы",
+    custom: "Переопределено вручную",
     strictnessHelp: "Рекомендация: для клинической работы оставлять самый безопасный режим. Агент не должен давать лечебные рекомендации без официального источника.",
     allowLocal: "Разрешить локальные инструкции",
     allowSupplementary: "Разрешить дополнительные источники",
@@ -112,6 +118,8 @@ const labels = {
     country: "Clinical country",
     clinicalLanguage: "Clinical text language",
     strictness: "How strictly sources are used",
+    fromCountry: "Using practice-country default",
+    custom: "Manually overridden",
     strictnessHelp: "Recommended: keep the safest mode for clinical work. The agent must not provide treatment recommendations without official source support.",
     allowLocal: "Allow local instructions",
     allowSupplementary: "Allow supplementary sources",
@@ -156,6 +164,12 @@ export default function ClinicalEvidenceSettingsCard() {
 
   const selectedCountry = useMemo(() => countries.find((country) => country.code === settings?.clinicalCountry), [countries, settings?.clinicalCountry]);
   const selectedEvidenceMode = settings ? l.evidenceModes[settings.evidenceStrictness] : null;
+  const followsCountryDefaults =
+    !!settings?.usePracticeCountryDefaults &&
+    !!selectedCountry &&
+    settings.clinicalCountry === selectedCountry.code &&
+    settings.clinicalOutputLanguage === selectedCountry.defaultClinicalOutputLanguage &&
+    settings.evidenceStrictness === selectedCountry.defaultEvidenceStrictness;
 
   async function loadSettings() {
     setLoading(true);
@@ -261,6 +275,17 @@ export default function ClinicalEvidenceSettingsCard() {
         <div>
           <h2 className="text-lg font-bold text-slate-900">{l.title}</h2>
           <p className="text-sm text-slate-500">{l.description}</p>
+          <div className="mt-3">
+            <span
+              className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-bold ${
+                followsCountryDefaults
+                  ? "border border-emerald-200 bg-emerald-50 text-emerald-700"
+                  : "border border-amber-200 bg-amber-50 text-amber-800"
+              }`}
+            >
+              {followsCountryDefaults ? l.fromCountry : l.custom}
+            </span>
+          </div>
         </div>
       </div>
 

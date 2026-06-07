@@ -1,15 +1,59 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Languages, Loader2 } from "lucide-react";
 import { SUPPORTED_UI_LANGUAGES, type UiLanguage } from "../lib/i18n/config";
 import { useI18n } from "../lib/useI18n";
+
+type WorkspaceContextSnapshot = {
+  usePracticeCountryDefaults: boolean;
+  uiLanguage: UiLanguage;
+  practiceCountry: "FI" | "RU";
+};
 
 export default function LanguageSettingsCard() {
   const { language, setLanguage, t } = useI18n();
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [workspaceContext, setWorkspaceContext] = useState<WorkspaceContextSnapshot | null>(null);
+
+  const overrideStatus = useMemo(() => {
+    if (!workspaceContext) return null;
+    return workspaceContext.usePracticeCountryDefaults
+      ? {
+          text: language === "ru" ? "По умолчанию от страны работы" : language === "en" ? "Using practice-country default" : "Työskentelymaan oletus käytössä",
+          className: "border border-emerald-200 bg-emerald-50 text-emerald-700",
+        }
+      : {
+          text: language === "ru" ? "Переопределено вручную" : language === "en" ? "Manually overridden" : "Yliajettu käsin",
+          className: "border border-amber-200 bg-amber-50 text-amber-800",
+        };
+  }, [language, workspaceContext]);
+
+  async function loadWorkspaceContext() {
+    try {
+      const response = await fetch("/api/profile/workspace-context");
+      const data = await response.json();
+      if (!response.ok) return;
+      setWorkspaceContext(data.settings);
+    } catch {
+      // keep card usable even if context fetch fails
+    }
+  }
+
+  useEffect(() => {
+    loadWorkspaceContext();
+
+    function handleWorkspaceContextUpdated() {
+      loadWorkspaceContext();
+    }
+
+    window.addEventListener("workspace-context-updated", handleWorkspaceContextUpdated);
+    return () => {
+      window.removeEventListener("workspace-context-updated", handleWorkspaceContextUpdated);
+    };
+  }, []);
 
   async function saveLanguage(nextLanguage: UiLanguage) {
     setSaving(true);
@@ -29,6 +73,15 @@ export default function LanguageSettingsCard() {
 
       const data = await response.json();
       setLanguage(data.uiLanguage);
+      setWorkspaceContext((current) =>
+        current
+          ? {
+              ...current,
+              uiLanguage: data.uiLanguage,
+              usePracticeCountryDefaults: false,
+            }
+          : current
+      );
       setStatus(t("settings.languageSaved"));
     } catch (err: any) {
       setError(err.message || t("settings.languageSaveFailed"));
@@ -47,6 +100,13 @@ export default function LanguageSettingsCard() {
           <div>
             <h2 className="text-lg font-bold text-slate-900">{t("settings.languageTitle")}</h2>
             <p className="text-sm text-slate-500">{t("settings.languageDescription")}</p>
+            {overrideStatus && (
+              <div className="mt-3">
+                <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-bold ${overrideStatus.className}`}>
+                  {overrideStatus.text}
+                </span>
+              </div>
+            )}
           </div>
 
           <div className="flex flex-col sm:flex-row sm:items-center gap-3">
