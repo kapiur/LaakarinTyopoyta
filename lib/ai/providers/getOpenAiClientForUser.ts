@@ -1,13 +1,14 @@
 import { OpenAI } from "openai";
 import { prisma } from "../../prisma";
 import { resolveAiCredential } from "../credentials/resolveAiCredential";
+import { getProviderDefaultModel, isOpenAiCompatibleProvider, normalizeModelForProvider } from "../modelRegistry";
 import { getUserAiSettings } from "../userAiSettings";
 
 export async function getOpenAiClientForUser(userId: number, fallbackModel = "gpt-5.4") {
   const settings = await getUserAiSettings(userId);
   const provider = settings.defaultProvider || "openai";
 
-  if (provider !== "openai") {
+  if (!isOpenAiCompatibleProvider(provider)) {
     throw new Error(`Selected AI provider is not yet supported for this route: ${provider}`);
   }
 
@@ -21,7 +22,7 @@ export async function getOpenAiClientForUser(userId: number, fallbackModel = "gp
     await prisma.userAiCredential.updateMany({
       where: {
         userId,
-        provider: "openai",
+        provider,
       },
       data: {
         lastUsedAt: new Date(),
@@ -30,7 +31,7 @@ export async function getOpenAiClientForUser(userId: number, fallbackModel = "gp
   } else if (secret.source === "platform") {
     await prisma.aiProviderCredential.updateMany({
       where: {
-        provider: "openai",
+        provider,
       },
       data: {
         lastUsedAt: new Date(),
@@ -43,7 +44,7 @@ export async function getOpenAiClientForUser(userId: number, fallbackModel = "gp
       apiKey: secret.value,
       ...(secret.baseUrl ? { baseURL: secret.baseUrl } : {}),
     }),
-    model: secret.defaultModel || settings.defaultModel || fallbackModel,
+    model: normalizeModelForProvider(provider, secret.defaultModel || settings.defaultModel || fallbackModel || getProviderDefaultModel(provider)),
     credentialSource: secret.source ?? "platform",
   };
 }

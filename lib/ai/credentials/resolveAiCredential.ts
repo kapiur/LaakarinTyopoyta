@@ -1,5 +1,6 @@
 import { prisma } from '../../prisma';
 import { decryptSecret } from '../../security/secretCrypto';
+import { getProviderDefaultModel, getProviderOpenAiCompatibleBaseUrl } from '../modelRegistry';
 import { getUserAiAccessPolicy, isProviderAllowedForUser, type AiCredentialMode } from '../userAiSettings';
 import type { AiProviderKey, AiProviderSecret } from '../providers/types';
 
@@ -33,7 +34,28 @@ function getEnvSecret(provider: AiProviderKey): AiProviderSecret | null {
     };
   }
 
+  if (provider === 'google') {
+    const value = process.env.GEMINI_API_KEY;
+    if (!value) return null;
+
+    return {
+      provider,
+      value,
+      baseUrl: getProviderOpenAiCompatibleBaseUrl(provider),
+      defaultModel: getProviderDefaultModel(provider),
+      source: 'env',
+    };
+  }
+
   return null;
+}
+
+function applyProviderDefaults(secret: AiProviderSecret): AiProviderSecret {
+  return {
+    ...secret,
+    baseUrl: secret.baseUrl || getProviderOpenAiCompatibleBaseUrl(secret.provider),
+    defaultModel: secret.defaultModel || getProviderDefaultModel(secret.provider),
+  };
 }
 
 async function getPlatformSecret(provider: AiProviderKey): Promise<AiProviderSecret | null> {
@@ -48,19 +70,20 @@ async function getPlatformSecret(provider: AiProviderKey): Promise<AiProviderSec
     const credential = rows[0];
 
     if (credential) {
-      return {
+      return applyProviderDefaults({
         provider,
         value: decryptSecret(credential.encryptedSecret),
         baseUrl: credential.baseUrl,
         defaultModel: credential.defaultModel,
         source: 'platform',
-      };
+      });
     }
   } catch (error) {
     console.error('Platform AI credential loading failed, falling back to env credential if available:', error);
   }
 
-  return getEnvSecret(provider);
+  const envSecret = getEnvSecret(provider);
+  return envSecret ? applyProviderDefaults(envSecret) : null;
 }
 
 async function getUserSecret(userId: number, provider: AiProviderKey): Promise<AiProviderSecret | null> {
@@ -76,13 +99,13 @@ async function getUserSecret(userId: number, provider: AiProviderKey): Promise<A
 
     if (!credential) return null;
 
-    return {
+    return applyProviderDefaults({
       provider,
       value: decryptSecret(credential.encryptedSecret),
       baseUrl: credential.baseUrl,
       defaultModel: credential.defaultModel,
       source: "user",
-    };
+    });
   } catch (error) {
     console.error("User AI credential loading failed:", error);
     return null;

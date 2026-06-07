@@ -1,4 +1,5 @@
 import { resolveAiCredential } from './credentials/resolveAiCredential';
+import { isOpenAiCompatibleProvider, normalizeModelForProvider } from './modelRegistry';
 import { runOpenAiCompletion } from './providers/openai';
 import { getUserAiSettings } from './userAiSettings';
 import type { RunAiCompletionInput, RunAiCompletionResult } from './providers/types';
@@ -12,9 +13,9 @@ export async function runAiCompletion(input: RunAiCompletionInput): Promise<RunA
     provider,
     credentialMode: userSettings.credentialMode,
   });
-  const model = secret.defaultModel || requestedModel;
+  const model = normalizeModelForProvider(provider, secret.defaultModel || requestedModel);
 
-  if (provider === 'openai') {
+  if (isOpenAiCompatibleProvider(provider)) {
     return runOpenAiCompletion({
       ...input,
       provider,

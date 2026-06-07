@@ -1,13 +1,13 @@
 import { NextResponse } from 'next/server';
 import { requireAuthenticatedUser } from '../../../../lib/admin-auth';
 import { prisma } from '../../../../lib/prisma';
-import { AI_MODEL_REGISTRY, DEFAULT_AI_MODEL, DEFAULT_AI_PROVIDER } from '../../../../lib/ai/modelRegistry';
+import { AI_MODEL_REGISTRY, DEFAULT_AI_MODEL, DEFAULT_AI_PROVIDER, getProviderDefaultModel } from '../../../../lib/ai/modelRegistry';
 import { getUserAiAccessPolicy, getUserAiSettings, normalizeCredentialMode, normalizeProvider } from '../../../../lib/ai/userAiSettings';
 
-function normalizeOptionalModel(value: unknown) {
-  if (typeof value !== 'string') return DEFAULT_AI_MODEL;
+function normalizeOptionalModel(value: unknown, provider: keyof typeof AI_MODEL_REGISTRY) {
+  if (typeof value !== 'string') return getProviderDefaultModel(provider);
   const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : DEFAULT_AI_MODEL;
+  return trimmed.length > 0 ? trimmed : getProviderDefaultModel(provider);
 }
 
 export async function GET() {
@@ -44,7 +44,7 @@ export async function PUT(req: Request) {
     const body = await req.json();
     const policy = await getUserAiAccessPolicy(userId);
     const defaultProvider = normalizeProvider(body?.defaultProvider ?? DEFAULT_AI_PROVIDER);
-    const defaultModel = normalizeOptionalModel(body?.defaultModel ?? DEFAULT_AI_MODEL);
+    const defaultModel = normalizeOptionalModel(body?.defaultModel ?? DEFAULT_AI_MODEL, defaultProvider);
     const credentialMode = normalizeCredentialMode(body?.credentialMode);
     const allowAgentModelSelection = body?.allowAgentModelSelection !== false;
 
