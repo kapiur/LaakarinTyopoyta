@@ -3,6 +3,7 @@ import { requireAuthenticatedUser } from '../../../../lib/admin-auth';
 import { prisma } from '../../../../lib/prisma';
 import { CLINICAL_COUNTRIES, getClinicalCountryConfig, normalizeClinicalCountry, normalizeClinicalOutputLanguage, normalizeEvidenceStrictness } from '../../../../lib/clinical/countries/countryRegistry';
 import { getUserClinicalEvidenceConfig } from '../../../../lib/clinical/evidence/userClinicalSettings';
+import { DEFAULT_PRACTICE_COUNTRY, normalizePracticeCountry } from '../../../../lib/clinical/practice/practiceCountryRegistry';
 import { ensureClinicalSourceSeeds } from '../../../../lib/clinical/sources/ensureClinicalSources';
 
 export async function GET() {
@@ -17,6 +18,8 @@ export async function GET() {
 
   return NextResponse.json({
     settings: {
+      practiceCountry: config.practiceCountry,
+      usePracticeCountryDefaults: config.usePracticeCountryDefaults,
       clinicalCountry: config.clinicalCountry,
       clinicalOutputLanguage: config.clinicalOutputLanguage,
       evidenceStrictness: config.evidenceStrictness,
@@ -42,10 +45,17 @@ export async function PUT(req: Request) {
     const evidenceStrictness = normalizeEvidenceStrictness(body?.evidenceStrictness ?? countryConfig.defaultEvidenceStrictness);
     const allowLocalSources = body?.allowLocalSources !== false;
     const allowSupplementarySources = body?.allowSupplementarySources === true;
+    const currentSettings = await prisma.userClinicalSettings.findUnique({
+      where: { userId },
+      select: { practiceCountry: true },
+    });
+    const practiceCountry = normalizePracticeCountry(currentSettings?.practiceCountry ?? DEFAULT_PRACTICE_COUNTRY);
 
     await prisma.userClinicalSettings.upsert({
       where: { userId },
       update: {
+        practiceCountry,
+        usePracticeCountryDefaults: false,
         clinicalCountry,
         clinicalOutputLanguage,
         evidenceStrictness,
@@ -54,6 +64,8 @@ export async function PUT(req: Request) {
       },
       create: {
         userId,
+        practiceCountry,
+        usePracticeCountryDefaults: false,
         clinicalCountry,
         clinicalOutputLanguage,
         evidenceStrictness,

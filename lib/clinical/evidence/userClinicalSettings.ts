@@ -1,5 +1,6 @@
 import { prisma } from '../../prisma';
 import { getClinicalCountryConfig, normalizeClinicalCountry, normalizeClinicalOutputLanguage, normalizeEvidenceStrictness } from '../countries/countryRegistry';
+import { DEFAULT_PRACTICE_COUNTRY, normalizePracticeCountry, type PracticeCountryCode } from '../practice/practiceCountryRegistry';
 import { CLINICAL_SOURCE_SEEDS, getDefaultClinicalSources } from '../sources/sourceRegistry';
 
 export type UserClinicalEvidenceSource = {
@@ -16,6 +17,8 @@ export type UserClinicalEvidenceSource = {
 };
 
 export type UserClinicalEvidenceConfig = {
+  practiceCountry: PracticeCountryCode;
+  usePracticeCountryDefaults: boolean;
   clinicalCountry: 'FI' | 'RU';
   clinicalOutputLanguage: string;
   evidenceStrictness: 'strict' | 'balanced' | 'local-aware';
@@ -53,6 +56,8 @@ function seedToEvidenceSource(source: (typeof CLINICAL_SOURCE_SEEDS)[number]): U
 }
 
 export async function getUserClinicalEvidenceConfig(userId: number): Promise<UserClinicalEvidenceConfig> {
+  let practiceCountry: PracticeCountryCode = DEFAULT_PRACTICE_COUNTRY;
+  let usePracticeCountryDefaults = true;
   let clinicalCountry: 'FI' | 'RU' = 'FI';
   let clinicalOutputLanguage = 'fi';
   let evidenceStrictness: 'strict' | 'balanced' | 'local-aware' = 'strict';
@@ -61,13 +66,15 @@ export async function getUserClinicalEvidenceConfig(userId: number): Promise<Use
 
   try {
     const rows = await prisma.$queryRaw<Array<{
+      practiceCountry: string;
+      usePracticeCountryDefaults: boolean;
       clinicalCountry: string;
       clinicalOutputLanguage: string;
       evidenceStrictness: string;
       allowLocalSources: boolean;
       allowSupplementarySources: boolean;
     }>>`
-      SELECT "clinicalCountry", "clinicalOutputLanguage", "evidenceStrictness", "allowLocalSources", "allowSupplementarySources"
+      SELECT "practiceCountry", "usePracticeCountryDefaults", "clinicalCountry", "clinicalOutputLanguage", "evidenceStrictness", "allowLocalSources", "allowSupplementarySources"
       FROM "UserClinicalSettings"
       WHERE "userId" = ${userId}
       LIMIT 1
@@ -75,6 +82,8 @@ export async function getUserClinicalEvidenceConfig(userId: number): Promise<Use
 
     const row = rows[0];
     if (row) {
+      practiceCountry = normalizePracticeCountry(row.practiceCountry);
+      usePracticeCountryDefaults = row.usePracticeCountryDefaults !== false;
       clinicalCountry = normalizeClinicalCountry(row.clinicalCountry);
       clinicalOutputLanguage = normalizeClinicalOutputLanguage(clinicalCountry, row.clinicalOutputLanguage);
       evidenceStrictness = normalizeEvidenceStrictness(row.evidenceStrictness);
@@ -143,6 +152,8 @@ export async function getUserClinicalEvidenceConfig(userId: number): Promise<Use
   }
 
   return {
+    practiceCountry,
+    usePracticeCountryDefaults,
     clinicalCountry,
     clinicalOutputLanguage,
     evidenceStrictness,

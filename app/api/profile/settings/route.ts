@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "../../../../lib/auth";
 import { prisma } from "../../../../lib/prisma";
 import { normalizeUiLanguage, isSupportedUiLanguage } from "../../../../lib/i18n/config";
+import { DEFAULT_PRACTICE_COUNTRY } from "../../../../lib/clinical/practice/practiceCountryRegistry";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -39,6 +40,18 @@ export async function PATCH(req: Request) {
     where: { id: userId },
     data: { uiLanguage },
     select: { uiLanguage: true },
+  });
+
+  await prisma.userClinicalSettings.upsert({
+    where: { userId },
+    update: {
+      usePracticeCountryDefaults: false,
+    },
+    create: {
+      userId,
+      practiceCountry: DEFAULT_PRACTICE_COUNTRY,
+      usePracticeCountryDefaults: false,
+    },
   });
 
   return NextResponse.json({ uiLanguage: normalizeUiLanguage(user.uiLanguage) });

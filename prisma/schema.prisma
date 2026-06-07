@@ -284,6 +284,8 @@ model UserClinicalSettings {
   id                       String   @id @default(cuid())
   userId                   Int      @unique
   user                     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  practiceCountry          String   @default("FI")
+  usePracticeCountryDefaults Boolean @default(true)
   clinicalCountry           String   @default("FI")
   clinicalOutputLanguage    String   @default("fi")
   evidenceStrictness        String   @default("strict")
@@ -293,6 +295,7 @@ model UserClinicalSettings {
   updatedAt                DateTime @updatedAt
 
   @@index([clinicalCountry])
+  @@index([practiceCountry])
 }
 
 model ClinicalSource {

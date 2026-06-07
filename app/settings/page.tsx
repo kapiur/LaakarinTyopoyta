@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { Bot, BrainCircuit, DatabaseZap, KeyRound, KeySquare, Settings, Shield, Users } from "lucide-react";
+import PracticeCountrySettingsCard from "../../components/PracticeCountrySettingsCard";
 import LanguageSettingsCard from "../../components/LanguageSettingsCard";
 import AiProfileSettingsCard from "../../components/AiProfileSettingsCard";
 import AiProviderSettingsCard from "../../components/AiProviderSettingsCard";
@@ -34,11 +35,12 @@ export default function SettingsPage() {
         </div>
       </header>
 
+      <PracticeCountrySettingsCard />
       <LanguageSettingsCard />
+      <ClinicalEvidenceSettingsCard />
       <CalculatorVisibilitySettingsCard />
       <AiProfileSettingsCard />
       <AiProviderSettingsCard />
-      <ClinicalEvidenceSettingsCard />
 
       <section className="grid grid-cols-1 md:grid-cols-2 gap-5">
         <Link href="/profile/security" className="group bg-white border border-slate-200 rounded-[2rem] p-6 shadow-sm hover:shadow-md hover:border-blue-200 transition-all">
