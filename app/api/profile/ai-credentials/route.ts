@@ -30,6 +30,7 @@ export async function GET() {
         provider: true,
         keyPreview: true,
         baseUrl: true,
+        projectId: true,
         defaultModel: true,
         lastUsedAt: true,
         createdAt: true,
@@ -69,6 +70,7 @@ export async function PUT(req: Request) {
     const provider = normalizeProvider(body?.provider);
     const secret = normalizeOptionalString(body?.secret);
     const baseUrl = normalizeOptionalString(body?.baseUrl);
+    const projectId = normalizeOptionalString(body?.projectId);
     const defaultModel = normalizeOptionalString(body?.defaultModel);
 
     if (!provider) {
@@ -77,6 +79,10 @@ export async function PUT(req: Request) {
 
     if (!secret) {
       return NextResponse.json({ error: "API-avain puuttuu" }, { status: 400 });
+    }
+
+    if (provider === "yandex" && !projectId) {
+      return NextResponse.json({ error: "YandexGPT vaatii folder / project ID:n" }, { status: 400 });
     }
 
     if (policy.allowedProviders.length > 0 && !policy.allowedProviders.includes(provider)) {
@@ -97,6 +103,7 @@ export async function PUT(req: Request) {
         encryptedSecret,
         keyPreview,
         baseUrl,
+        projectId,
         defaultModel,
       },
       create: {
@@ -105,6 +112,7 @@ export async function PUT(req: Request) {
         encryptedSecret,
         keyPreview,
         baseUrl,
+        projectId,
         defaultModel,
       },
     });
@@ -115,6 +123,7 @@ export async function PUT(req: Request) {
         provider,
         keyPreview,
         baseUrl,
+        projectId,
         defaultModel,
       },
     });

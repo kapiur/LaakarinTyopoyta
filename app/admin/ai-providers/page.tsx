@@ -11,6 +11,7 @@ type ProviderCredential = {
   label: string | null;
   keyPreview: string | null;
   baseUrl: string | null;
+  projectId: string | null;
   isEnabled: boolean;
   isDefault: boolean;
   defaultModel: string | null;
@@ -30,6 +31,7 @@ type FormState = {
   label: string;
   secret: string;
   baseUrl: string;
+  projectId: string;
   isEnabled: boolean;
   isDefault: boolean;
   defaultModel: string;
@@ -41,6 +43,7 @@ const initialForm: FormState = {
   label: "OpenAI",
   secret: "",
   baseUrl: "",
+  projectId: "",
   isEnabled: true,
   isDefault: true,
   defaultModel: "gpt-5.4",
@@ -119,6 +122,7 @@ export default function AdminAiProvidersPage() {
       label: provider.label || "",
       secret: "",
       baseUrl: provider.baseUrl || "",
+      projectId: provider.projectId || "",
       isEnabled: provider.isEnabled,
       isDefault: provider.isDefault,
       defaultModel: provider.defaultModel || "",
@@ -241,6 +245,7 @@ export default function AdminAiProvidersPage() {
           <input value={form.defaultModel} onChange={(event) => setForm({ ...form, defaultModel: event.target.value })} placeholder={tt("defaultModelPlaceholder")} className="px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-blue-100" />
           <input type="password" value={form.secret} onChange={(event) => setForm({ ...form, secret: event.target.value })} placeholder={editingId ? tt("newSecretPlaceholder") : tt("secretPlaceholder")} className="px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-blue-100" />
           <input value={form.baseUrl} onChange={(event) => setForm({ ...form, baseUrl: event.target.value })} placeholder={tt("baseUrlPlaceholder")} className="px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-blue-100" />
+          <input value={form.projectId} onChange={(event) => setForm({ ...form, projectId: event.target.value })} placeholder={tt("projectIdPlaceholder")} className="px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-blue-100" />
           <input value={form.allowedModels} onChange={(event) => setForm({ ...form, allowedModels: event.target.value })} placeholder={tt("allowedModelsPlaceholder")} className="px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-blue-100" />
         </div>
 
@@ -278,6 +283,7 @@ export default function AdminAiProvidersPage() {
                   <div>Model: <span className="font-semibold text-slate-700">{provider.defaultModel || "-"}</span></div>
                   <div>{tt("testedAt")}: <span className="font-semibold text-slate-700">{formatDate(provider.lastTestedAt)}</span></div>
                   <div>Base URL: <span className="font-semibold text-slate-700">{provider.baseUrl || "-"}</span></div>
+                  <div>Project: <span className="font-semibold text-slate-700">{provider.projectId || "-"}</span></div>
                   <div>{tt("allowed")}: <span className="font-semibold text-slate-700">{modelsToText(provider.allowedModels || []) || "-"}</span></div>
                   <div>{tt("lastUsed")}: <span className="font-semibold text-slate-700">{formatDate(provider.lastUsedAt)}</span></div>
                 </div>

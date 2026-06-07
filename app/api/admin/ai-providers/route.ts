@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '../../../../lib/prisma';
 import { requireAdmin } from '../../../../lib/admin-auth';
 import { encryptSecret, getSecretPreview } from '../../../../lib/security/secretCrypto';
-import { AI_MODEL_REGISTRY, DEFAULT_AI_MODEL } from '../../../../lib/ai/modelRegistry';
+import { AI_MODEL_REGISTRY, getProviderDefaultModel } from '../../../../lib/ai/modelRegistry';
 import type { AiProviderKey } from '../../../../lib/ai/providers/types';
 
 const SUPPORTED_PROVIDERS = new Set(Object.keys(AI_MODEL_REGISTRY));
@@ -13,6 +13,7 @@ type AiProviderCredentialRow = {
   label: string | null;
   keyPreview: string | null;
   baseUrl: string | null;
+  projectId: string | null;
   isEnabled: boolean;
   isDefault: boolean;
   defaultModel: string | null;
@@ -57,7 +58,7 @@ export async function GET() {
   try {
     const rows = await prisma.$queryRaw<AiProviderCredentialRow[]>`
       SELECT
-        "id", "provider", "label", "keyPreview", "baseUrl", "isEnabled", "isDefault",
+        "id", "provider", "label", "keyPreview", "baseUrl", "projectId", "isEnabled", "isDefault",
         "defaultModel", "allowedModels", "lastTestedAt", "lastTestOk", "lastTestError",
         "lastUsedAt", "createdAt", "updatedAt"
       FROM "AiProviderCredential"
@@ -85,20 +86,25 @@ export async function POST(req: Request) {
 
     const label = normalizeOptionalString(body?.label);
     const baseUrl = normalizeOptionalString(body?.baseUrl);
-    const defaultModel = normalizeOptionalString(body?.defaultModel) ?? (provider === 'openai' ? DEFAULT_AI_MODEL : null);
+    const projectId = normalizeOptionalString(body?.projectId);
+    const defaultModel = normalizeOptionalString(body?.defaultModel) ?? getProviderDefaultModel(provider);
     const allowedModels = normalizeAllowedModels(body?.allowedModels);
     const encryptedSecret = encryptSecret(secret);
     const keyPreview = getSecretPreview(secret);
     const isEnabled = body?.isEnabled !== false;
     const isDefault = body?.isDefault === true;
 
+    if (provider === 'yandex' && !projectId) {
+      return NextResponse.json({ error: 'YandexGPT vaatii folder / project ID:n' }, { status: 400 });
+    }
+
     await prisma.$executeRaw`
       INSERT INTO "AiProviderCredential" (
         "id", "provider", "label", "encryptedSecret", "keyPreview", "baseUrl",
-        "isEnabled", "isDefault", "defaultModel", "allowedModels", "createdAt", "updatedAt"
+        "projectId", "isEnabled", "isDefault", "defaultModel", "allowedModels", "createdAt", "updatedAt"
       ) VALUES (
         gen_random_uuid()::text, ${provider}, ${label}, ${encryptedSecret}, ${keyPreview}, ${baseUrl},
-        ${isEnabled}, ${isDefault}, ${defaultModel}, ${allowedModels}, NOW(), NOW()
+        ${projectId}, ${isEnabled}, ${isDefault}, ${defaultModel}, ${allowedModels}, NOW(), NOW()
       )
       ON CONFLICT ("provider")
       DO UPDATE SET
@@ -106,6 +112,7 @@ export async function POST(req: Request) {
         "encryptedSecret" = EXCLUDED."encryptedSecret",
         "keyPreview" = EXCLUDED."keyPreview",
         "baseUrl" = EXCLUDED."baseUrl",
+        "projectId" = EXCLUDED."projectId",
         "isEnabled" = EXCLUDED."isEnabled",
         "isDefault" = EXCLUDED."isDefault",
         "defaultModel" = EXCLUDED."defaultModel",

@@ -28,7 +28,7 @@ export function normalizeCredentialMode(value: unknown): AiCredentialMode {
 }
 
 export function normalizeProvider(value: unknown): AiProviderKey {
-  if (value === 'openai' || value === 'anthropic' || value === 'google' || value === 'mistral' || value === 'customOpenAiCompatible') {
+  if (value === 'openai' || value === 'google' || value === 'yandex') {
     return value;
   }
 

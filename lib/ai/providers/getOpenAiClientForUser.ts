@@ -42,6 +42,7 @@ export async function getOpenAiClientForUser(userId: number, fallbackModel = "gp
   return {
     client: new OpenAI({
       apiKey: secret.value,
+      ...(secret.projectId ? { project: secret.projectId } : {}),
       ...(secret.baseUrl ? { baseURL: secret.baseUrl } : {}),
     }),
     model: normalizeModelForProvider(provider, secret.defaultModel || settings.defaultModel || fallbackModel || getProviderDefaultModel(provider)),

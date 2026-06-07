@@ -38,10 +38,6 @@ export const AI_MODEL_REGISTRY: Record<AiProviderKey, AiProviderRegistryItem> = 
       },
     ],
   },
-  anthropic: {
-    label: 'Anthropic Claude',
-    models: [],
-  },
   google: {
     label: 'Google Gemini',
     defaultModel: 'gemini-2.5-flash',
@@ -69,13 +65,42 @@ export const AI_MODEL_REGISTRY: Record<AiProviderKey, AiProviderRegistryItem> = 
       },
     ],
   },
-  mistral: {
-    label: 'Mistral',
-    models: [],
-  },
-  customOpenAiCompatible: {
-    label: 'Custom OpenAI-compatible API',
-    models: [],
+  yandex: {
+    label: 'YandexGPT',
+    defaultModel: 'yandexgpt/latest',
+    openAiCompatibleBaseUrl: 'https://llm.api.cloud.yandex.net/v1',
+    models: [
+      {
+        id: 'yandexgpt/latest',
+        label: 'YandexGPT Latest',
+        strengths: ['general_chat', 'russian', 'summarization'],
+        costTier: 'medium',
+        speedTier: 'medium',
+        supportsJson: true,
+        supportsVision: false,
+        recommendedFor: ['general_chat', 'clinical_document', 'prompt_engineering'],
+      },
+      {
+        id: 'yandexgpt-lite/latest',
+        label: 'YandexGPT Lite Latest',
+        strengths: ['speed', 'cost_efficiency', 'russian'],
+        costTier: 'low',
+        speedTier: 'fast',
+        supportsJson: true,
+        supportsVision: false,
+        recommendedFor: ['general_chat', 'template_generation', 'summarization'],
+      },
+      {
+        id: 'yandexgpt/rc',
+        label: 'YandexGPT RC',
+        strengths: ['reasoning', 'structured_output', 'russian'],
+        costTier: 'medium',
+        speedTier: 'medium',
+        supportsJson: true,
+        supportsVision: false,
+        recommendedFor: ['clinical_review', 'clinical_document', 'general_chat'],
+      },
+    ],
   },
 };
 
@@ -88,7 +113,7 @@ export function getProviderOpenAiCompatibleBaseUrl(provider: AiProviderKey): str
 }
 
 export function isOpenAiCompatibleProvider(provider: AiProviderKey): boolean {
-  return provider === 'openai' || provider === 'google' || provider === 'customOpenAiCompatible';
+  return provider === 'openai' || provider === 'google' || provider === 'yandex';
 }
 
 export function normalizeModelForProvider(provider: AiProviderKey, requestedModel?: string | null): string {
@@ -104,4 +129,22 @@ export function normalizeModelForProvider(provider: AiProviderKey, requestedMode
   }
 
   return trimmed;
+}
+
+export function buildProviderRuntimeModel(provider: AiProviderKey, model: string, projectId?: string | null): string {
+  if (provider !== 'yandex') {
+    return model;
+  }
+
+  const trimmedModel = model.trim();
+
+  if (trimmedModel.startsWith('gpt://')) {
+    return trimmedModel;
+  }
+
+  if (!projectId) {
+    return trimmedModel;
+  }
+
+  return `gpt://${projectId}/${trimmedModel.replace(/^\/+/, '')}`;
 }

@@ -7,12 +7,14 @@ import type { AiProviderKey, AiProviderSecret } from '../providers/types';
 type AiProviderCredentialRow = {
   encryptedSecret: string;
   baseUrl: string | null;
+  projectId: string | null;
   defaultModel: string | null;
 };
 
 type UserAiCredentialRow = {
   encryptedSecret: string;
   baseUrl: string | null;
+  projectId: string | null;
   defaultModel: string | null;
 };
 
@@ -47,6 +49,20 @@ function getEnvSecret(provider: AiProviderKey): AiProviderSecret | null {
     };
   }
 
+  if (provider === 'yandex') {
+    const value = process.env.YANDEX_API_KEY;
+    if (!value) return null;
+
+    return {
+      provider,
+      value,
+      baseUrl: getProviderOpenAiCompatibleBaseUrl(provider),
+      projectId: process.env.YANDEX_CLOUD_FOLDER_ID || null,
+      defaultModel: getProviderDefaultModel(provider),
+      source: 'env',
+    };
+  }
+
   return null;
 }
 
@@ -54,6 +70,7 @@ function applyProviderDefaults(secret: AiProviderSecret): AiProviderSecret {
   return {
     ...secret,
     baseUrl: secret.baseUrl || getProviderOpenAiCompatibleBaseUrl(secret.provider),
+    projectId: secret.projectId || null,
     defaultModel: secret.defaultModel || getProviderDefaultModel(secret.provider),
   };
 }
@@ -61,7 +78,7 @@ function applyProviderDefaults(secret: AiProviderSecret): AiProviderSecret {
 async function getPlatformSecret(provider: AiProviderKey): Promise<AiProviderSecret | null> {
   try {
     const rows = await prisma.$queryRaw<AiProviderCredentialRow[]>`
-      SELECT "encryptedSecret", "baseUrl", "defaultModel"
+      SELECT "encryptedSecret", "baseUrl", "projectId", "defaultModel"
       FROM "AiProviderCredential"
       WHERE "provider" = ${provider} AND "isEnabled" = true
       LIMIT 1
@@ -74,6 +91,7 @@ async function getPlatformSecret(provider: AiProviderKey): Promise<AiProviderSec
         provider,
         value: decryptSecret(credential.encryptedSecret),
         baseUrl: credential.baseUrl,
+        projectId: credential.projectId,
         defaultModel: credential.defaultModel,
         source: 'platform',
       });
@@ -89,7 +107,7 @@ async function getPlatformSecret(provider: AiProviderKey): Promise<AiProviderSec
 async function getUserSecret(userId: number, provider: AiProviderKey): Promise<AiProviderSecret | null> {
   try {
     const rows = await prisma.$queryRaw<UserAiCredentialRow[]>`
-      SELECT "encryptedSecret", "baseUrl", "defaultModel"
+      SELECT "encryptedSecret", "baseUrl", "projectId", "defaultModel"
       FROM "UserAiCredential"
       WHERE "userId" = ${userId} AND "provider" = ${provider}
       LIMIT 1
@@ -103,6 +121,7 @@ async function getUserSecret(userId: number, provider: AiProviderKey): Promise<A
       provider,
       value: decryptSecret(credential.encryptedSecret),
       baseUrl: credential.baseUrl,
+      projectId: credential.projectId,
       defaultModel: credential.defaultModel,
       source: "user",
     });

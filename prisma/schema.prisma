@@ -282,6 +282,7 @@ model AiProviderCredential {
   encryptedSecret String   @db.Text
   keyPreview      String?
   baseUrl         String?
+  projectId       String?
   isEnabled       Boolean  @default(true)
   isDefault       Boolean  @default(false)
   defaultModel    String?
@@ -304,6 +305,7 @@ model UserAiCredential {
   encryptedSecret String   @db.Text
   keyPreview      String?
   baseUrl         String?
+  projectId       String?
   defaultModel    String?
   lastUsedAt      DateTime?
   createdAt       DateTime @default(now())

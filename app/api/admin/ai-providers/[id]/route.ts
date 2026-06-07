@@ -23,6 +23,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     const body = await req.json();
     const label = normalizeOptionalString(body?.label);
     const baseUrl = normalizeOptionalString(body?.baseUrl);
+    const projectId = normalizeOptionalString(body?.projectId);
     const defaultModel = normalizeOptionalString(body?.defaultModel);
     const allowedModels = normalizeAllowedModels(body?.allowedModels);
     const isEnabled = body?.isEnabled !== false;
@@ -37,6 +38,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
           "encryptedSecret" = ${encryptSecret(secret)},
           "keyPreview" = ${getSecretPreview(secret)},
           "baseUrl" = ${baseUrl},
+          "projectId" = ${projectId},
           "isEnabled" = ${isEnabled},
           "isDefault" = ${isDefault},
           "defaultModel" = ${defaultModel},
@@ -50,6 +52,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
         SET
           "label" = ${label},
           "baseUrl" = ${baseUrl},
+          "projectId" = ${projectId},
           "isEnabled" = ${isEnabled},
           "isDefault" = ${isDefault},
           "defaultModel" = ${defaultModel},

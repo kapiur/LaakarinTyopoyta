@@ -1,4 +1,4 @@
-export type AiProviderKey = 'openai' | 'anthropic' | 'google' | 'mistral' | 'customOpenAiCompatible';
+export type AiProviderKey = 'openai' | 'google' | 'yandex';
 
 export type AiMessageRole = 'system' | 'user' | 'assistant';
 
@@ -15,6 +15,7 @@ export type AiProviderSecret = {
   provider: AiProviderKey;
   value: string;
   baseUrl?: string | null;
+  projectId?: string | null;
   defaultModel?: string | null;
   source?: AiSecretSource;
 };

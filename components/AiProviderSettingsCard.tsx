@@ -25,6 +25,7 @@ type PersonalCredentialSummary = {
   provider: string;
   keyPreview?: string | null;
   baseUrl?: string | null;
+  projectId?: string | null;
   defaultModel?: string | null;
   lastUsedAt?: string | null;
   createdAt?: string | null;
@@ -51,6 +52,7 @@ export default function AiProviderSettingsCard() {
   const [credentialDeleting, setCredentialDeleting] = useState(false);
   const [personalCredentials, setPersonalCredentials] = useState<PersonalCredentialSummary[]>([]);
   const [personalSecret, setPersonalSecret] = useState("");
+  const [personalProjectId, setPersonalProjectId] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -100,6 +102,15 @@ export default function AiProviderSettingsCard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [language]);
 
+  useEffect(() => {
+    if (settings.defaultProvider === "yandex") {
+      setPersonalProjectId(currentPersonalCredential?.projectId || "");
+      return;
+    }
+
+    setPersonalProjectId("");
+  }, [currentPersonalCredential?.projectId, settings.defaultProvider]);
+
   async function saveSettings() {
     setSaving(true);
     setMessage(null);
@@ -140,6 +151,7 @@ export default function AiProviderSettingsCard() {
         body: JSON.stringify({
           provider: settings.defaultProvider,
           secret: personalSecret,
+          projectId: personalProjectId,
         }),
       });
       const data = await response.json();
@@ -148,6 +160,7 @@ export default function AiProviderSettingsCard() {
 
       setMessage(tt("personalCredentialSaved"));
       setPersonalSecret("");
+      setPersonalProjectId("");
       await loadSettings();
     } catch (err: any) {
       setError(err.message || tt("personalCredentialSaveFailed"));
@@ -272,16 +285,30 @@ export default function AiProviderSettingsCard() {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_auto] gap-3 items-end">
-                <label className="space-y-1">
-                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{tt("userCredential")}</span>
-                  <input
-                    type="password"
-                    value={personalSecret}
-                    onChange={(event) => setPersonalSecret(event.target.value)}
-                    className="w-full px-4 py-3 rounded-xl bg-white border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-blue-100"
-                    placeholder={tt("personalCredentialPlaceholder")}
-                  />
-                </label>
+                <div className="space-y-3">
+                  <label className="space-y-1 block">
+                    <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{tt("userCredential")}</span>
+                    <input
+                      type="password"
+                      value={personalSecret}
+                      onChange={(event) => setPersonalSecret(event.target.value)}
+                      className="w-full px-4 py-3 rounded-xl bg-white border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-blue-100"
+                      placeholder={tt("personalCredentialPlaceholder")}
+                    />
+                  </label>
+                  {settings.defaultProvider === "yandex" && (
+                    <label className="space-y-1 block">
+                      <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{tt("projectIdLabel")}</span>
+                      <input
+                        type="text"
+                        value={personalProjectId}
+                        onChange={(event) => setPersonalProjectId(event.target.value)}
+                        className="w-full px-4 py-3 rounded-xl bg-white border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-blue-100"
+                        placeholder={tt("projectIdPlaceholder")}
+                      />
+                    </label>
+                  )}
+                </div>
                 <button
                   type="button"
                   onClick={savePersonalCredential}
@@ -298,6 +325,11 @@ export default function AiProviderSettingsCard() {
                   <div className="space-y-1">
                     <div className="text-xs font-bold uppercase tracking-wider text-slate-500">{tt("personalCredentialSavedPreview")}</div>
                     <div className="text-sm font-semibold text-slate-800">{currentPersonalCredential.keyPreview}</div>
+                    {currentPersonalCredential.projectId && (
+                      <div className="text-xs text-slate-500">
+                        {tt("projectIdLabel")}: <span className="font-semibold text-slate-700">{currentPersonalCredential.projectId}</span>
+                      </div>
+                    )}
                   </div>
                   <button
                     type="button"
