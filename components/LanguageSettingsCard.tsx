@@ -82,6 +82,7 @@ export default function LanguageSettingsCard() {
             }
           : current
       );
+      window.dispatchEvent(new CustomEvent("workspace-context-invalidated"));
       setStatus(t("settings.languageSaved"));
     } catch (err: any) {
       setError(err.message || t("settings.languageSaveFailed"));

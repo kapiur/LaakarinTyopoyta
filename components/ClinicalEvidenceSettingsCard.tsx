@@ -163,13 +163,17 @@ export default function ClinicalEvidenceSettingsCard() {
   const [message, setMessage] = useState<string | null>(null);
 
   const selectedCountry = useMemo(() => countries.find((country) => country.code === settings?.clinicalCountry), [countries, settings?.clinicalCountry]);
+  const practiceCountryConfig = useMemo(
+    () => countries.find((country) => country.code === settings?.practiceCountry) ?? null,
+    [countries, settings?.practiceCountry]
+  );
   const selectedEvidenceMode = settings ? l.evidenceModes[settings.evidenceStrictness] : null;
   const followsCountryDefaults =
     !!settings?.usePracticeCountryDefaults &&
-    !!selectedCountry &&
-    settings.clinicalCountry === selectedCountry.code &&
-    settings.clinicalOutputLanguage === selectedCountry.defaultClinicalOutputLanguage &&
-    settings.evidenceStrictness === selectedCountry.defaultEvidenceStrictness;
+    !!practiceCountryConfig &&
+    settings.clinicalCountry === practiceCountryConfig.code &&
+    settings.clinicalOutputLanguage === practiceCountryConfig.defaultClinicalOutputLanguage &&
+    settings.evidenceStrictness === practiceCountryConfig.defaultEvidenceStrictness;
 
   async function loadSettings() {
     setLoading(true);
@@ -223,6 +227,12 @@ export default function ClinicalEvidenceSettingsCard() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || l.failed);
+      setSettings({
+        ...nextSettings,
+        practiceCountry: settings?.practiceCountry,
+        usePracticeCountryDefaults: false,
+      });
+      window.dispatchEvent(new CustomEvent("workspace-context-invalidated"));
       setMessage(l.saved);
       await loadSources(nextSettings.clinicalCountry);
     } catch (error) {

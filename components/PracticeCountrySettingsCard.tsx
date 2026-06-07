@@ -154,6 +154,14 @@ export default function PracticeCountrySettingsCard() {
 
   useEffect(() => {
     loadContext();
+    function handleWorkspaceContextInvalidated() {
+      loadContext();
+    }
+
+    window.addEventListener("workspace-context-invalidated", handleWorkspaceContextInvalidated);
+    return () => {
+      window.removeEventListener("workspace-context-invalidated", handleWorkspaceContextInvalidated);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
