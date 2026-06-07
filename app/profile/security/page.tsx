@@ -1,62 +1,34 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
-import { CheckCircle2, KeyRound, Loader2 } from "lucide-react";
+import { KeyRound, Loader2 } from "lucide-react";
 
 export default function ProfileSecurityPage() {
   const { data: session } = useSession();
   const [oldValue, setOldValue] = useState("");
   const [newValue, setNewValue] = useState("");
   const [repeatValue, setRepeatValue] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [serverError, setServerError] = useState<string | null>(null);
 
-  async function handleSubmit(event: React.FormEvent) {
-    event.preventDefault();
-    setLoading(true);
-    setMessage(null);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    setServerError(params.get("error"));
+  }, []);
+
+  function handleSubmit(event: React.FormEvent) {
     setError(null);
 
     if (newValue !== repeatValue) {
+      event.preventDefault();
       setError("Uusi tunniste ja vahvistus eivät täsmää.");
-      setLoading(false);
       return;
     }
 
-    try {
-      const response = await fetch("/api/profile/credential", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ oldValue, newValue })
-      });
-
-      if (!response.ok) {
-        let errorMessage = "Tunnisteen vaihtaminen epäonnistui";
-
-        try {
-          const data = await response.json();
-          errorMessage = data.error || errorMessage;
-        } catch {
-          try {
-            const text = await response.text();
-            if (text) errorMessage = text;
-          } catch {
-            // Ignore body parsing failures and keep the generic message.
-          }
-        }
-
-        throw new Error(errorMessage);
-      }
-
-      window.location.href = `/login?passwordChanged=1&t=${Date.now()}`;
-      return;
-    } catch (err: any) {
-      setError(err.message || "Tunnisteen vaihtaminen epäonnistui");
-    } finally {
-      setLoading(false);
-    }
+    setSubmitting(true);
   }
 
   return (
@@ -72,22 +44,16 @@ export default function ProfileSecurityPage() {
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-8 space-y-5">
+        <form action="/profile/security/change" method="post" onSubmit={handleSubmit} className="p-8 space-y-5">
           {(session?.user as any)?.mustChangePassword && (
             <div className="rounded-2xl bg-amber-50 border border-amber-100 px-4 py-3 text-sm font-semibold text-amber-700">
               Sinun tulee päivittää kirjautumistunniste ennen palvelun jatkokäyttöä.
             </div>
           )}
 
-          {message && (
-            <div className="rounded-2xl bg-emerald-50 border border-emerald-100 px-4 py-3 text-sm font-semibold text-emerald-700 flex items-center gap-2">
-              <CheckCircle2 size={16} /> {message}
-            </div>
-          )}
-
-          {error && (
+          {(error || serverError) && (
             <div className="rounded-2xl bg-red-50 border border-red-100 px-4 py-3 text-sm font-semibold text-red-700">
-              {error}
+              {error || serverError}
             </div>
           )}
 
@@ -95,6 +61,7 @@ export default function ProfileSecurityPage() {
             <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Nykyinen tunniste</label>
             <input
               type="password"
+              name="oldValue"
               value={oldValue}
               onChange={(event) => setOldValue(event.target.value)}
               className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-blue-100"
@@ -106,6 +73,7 @@ export default function ProfileSecurityPage() {
             <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Uusi tunniste</label>
             <input
               type="password"
+              name="newValue"
               value={newValue}
               onChange={(event) => setNewValue(event.target.value)}
               className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-blue-100"
@@ -118,6 +86,7 @@ export default function ProfileSecurityPage() {
             <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Vahvista uusi tunniste</label>
             <input
               type="password"
+              name="repeatValue"
               value={repeatValue}
               onChange={(event) => setRepeatValue(event.target.value)}
               className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-blue-100"
@@ -128,10 +97,10 @@ export default function ProfileSecurityPage() {
 
           <button
             type="submit"
-            disabled={loading || !oldValue || !newValue || !repeatValue}
+            disabled={submitting || !oldValue || !newValue || !repeatValue}
             className="w-full inline-flex items-center justify-center gap-2 px-5 py-4 rounded-xl bg-blue-600 text-white text-sm font-bold hover:bg-blue-700 disabled:opacity-50"
           >
-            {loading && <Loader2 size={16} className="animate-spin" />}
+            {submitting && <Loader2 size={16} className="animate-spin" />}
             Tallenna uusi tunniste
           </button>
 
