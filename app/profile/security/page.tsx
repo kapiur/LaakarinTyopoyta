@@ -1,35 +1,17 @@
-"use client";
+import Link from "next/link";
+import { KeyRound } from "lucide-react";
+import { getCurrentSession } from "../../../lib/admin-auth";
 
-import { useEffect, useState } from "react";
-import { useSession } from "next-auth/react";
-import { KeyRound, Loader2 } from "lucide-react";
+type PageProps = {
+  searchParams?: {
+    error?: string;
+  };
+};
 
-export default function ProfileSecurityPage() {
-  const { data: session } = useSession();
-  const [oldValue, setOldValue] = useState("");
-  const [newValue, setNewValue] = useState("");
-  const [repeatValue, setRepeatValue] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [serverError, setServerError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const params = new URLSearchParams(window.location.search);
-    setServerError(params.get("error"));
-  }, []);
-
-  function handleSubmit(event: React.FormEvent) {
-    setError(null);
-
-    if (newValue !== repeatValue) {
-      event.preventDefault();
-      setError("Uusi tunniste ja vahvistus eivät täsmää.");
-      return;
-    }
-
-    setSubmitting(true);
-  }
+export default async function ProfileSecurityPage({ searchParams }: PageProps) {
+  const session = await getCurrentSession();
+  const mustChangePassword = (session?.user as any)?.mustChangePassword === true;
+  const serverError = typeof searchParams?.error === "string" ? searchParams.error : null;
 
   return (
     <div className="max-w-xl mx-auto">
@@ -44,16 +26,16 @@ export default function ProfileSecurityPage() {
           </div>
         </div>
 
-        <form action="/profile/security/change" method="post" onSubmit={handleSubmit} className="p-8 space-y-5">
-          {(session?.user as any)?.mustChangePassword && (
+        <form action="/profile/security/change" method="post" className="p-8 space-y-5">
+          {mustChangePassword && (
             <div className="rounded-2xl bg-amber-50 border border-amber-100 px-4 py-3 text-sm font-semibold text-amber-700">
               Sinun tulee päivittää kirjautumistunniste ennen palvelun jatkokäyttöä.
             </div>
           )}
 
-          {(error || serverError) && (
+          {serverError && (
             <div className="rounded-2xl bg-red-50 border border-red-100 px-4 py-3 text-sm font-semibold text-red-700">
-              {error || serverError}
+              {serverError}
             </div>
           )}
 
@@ -62,8 +44,6 @@ export default function ProfileSecurityPage() {
             <input
               type="password"
               name="oldValue"
-              value={oldValue}
-              onChange={(event) => setOldValue(event.target.value)}
               className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-blue-100"
               required
             />
@@ -74,8 +54,6 @@ export default function ProfileSecurityPage() {
             <input
               type="password"
               name="newValue"
-              value={newValue}
-              onChange={(event) => setNewValue(event.target.value)}
               className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-blue-100"
               minLength={8}
               required
@@ -87,31 +65,30 @@ export default function ProfileSecurityPage() {
             <input
               type="password"
               name="repeatValue"
-              value={repeatValue}
-              onChange={(event) => setRepeatValue(event.target.value)}
               className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-blue-100"
               minLength={8}
               required
             />
           </div>
 
+          <p className="text-xs text-slate-500">
+            Jos uusi tunniste ja vahvistus eivät täsmää, palvelu palauttaa sinut tälle sivulle virheilmoituksen kanssa.
+          </p>
+
           <button
             type="submit"
-            disabled={submitting || !oldValue || !newValue || !repeatValue}
-            className="w-full inline-flex items-center justify-center gap-2 px-5 py-4 rounded-xl bg-blue-600 text-white text-sm font-bold hover:bg-blue-700 disabled:opacity-50"
+            className="w-full inline-flex items-center justify-center gap-2 px-5 py-4 rounded-xl bg-blue-600 text-white text-sm font-bold hover:bg-blue-700"
           >
-            {submitting && <Loader2 size={16} className="animate-spin" />}
             Tallenna uusi tunniste
           </button>
 
-          {!(session?.user as any)?.mustChangePassword && (
-            <button
-              type="button"
-              onClick={() => window.location.assign("/")}
-              className="w-full px-5 py-3 rounded-xl border border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-50"
+          {!mustChangePassword && (
+            <Link
+              href="/"
+              className="block w-full px-5 py-3 rounded-xl border border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-50 text-center"
             >
               Palaa etusivulle
-            </button>
+            </Link>
           )}
         </form>
       </div>
