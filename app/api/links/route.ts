@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "../../../lib/auth";
+import { normalizeUiLanguage } from "../../../lib/i18n/config";
+import { normalizePracticeCountry } from "../../../lib/clinical/practice/practiceCountryRegistry";
+import { getPracticeCountryLinkCategories } from "../../../lib/links/practiceCountryLinkRegistry";
 
 const prisma = new PrismaClient();
 
@@ -13,6 +16,19 @@ export async function GET() {
     }
 
     const currentUserId = (session.user as any).id ? parseInt((session.user as any).id) : null;
+    const user = await prisma.user.findUnique({
+      where: { id: currentUserId || -1 },
+      select: {
+        uiLanguage: true,
+        clinicalSettings: {
+          select: {
+            practiceCountry: true,
+          },
+        },
+      },
+    });
+    const uiLanguage = normalizeUiLanguage(user?.uiLanguage);
+    const practiceCountry = normalizePracticeCountry(user?.clinicalSettings?.practiceCountry);
 
     const categories = await prisma.linkCategory.findMany({
       where: {
@@ -29,7 +45,17 @@ export async function GET() {
       orderBy: { name: 'asc' }
     });
 
-    return NextResponse.json(categories);
+    const defaultCategories = getPracticeCountryLinkCategories(practiceCountry, uiLanguage);
+    const dbCategories = categories.map((category) => ({
+      ...category,
+      source: category.userId ? "personal" : "shared",
+      links: category.links.map((link) => ({
+        ...link,
+        source: link.userId ? "personal" : "shared",
+      })),
+    }));
+
+    return NextResponse.json([...defaultCategories, ...dbCategories]);
   } catch (error) {
     console.error("GET links error:", error);
     return NextResponse.json({ error: "Server error" }, { status: 500 });

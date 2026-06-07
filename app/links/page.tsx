@@ -16,6 +16,7 @@ const copy = {
     addLink: "Lisää linkki",
     own: "Oma",
     common: "Yleinen",
+    practiceDefault: "Työskentelymaan oletus",
     move: "Siirrä",
     emptyCategory: "Tyhjä kategoria",
     addNewLink: "Lisää uusi linkki",
@@ -37,6 +38,7 @@ const copy = {
     addLink: "Добавить ссылку",
     own: "Личное",
     common: "Общее",
+    practiceDefault: "Дефолт для страны работы",
     move: "Перенести",
     emptyCategory: "Пустая категория",
     addNewLink: "Добавить новую ссылку",
@@ -58,6 +60,7 @@ const copy = {
     addLink: "Add link",
     own: "Personal",
     common: "Shared",
+    practiceDefault: "Practice-country default",
     move: "Move",
     emptyCategory: "Empty category",
     addNewLink: "Add new link",
@@ -93,9 +96,11 @@ export default function LinksPage() {
     try {
       const res = await fetch("/api/links");
       const data = await res.json();
-      setCategories(Array.isArray(data) ? data : []);
-      if (data.length > 0 && !newLink.categoryId) {
-        setNewLink(prev => ({ ...prev, categoryId: data[0].id.toString() }));
+      const nextCategories = Array.isArray(data) ? data : [];
+      setCategories(nextCategories);
+      const firstWritableCategory = nextCategories.find((category: any) => typeof category.id === "number");
+      if (firstWritableCategory && !newLink.categoryId) {
+        setNewLink(prev => ({ ...prev, categoryId: firstWritableCategory.id.toString() }));
       }
     } catch (err) {
       console.error(c.errorPrefix, err);
@@ -188,12 +193,16 @@ export default function LinksPage() {
                   </span>
                 </h3>
                 <div className="flex items-center gap-2">
-                  {cat.links.length === 0 && (
+                  {cat.links.length === 0 && typeof cat.id === "number" && (
                     <button onClick={() => handleDeleteCategory(cat.id)} className="text-slate-300 hover:text-red-500 transition-colors">
                       <Trash2 size={14} />
                     </button>
                   )}
-                  {cat.userId ? (
+                  {cat.source === "practice-country-default" ? (
+                    <div className="flex items-center gap-1 text-blue-600 bg-blue-50 px-2 py-1 rounded-md text-[10px] font-bold uppercase">
+                      <Globe size={10} /> {c.practiceDefault}
+                    </div>
+                  ) : cat.userId ? (
                     <div className="flex items-center gap-1 text-amber-600 bg-amber-50 px-2 py-1 rounded-md text-[10px] font-bold uppercase">
                       <Lock size={10} /> {c.own}
                     </div>
@@ -221,27 +230,31 @@ export default function LinksPage() {
                         <span className="text-sm font-semibold truncate">{link.title}</span>
                       </a>
                       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                        <button 
-                          onClick={() => handleDelete(link.id)}
-                          className="p-1.5 text-slate-300 hover:text-red-500 transition-all"
-                        >
-                          <Trash2 size={14} />
-                        </button>
+                        {typeof link.id === "number" && (
+                          <button 
+                            onClick={() => handleDelete(link.id)}
+                            className="p-1.5 text-slate-300 hover:text-red-500 transition-all"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        )}
                       </div>
                     </div>
                     
-                    <div className="mt-2 pl-11 opacity-0 group-hover:opacity-100 transition-all flex items-center gap-1.5">
-                      <MoveHorizontal size={10} className="text-slate-300" />
-                      <select 
-                        className="text-[10px] bg-transparent text-slate-400 border-none p-0 focus:ring-0 cursor-pointer hover:text-blue-600 font-medium"
-                        value={cat.id}
-                        onChange={(e) => handleMoveLink(link.id, e.target.value)}
-                      >
-                        {categories.map((targetCategory: any) => (
-                          <option key={targetCategory.id} value={targetCategory.id}>{c.move}: {targetCategory.name}</option>
-                        ))}
-                      </select>
-                    </div>
+                    {typeof link.id === "number" && (
+                      <div className="mt-2 pl-11 opacity-0 group-hover:opacity-100 transition-all flex items-center gap-1.5">
+                        <MoveHorizontal size={10} className="text-slate-300" />
+                        <select 
+                          className="text-[10px] bg-transparent text-slate-400 border-none p-0 focus:ring-0 cursor-pointer hover:text-blue-600 font-medium"
+                          value={cat.id}
+                          onChange={(e) => handleMoveLink(link.id, e.target.value)}
+                        >
+                          {categories.filter((targetCategory: any) => typeof targetCategory.id === "number").map((targetCategory: any) => (
+                            <option key={targetCategory.id} value={targetCategory.id}>{c.move}: {targetCategory.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                   </li>
                 ))}
                 {cat.links.length === 0 && (
@@ -286,7 +299,7 @@ export default function LinksPage() {
                       value={newLink.categoryId}
                       onChange={e => setNewLink({...newLink, categoryId: e.target.value})}
                     >
-                      {categories.map((targetCategory: any) => <option key={targetCategory.id} value={targetCategory.id}>{targetCategory.name}</option>)}
+                      {categories.filter((targetCategory: any) => typeof targetCategory.id === "number").map((targetCategory: any) => <option key={targetCategory.id} value={targetCategory.id}>{targetCategory.name}</option>)}
                     </select>
                   </>
                 ) : (
