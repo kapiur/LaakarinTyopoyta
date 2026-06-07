@@ -51,7 +51,7 @@ export async function POST(req: Request) {
       }
     });
 
-    return NextResponse.json({ success: true });
+    return new Response(null, { status: 204 });
   } catch (error) {
     return NextResponse.json({ error: "Tunnisteen vaihtaminen epäonnistui" }, { status: 500 });
   }
