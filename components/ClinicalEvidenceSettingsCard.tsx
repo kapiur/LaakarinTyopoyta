@@ -46,7 +46,7 @@ const labels = {
     country: "Kliininen maa",
     clinicalLanguage: "Kliinisen tekstin kieli",
     strictness: "Miten tiukasti lähteitä käytetään",
-    fromCountry: "Maan oletus käytössä",
+    fromCountry: "Vastaa työskentelymaan oletusta",
     custom: "Yliajettu käsin",
     strictnessHelp: "Suositus: pidä turvallisin tila päällä kliinisessä työssä. Agentti ei saa antaa hoito-ohjeita ilman virallista lähdetukea.",
     allowLocal: "Salli paikalliset ohjeet",
@@ -82,7 +82,7 @@ const labels = {
     country: "Страна рекомендаций",
     clinicalLanguage: "Язык клинического текста",
     strictness: "Как строго использовать источники",
-    fromCountry: "По умолчанию от страны работы",
+    fromCountry: "Соответствует дефолту страны работы",
     custom: "Переопределено вручную",
     strictnessHelp: "Рекомендация: для клинической работы оставлять самый безопасный режим. Агент не должен давать лечебные рекомендации без официального источника.",
     allowLocal: "Разрешить локальные инструкции",
@@ -118,7 +118,7 @@ const labels = {
     country: "Clinical country",
     clinicalLanguage: "Clinical text language",
     strictness: "How strictly sources are used",
-    fromCountry: "Using practice-country default",
+    fromCountry: "Matches practice-country default",
     custom: "Manually overridden",
     strictnessHelp: "Recommended: keep the safest mode for clinical work. The agent must not provide treatment recommendations without official source support.",
     allowLocal: "Allow local instructions",
@@ -169,11 +169,10 @@ export default function ClinicalEvidenceSettingsCard() {
   );
   const selectedEvidenceMode = settings ? l.evidenceModes[settings.evidenceStrictness] : null;
   const followsCountryDefaults =
-    !!settings?.usePracticeCountryDefaults &&
     !!practiceCountryConfig &&
-    settings.clinicalCountry === practiceCountryConfig.code &&
-    settings.clinicalOutputLanguage === practiceCountryConfig.defaultClinicalOutputLanguage &&
-    settings.evidenceStrictness === practiceCountryConfig.defaultEvidenceStrictness;
+    settings?.clinicalCountry === practiceCountryConfig.code &&
+    settings?.clinicalOutputLanguage === practiceCountryConfig.defaultClinicalOutputLanguage &&
+    settings?.evidenceStrictness === practiceCountryConfig.defaultEvidenceStrictness;
 
   async function loadSettings() {
     setLoading(true);

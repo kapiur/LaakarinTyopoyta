@@ -11,6 +11,11 @@ type WorkspaceContextSnapshot = {
   practiceCountry: "FI" | "RU";
 };
 
+const practiceCountryDefaultUiLanguage: Record<WorkspaceContextSnapshot["practiceCountry"], UiLanguage> = {
+  FI: "fi",
+  RU: "ru",
+};
+
 export default function LanguageSettingsCard() {
   const { language, setLanguage, t } = useI18n();
   const [saving, setSaving] = useState(false);
@@ -20,9 +25,10 @@ export default function LanguageSettingsCard() {
 
   const overrideStatus = useMemo(() => {
     if (!workspaceContext) return null;
-    return workspaceContext.usePracticeCountryDefaults
+    const matchesCountryDefault = language === practiceCountryDefaultUiLanguage[workspaceContext.practiceCountry];
+    return matchesCountryDefault
       ? {
-          text: language === "ru" ? "По умолчанию от страны работы" : language === "en" ? "Using practice-country default" : "Työskentelymaan oletus käytössä",
+          text: language === "ru" ? "Соответствует дефолту страны работы" : language === "en" ? "Matches practice-country default" : "Vastaa työskentelymaan oletusta",
           className: "border border-emerald-200 bg-emerald-50 text-emerald-700",
         }
       : {

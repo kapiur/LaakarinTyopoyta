@@ -39,7 +39,7 @@ const labels = {
     clinicalLanguage: "Kliinisen tekstin kieli",
     mode: "Lähdetila",
     current: "Nykyinen tila",
-    fromCountry: "Maan oletus käytössä",
+    fromCountry: "Vastaa maan oletusta",
     custom: "Yliajettu käsin",
     save: "Tallenna työympäristö",
     saved: "Työympäristö tallennettu.",
@@ -58,7 +58,7 @@ const labels = {
     clinicalLanguage: "Язык клинического текста",
     mode: "Режим источников",
     current: "Текущее состояние",
-    fromCountry: "По умолчанию от страны",
+    fromCountry: "Соответствует дефолту страны",
     custom: "Переопределено вручную",
     save: "Сохранить рабочий контекст",
     saved: "Рабочий контекст сохранен.",
@@ -77,7 +77,7 @@ const labels = {
     clinicalLanguage: "Clinical text language",
     mode: "Evidence mode",
     current: "Current behavior",
-    fromCountry: "Using country default",
+    fromCountry: "Matches country default",
     custom: "Manually overridden",
     save: "Save workspace context",
     saved: "Workspace context saved.",
@@ -108,29 +108,25 @@ export default function PracticeCountrySettingsCard() {
         key: "uiLanguage",
         label: l.uiLanguage,
         currentValue: settings.uiLanguage,
-        followsDefault: settings.usePracticeCountryDefaults && settings.uiLanguage === selectedCountry.defaultUiLanguage,
+        followsDefault: settings.uiLanguage === selectedCountry.defaultUiLanguage,
       },
       {
         key: "clinicalCountry",
         label: l.clinicalCountry,
         currentValue: settings.clinicalCountry,
-        followsDefault: settings.usePracticeCountryDefaults && settings.clinicalCountry === selectedCountry.defaultClinicalCountry,
+        followsDefault: settings.clinicalCountry === selectedCountry.defaultClinicalCountry,
       },
       {
         key: "clinicalOutputLanguage",
         label: l.clinicalLanguage,
         currentValue: settings.clinicalOutputLanguage,
-        followsDefault:
-          settings.usePracticeCountryDefaults &&
-          settings.clinicalOutputLanguage === selectedCountry.defaultClinicalOutputLanguage,
+        followsDefault: settings.clinicalOutputLanguage === selectedCountry.defaultClinicalOutputLanguage,
       },
       {
         key: "evidenceStrictness",
         label: l.mode,
         currentValue: settings.evidenceStrictness,
-        followsDefault:
-          settings.usePracticeCountryDefaults &&
-          settings.evidenceStrictness === selectedCountry.defaultEvidenceStrictness,
+        followsDefault: settings.evidenceStrictness === selectedCountry.defaultEvidenceStrictness,
       },
     ];
   }, [l.clinicalCountry, l.clinicalLanguage, l.mode, l.uiLanguage, selectedCountry, settings]);
