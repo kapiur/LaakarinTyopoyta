@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { signOut, useSession } from "next-auth/react";
+import { useSession } from "next-auth/react";
 import { CheckCircle2, KeyRound, Loader2 } from "lucide-react";
 
 export default function ProfileSecurityPage() {
@@ -43,9 +43,8 @@ export default function ProfileSecurityPage() {
       setNewValue("");
       setRepeatValue("");
 
-      setTimeout(async () => {
-        await signOut({ redirect: false });
-        window.location.assign("/login");
+      setTimeout(() => {
+        window.location.replace(`/login?passwordChanged=1&t=${Date.now()}`);
       }, 800);
     } catch (err: any) {
       setError(err.message || "Tunnisteen vaihtaminen epäonnistui");
