@@ -44,6 +44,16 @@ const texts = {
     orderDescription: "Siirrä laskureita ylös tai alas. Tämä järjestys näkyy laskurien etusivulla ja tukee oman työpöydän rakentamista.",
     moveUp: "Siirrä ylemmäs",
     moveDown: "Siirrä alemmas",
+    calculatorDescriptions: {
+      pca: "PCA-annostelun suunnittelu käyttäjän oman lääkevalikoiman tuella.",
+      peds: "Pediatrinen annoslaskuri käyttäjäkohtaisilla indikaatioilla ja lääkevalikoiman oletuksilla.",
+      vte: "Syvän laskimotromboosin todennäköisyyden arvio erillisellä Wells-tyylisellä laskurilla.",
+      pe: "Keuhkoembolian todennäköisyyden arvio erillisellä Wells-tyylisellä laskurilla.",
+      cad: "Sepelvaltimotaudin esitodennäköisyyden arvio erillisessä rakenteisessa laskurissa.",
+      chads: "Eteisvärinäpotilaan aivohalvaus- ja vuotoriskin arvio erillisessä kaksoislaskurissa.",
+      bmi: "Painoindeksin laskuri.",
+      gfr: "Munuaistoiminnan arvio Cockcroft-Gault-tyylisellä kaavalla.",
+    },
   },
   ru: {
     title: "Калькуляторы",
@@ -60,6 +70,16 @@ const texts = {
     orderDescription: "Перемещайте калькуляторы вверх и вниз. Этот порядок будет использован на странице калькуляторов и помогает собрать свой рабочий стол.",
     moveUp: "Поднять выше",
     moveDown: "Опустить ниже",
+    calculatorDescriptions: {
+      pca: "Планирование дозировок PCA с поддержкой вашей пользовательской библиотеки препаратов.",
+      peds: "Педиатрический калькулятор дозировок с пользовательскими показаниями и настройками библиотеки препаратов.",
+      vte: "Оценка вероятности тромбоза глубоких вен по отдельному калькулятору в стиле Wells.",
+      pe: "Оценка вероятности ТЭЛА по отдельному калькулятору в стиле Wells.",
+      cad: "Оценка предтестовой вероятности ишемической болезни сердца в отдельном структурированном калькуляторе.",
+      chads: "Оценка риска инсульта и кровотечения при фибрилляции предсердий в отдельном двойном калькуляторе.",
+      bmi: "Калькулятор индекса массы тела.",
+      gfr: "Оценка функции почек по формуле в стиле Cockcroft-Gault.",
+    },
   },
   en: {
     title: "Calculators",
@@ -76,6 +96,16 @@ const texts = {
     orderDescription: "Move calculators up or down. This order is used on the calculator home page and helps shape a more personal workspace.",
     moveUp: "Move up",
     moveDown: "Move down",
+    calculatorDescriptions: {
+      pca: "Patient-controlled analgesia dose planning with support for your personal drug library.",
+      peds: "Pediatric dose calculator with personal indication presets and drug-library defaults.",
+      vte: "Deep vein thrombosis probability support in a standalone Wells-style calculator.",
+      pe: "Pulmonary embolism probability support in a standalone Wells-style calculator.",
+      cad: "Pre-test coronary artery disease probability support in a standalone structured calculator.",
+      chads: "Atrial fibrillation stroke and bleeding risk support in a standalone dual-score calculator.",
+      bmi: "Body mass index calculator.",
+      gfr: "Cockcroft-Gault style renal function estimate.",
+    },
   },
 } as const;
 
@@ -229,7 +259,9 @@ export default function CalculatorVisibilitySettingsCard() {
                   </div>
                   <div className="min-w-0">
                     <div className="font-bold text-sm text-slate-800">{calculator.title}</div>
-                    <p className="text-xs text-slate-500 leading-relaxed mt-1">{calculator.description}</p>
+                    <p className="text-xs text-slate-500 leading-relaxed mt-1">
+                      {i18n.calculatorDescriptions[calculator.key as keyof typeof i18n.calculatorDescriptions] || calculator.description}
+                    </p>
                     <div className="mt-2 flex flex-wrap gap-2">
                       <div className={`text-[10px] font-bold uppercase ${calculator.isVisible ? "text-emerald-600" : "text-slate-400"}`}>
                         {calculator.isVisible ? i18n.visible : i18n.hidden}

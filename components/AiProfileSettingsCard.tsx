@@ -66,6 +66,16 @@ const dict = {
     error: "Toiminto epäonnistui.",
     loading: "Ladataan...",
     preview: "Anonymisoitu esikatselu",
+    fieldPlaceholders: {
+      role: "Terveyskeskuslääkäri",
+      specialty: "Yleislääketiede / päivystys / geriatria",
+      workplace: "Terveysasema, akuuttiosasto, vastaanotto",
+      experienceLevel: "Erikoistuva / kokenut / konsultoiva",
+      defaultClinicalContext: "Suomen perusterveydenhuolto",
+      preferredStructure: "Tulosyy, Esitiedot, Nykytila, Suunnitelma",
+      detailLevel: "Tiivis mutta kliinisesti yksityiskohtainen",
+      writingStyle: "Kronologinen, selkeä, ammattimainen",
+    },
   },
   ru: {
     title: "AI-профиль",
@@ -83,10 +93,10 @@ const dict = {
     avoidInstructions: "Чего AI должен избегать",
     styleSummary: "Краткое описание стиля",
     exampleTitle: "Добавить новый пример к стилю",
-    exampleHelp: "Вставляйте один хороший пример за раз. Сначала выберите или напишите тип текста, чтобы AI различал стиль etäkontakti, направления и loppuarvio. Исходный текст не сохраняется.",
-    examplePlaceholder: "Вставьте один приём, etäkontakti, направление или loppuarvio...",
+    exampleHelp: "Вставляйте по одному хорошему примеру за раз. Сначала выберите или укажите тип текста, чтобы AI различал, например, дистанционный контакт, направление и итоговое заключение. Исходный текст не сохраняется.",
+    examplePlaceholder: "Вставьте один текст приёма, дистанционного контакта, направления или итогового заключения...",
     sourceLabel: "Тип текста / название образца",
-    sourceLabelPlaceholder: "Например: Loppuarvio, Lähete, Etäkontakti, Vastaanottokäynti, Väliarvio",
+    sourceLabelPlaceholder: "Например: Итоговое заключение, Направление, Дистанционный контакт, Приём, Промежуточная запись",
     saveSample: "Сохранить анонимизированный пример для дальнейшего уточнения стиля (только если вы хотите его хранить)",
     sampleRetention: "Сохранённые примеры",
     sampleRetentionHelp: "Если вы решите хранить анонимизированные примеры, система оставляет только ограниченное число самых новых.",
@@ -99,7 +109,17 @@ const dict = {
     analyzed: "Описание стиля дополнено новым примером.",
     error: "Действие не удалось.",
     loading: "Загрузка...",
-    preview: "Анонимизированный preview",
+    preview: "Анонимизированный предварительный просмотр",
+    fieldPlaceholders: {
+      role: "Врач общей практики / терапевт",
+      specialty: "Общая медицина / неотложная помощь / гериатрия",
+      workplace: "Амбулатория, приём, стационар краткого пребывания",
+      experienceLevel: "Ординатор / опытный врач / консультант",
+      defaultClinicalContext: "Амбулаторная помощь взрослым",
+      preferredStructure: "Жалобы, Анамнез, Статус, План",
+      detailLevel: "Кратко, но клинически содержательно",
+      writingStyle: "Хронологично, ясно, профессионально",
+    },
   },
   en: {
     title: "AI profile",
@@ -134,6 +154,16 @@ const dict = {
     error: "Action failed.",
     loading: "Loading...",
     preview: "Anonymized preview",
+    fieldPlaceholders: {
+      role: "Primary care physician",
+      specialty: "General practice / emergency medicine / geriatrics",
+      workplace: "Clinic, urgent care ward, outpatient setting",
+      experienceLevel: "Resident / experienced clinician / consultant",
+      defaultClinicalContext: "Adult primary care",
+      preferredStructure: "Reason for visit, History, Current status, Plan",
+      detailLevel: "Concise but clinically detailed",
+      writingStyle: "Chronological, clear, professional",
+    },
   },
 };
 
@@ -177,14 +207,14 @@ export default function AiProfileSettingsCard() {
   const [message, setMessage] = useState("");
 
   const textFields = useMemo(() => [
-    ["role", t.role, "Terveyskeskuslääkäri"] as const,
-    ["specialty", t.specialty, "Yleislääketiede / päivystys / geriatria"] as const,
-    ["workplace", t.workplace, "Terveysasema, akuuttiosasto, vastaanotto"] as const,
-    ["experienceLevel", t.experienceLevel, "Erikoistuva / kokenut / konsultoiva"] as const,
-    ["defaultClinicalContext", t.defaultClinicalContext, "Suomen perusterveydenhuolto"] as const,
-    ["preferredStructure", t.preferredStructure, "Tulosyy, Esitiedot, Nykytila, Suunnitelma"] as const,
-    ["detailLevel", t.detailLevel, "Tiivis mutta kliinisesti yksityiskohtainen"] as const,
-    ["writingStyle", t.writingStyle, "Kronologinen, selkeä, ammattimainen"] as const,
+    ["role", t.role, t.fieldPlaceholders.role] as const,
+    ["specialty", t.specialty, t.fieldPlaceholders.specialty] as const,
+    ["workplace", t.workplace, t.fieldPlaceholders.workplace] as const,
+    ["experienceLevel", t.experienceLevel, t.fieldPlaceholders.experienceLevel] as const,
+    ["defaultClinicalContext", t.defaultClinicalContext, t.fieldPlaceholders.defaultClinicalContext] as const,
+    ["preferredStructure", t.preferredStructure, t.fieldPlaceholders.preferredStructure] as const,
+    ["detailLevel", t.detailLevel, t.fieldPlaceholders.detailLevel] as const,
+    ["writingStyle", t.writingStyle, t.fieldPlaceholders.writingStyle] as const,
   ], [t]);
 
   const loadSampleStats = async () => {
