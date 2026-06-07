@@ -38,14 +38,8 @@ export default function ProfileSecurityPage() {
         throw new Error(data.error || "Tunnisteen vaihtaminen epäonnistui");
       }
 
-      setMessage("Tunniste vaihdettu. Kirjaudu uudelleen sisään.");
-      setOldValue("");
-      setNewValue("");
-      setRepeatValue("");
-
-      setTimeout(() => {
-        window.location.replace(`/login?passwordChanged=1&t=${Date.now()}`);
-      }, 800);
+      window.location.href = `/login?passwordChanged=1&t=${Date.now()}`;
+      return;
     } catch (err: any) {
       setError(err.message || "Tunnisteen vaihtaminen epäonnistui");
     } finally {
