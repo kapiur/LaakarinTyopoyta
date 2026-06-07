@@ -199,8 +199,12 @@ export default function LinksPage() {
                     </button>
                   )}
                   {cat.source === "practice-country-default" ? (
-                    <div className="flex items-center gap-1 text-blue-600 bg-blue-50 px-2 py-1 rounded-md text-[10px] font-bold uppercase">
-                      <Globe size={10} /> {c.practiceDefault}
+                    <div
+                      className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-50 text-blue-600"
+                      title={c.practiceDefault}
+                      aria-label={c.practiceDefault}
+                    >
+                      <Globe size={13} />
                     </div>
                   ) : cat.userId ? (
                     <div className="flex items-center gap-1 text-amber-600 bg-amber-50 px-2 py-1 rounded-md text-[10px] font-bold uppercase">
