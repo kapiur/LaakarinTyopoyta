@@ -32,10 +32,22 @@ export default function ProfileSecurityPage() {
         body: JSON.stringify({ oldValue, newValue })
       });
 
-      const data = await response.json();
-
       if (!response.ok) {
-        throw new Error(data.error || "Tunnisteen vaihtaminen epäonnistui");
+        let errorMessage = "Tunnisteen vaihtaminen epäonnistui";
+
+        try {
+          const data = await response.json();
+          errorMessage = data.error || errorMessage;
+        } catch {
+          try {
+            const text = await response.text();
+            if (text) errorMessage = text;
+          } catch {
+            // Ignore body parsing failures and keep the generic message.
+          }
+        }
+
+        throw new Error(errorMessage);
       }
 
       window.location.href = `/login?passwordChanged=1&t=${Date.now()}`;
