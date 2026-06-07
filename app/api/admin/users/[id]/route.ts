@@ -18,6 +18,12 @@ function validatePassword(value: unknown) {
   return typeof value === "string" && value.length >= 8;
 }
 
+function normalizePassword(value: unknown) {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : null;
+}
+
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
   const { session, error } = await requireAdmin();
   if (error) return error;
@@ -29,6 +35,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
   try {
     const { email, name, isActive, mustChangePassword, newPassword } = await req.json();
+    const normalizedNewPassword = normalizePassword(newPassword);
 
     const currentUserId = Number((session?.user as any)?.id);
     const targetUser = await prisma.user.findUnique({ where: { id: userId } });
@@ -64,12 +71,12 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       data.mustChangePassword = mustChangePassword;
     }
 
-    if (typeof newPassword === "string" && newPassword.trim().length > 0) {
-      if (!validatePassword(newPassword)) {
+    if (normalizedNewPassword) {
+      if (!validatePassword(normalizedNewPassword)) {
         return NextResponse.json({ error: "Uuden salasanan tulee olla vähintään 8 merkkiä" }, { status: 400 });
       }
 
-      data.password = await bcrypt.hash(newPassword, 12);
+      data.password = await bcrypt.hash(normalizedNewPassword, 12);
     }
 
     const updatedUser = await prisma.user.update({

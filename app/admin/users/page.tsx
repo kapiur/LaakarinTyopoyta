@@ -30,7 +30,7 @@ export default function AdminUsersPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [editForm, setEditForm] = useState({ name: "", email: "", isActive: true, mustChangePassword: false, newPassword: "" });
+  const [editForm, setEditForm] = useState({ name: "", email: "", isActive: true, mustChangePassword: false, newPassword: "", confirmPassword: "" });
   const [newUser, setNewUser] = useState({ name: "", email: "", initialCredential: "", mustChangePassword: true });
 
   const adminCount = useMemo(() => users.filter((user) => user.role === "ADMIN").length, [users]);
@@ -66,7 +66,8 @@ export default function AdminUsersPage() {
       email: user.email,
       isActive: user.isActive,
       mustChangePassword: user.mustChangePassword,
-      newPassword: ""
+      newPassword: "",
+      confirmPassword: ""
     });
     setMessage(null);
     setError(null);
@@ -74,7 +75,7 @@ export default function AdminUsersPage() {
 
   function cancelEdit() {
     setEditingId(null);
-    setEditForm({ name: "", email: "", isActive: true, mustChangePassword: false, newPassword: "" });
+    setEditForm({ name: "", email: "", isActive: true, mustChangePassword: false, newPassword: "", confirmPassword: "" });
   }
 
   async function createUser() {
@@ -109,6 +110,12 @@ export default function AdminUsersPage() {
     setSaving(true);
     setMessage(null);
     setError(null);
+
+    if (editForm.newPassword && editForm.newPassword !== editForm.confirmPassword) {
+      setError("Uusi salasana ja vahvistus eivät täsmää.");
+      setSaving(false);
+      return;
+    }
 
     try {
       const response = await fetch(`/api/admin/users/${userId}`, {
@@ -306,8 +313,15 @@ export default function AdminUsersPage() {
                               type="password"
                               className="w-full px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-sm"
                             />
+                            <input
+                              value={editForm.confirmPassword}
+                              onChange={(event) => setEditForm({ ...editForm, confirmPassword: event.target.value })}
+                              placeholder="Vahvista uusi salasana"
+                              type="password"
+                              className="w-full px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-sm"
+                            />
                             <p className="text-[10px] text-slate-500">
-                              Admin voi asettaa käyttäjälle uuden salasanan ilman tilin poistamista. Vähintään 8 merkkiä.
+                              Admin voi asettaa käyttäjälle uuden salasanan ilman tilin poistamista. Alku- ja loppuvälilyönnit ohitetaan. Vähintään 8 merkkiä.
                             </p>
                           </div>
                         ) : (
@@ -361,7 +375,11 @@ export default function AdminUsersPage() {
                           <div className="flex justify-end gap-2">
                             <button
                               onClick={() => saveUser(user.id)}
-                              disabled={saving || (editForm.newPassword.length > 0 && editForm.newPassword.length < 8)}
+                              disabled={
+                                saving ||
+                                (editForm.newPassword.length > 0 && editForm.newPassword.trim().length < 8) ||
+                                (editForm.newPassword.length > 0 && editForm.newPassword !== editForm.confirmPassword)
+                              }
                               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-900 text-white text-xs font-bold disabled:opacity-50"
                             >
                               <Save size={14} /> Tallenna
