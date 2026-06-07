@@ -14,7 +14,7 @@ The product should evolve as a personal physician desktop. Users should be able 
 - Prisma
 - PostgreSQL
 - NextAuth credentials authentication
-- OpenAI API today, with an in-progress multi-provider architecture
+- OpenAI-compatible multi-provider AI runtime with OpenAI, Google Gemini, and YandexGPT
 
 ## Main product areas
 
@@ -74,9 +74,17 @@ Minimum expected environment variables:
 - `OPENAI_API_KEY`
 - `AI_CREDENTIAL_ENCRYPTION_KEY`
 
+Optional provider-specific variables used when platform credentials are configured through environment variables:
+
+- `GEMINI_API_KEY`
+- `YANDEX_API_KEY`
+- `YANDEX_CLOUD_FOLDER_ID`
+
 Notes:
 
-- `OPENAI_API_KEY` is still required by some current routes even though the project is moving toward a multi-provider model.
+- `OPENAI_API_KEY` is still required in current production because some routes and defaults still assume OpenAI availability.
+- `GEMINI_API_KEY` and `YANDEX_API_KEY` are optional unless those providers are used as platform-level fallbacks.
+- `YANDEX_CLOUD_FOLDER_ID` is required when YandexGPT is used through environment-backed platform credentials.
 - `AI_CREDENTIAL_ENCRYPTION_KEY` protects stored provider credentials. Do not rotate it casually in production.
 
 ## Deployment model
@@ -108,6 +116,8 @@ See [docs/deployment-coolify.md](docs/deployment-coolify.md) for the operational
 - [docs/deployment-coolify.md](docs/deployment-coolify.md)
 - [docs/agent-architecture.md](docs/agent-architecture.md)
 - [docs/security-and-privacy.md](docs/security-and-privacy.md)
+- [docs/ai-providers-and-credentials.md](docs/ai-providers-and-credentials.md)
+- [docs/personalization-and-settings.md](docs/personalization-and-settings.md)
 - [docs/privacy-architecture.md](docs/privacy-architecture.md)
 - [docs/privacy-operations.md](docs/privacy-operations.md)
 - [docs/agent-roadmap.md](docs/agent-roadmap.md)

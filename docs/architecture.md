@@ -85,13 +85,16 @@ Current state:
 
 - platform credentials exist
 - per-user AI profile exists
-- multi-provider support is partially implemented
-- some routes still call OpenAI directly as an interim state
+- per-user provider credentials exist
+- supported providers are intentionally limited to `OpenAI`, `Google Gemini`, and `YandexGPT`
+- the current runtime uses an OpenAI-compatible provider path for those supported providers
+- some historical route assumptions still lean on OpenAI defaults even though the provider layer is broader now
 
 Privacy-related implementation details are documented separately in:
 
 - [privacy-architecture.md](privacy-architecture.md)
 - [privacy-operations.md](privacy-operations.md)
+- [ai-providers-and-credentials.md](ai-providers-and-credentials.md)
 
 ### 5. AI agent
 
@@ -118,6 +121,12 @@ The system includes:
 
 This is the backbone for country-scoped clinical responses.
 
+It now also connects to a higher-level workspace context:
+
+- `practiceCountry` acts as the top-level clinician context
+- country defaults can set interface language, clinical country, clinical output language, evidence strictness, and default source preferences
+- manual overrides remain possible and are surfaced in settings instead of being hidden
+
 ### 7. Medicines and support modules
 
 There are supporting modules for:
@@ -136,6 +145,12 @@ The calculator area is now the reference implementation for user-facing personal
 - order can be stored per user;
 - the catalog page is generated from those per-user preferences.
 
+Other areas now follow the same general direction:
+
+- the sidebar supports per-user visibility and ordering for the main navigation block;
+- the links area can inject practice-country default categories while keeping personal and shared content separate;
+- the settings page itself is organized into second-level sections instead of one long scroll surface.
+
 ## Database shape
 
 Main model groups in [prisma/schema.prisma](/C:/Users/kapus/Documents/Codex/2026-06-06/github-plugin-github-openai-curated-github/work/LaakarinTyopoyta/prisma/schema.prisma):
@@ -152,7 +167,7 @@ Main model groups in [prisma/schema.prisma](/C:/Users/kapus/Documents/Codex/2026
 
 Some parts are intentionally transitional:
 
-- direct OpenAI routes still exist
+- some provider assumptions still default toward OpenAI even though runtime support now covers OpenAI, Gemini, and YandexGPT
 - some older endpoints are still present for legacy reasons
 - `pikaohjeet-v2` still stores some state in internal tags that should eventually become explicit schema fields
 - a few schema-related workarounds were originally made under GitHub connector limitations and should be normalized over time

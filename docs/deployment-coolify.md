@@ -31,6 +31,9 @@ Known production variables:
 - `NEXTAUTH_SECRET`
 - `NEXTAUTH_URL`
 - `OPENAI_API_KEY`
+- `GEMINI_API_KEY` when Gemini is used as an environment-backed platform credential
+- `YANDEX_API_KEY` when YandexGPT is used as an environment-backed platform credential
+- `YANDEX_CLOUD_FOLDER_ID` when YandexGPT is used through environment-backed platform credentials
 - `AI_CREDENTIAL_ENCRYPTION_KEY`
 - `NIXPACKS_NODE_VERSION` may still exist in Coolify settings, but the app now builds through the Dockerfile
 

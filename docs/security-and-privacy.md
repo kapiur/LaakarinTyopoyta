@@ -60,6 +60,18 @@ npm run test:privacy
 - do not return full secrets to the frontend
 - do not log secrets
 - keep `AI_CREDENTIAL_ENCRYPTION_KEY` stable unless credential recreation is planned
+- personal user credentials and admin-managed platform credentials must both go through the same encryption layer before database storage
+- YandexGPT requires `projectId` or folder ID metadata in addition to the secret, but that metadata still should be handled carefully and consistently
+
+Current supported providers in the user-facing provider selector are:
+
+- `OpenAI`
+- `Google Gemini`
+- `YandexGPT`
+
+For the current provider and credential model, see:
+
+- [ai-providers-and-credentials.md](ai-providers-and-credentials.md)
 
 ## Clinical safety rules
 
