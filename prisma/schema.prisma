@@ -150,6 +150,7 @@ model UserCalculatorPreference {
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   calculatorKey String
   isVisible     Boolean  @default(true)
+  customOrder   Int?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

@@ -8,6 +8,12 @@ LaakarinTyopoyta is an authenticated internal physician workspace. The system is
 2. privacy-aware AI assistance;
 3. stable production operation for active users.
 
+There is also a strong product-shaping principle for future work:
+
+- this should behave like a personal physician desktop, not a one-size-fits-all portal;
+- users should be able to control which tools are visible to them and, where sensible, the order and layout of those tools;
+- personalization should be implemented through explicit per-user preferences rather than hidden UI heuristics.
+
 ## High-level structure
 
 ```text
@@ -123,6 +129,13 @@ There are supporting modules for:
 
 Some of these are production-grade, some are still experimental.
 
+The calculator area is now the reference implementation for user-facing personalization:
+
+- calculator definitions live in a registry;
+- visibility is stored per user;
+- order can be stored per user;
+- the catalog page is generated from those per-user preferences.
+
 ## Database shape
 
 Main model groups in [prisma/schema.prisma](/C:/Users/kapus/Documents/Codex/2026-06-06/github-plugin-github-openai-curated-github/work/LaakarinTyopoyta/prisma/schema.prisma):
@@ -151,3 +164,4 @@ Some parts are intentionally transitional:
 - database changes should be additive
 - the agent must stay supervised
 - privacy and evidence gates are part of the architecture, not optional extras
+- personalization should prefer explicit user preferences stored in the system over hardcoded universal defaults

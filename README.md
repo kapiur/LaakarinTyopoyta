@@ -4,6 +4,8 @@ LaakarinTyopoyta is a Next.js + Prisma + PostgreSQL clinical workspace for physi
 
 The project is used by real production users. Data preservation and cautious rollout discipline are mandatory.
 
+The product should evolve as a personal physician desktop. Users should be able to decide which tools they need, which modules stay visible, and how their own workspace is arranged wherever that is practical and safe.
+
 ## Tech stack
 
 - Next.js 14 (App Router)

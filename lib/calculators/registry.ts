@@ -109,9 +109,14 @@ export const CALCULATOR_DEFINITIONS: CalculatorDefinition[] = [
 ];
 
 export const CALCULATOR_KEYS = new Set(CALCULATOR_DEFINITIONS.map((calculator) => calculator.key));
+export const CALCULATOR_DEFINITION_MAP = new Map(CALCULATOR_DEFINITIONS.map((calculator) => [calculator.key, calculator]));
 
 export function isCalculatorKey(value: unknown): value is string {
   return typeof value === 'string' && CALCULATOR_KEYS.has(value);
+}
+
+export function getCalculatorDefinition(key: string) {
+  return CALCULATOR_DEFINITION_MAP.get(key);
 }
 
 export function getSortedCalculatorDefinitions() {
