@@ -9,6 +9,7 @@ import AiProfileSettingsCard from "../../components/AiProfileSettingsCard";
 import AiProviderSettingsCard from "../../components/AiProviderSettingsCard";
 import CalculatorVisibilitySettingsCard from "../../components/CalculatorVisibilitySettingsCard";
 import ClinicalEvidenceSettingsCard from "../../components/ClinicalEvidenceSettingsCard";
+import SidebarVisibilitySettingsCard from "../../components/SidebarVisibilitySettingsCard";
 import { useI18n } from "../../lib/useI18n";
 
 export default function SettingsPage() {
@@ -38,6 +39,7 @@ export default function SettingsPage() {
       <PracticeCountrySettingsCard />
       <LanguageSettingsCard />
       <ClinicalEvidenceSettingsCard />
+      <SidebarVisibilitySettingsCard />
       <CalculatorVisibilitySettingsCard />
       <AiProfileSettingsCard />
       <AiProviderSettingsCard />

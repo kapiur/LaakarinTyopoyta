@@ -38,6 +38,7 @@ model User {
   pedsDrugs       PedsDrug[]
   pedsIndications PedsIndication[]
   calculatorPreferences UserCalculatorPreference[]
+  sidebarPreferences SidebarMenuPreference[]
   history         AIHistory[]
   aiRunAuditLogs  AiRunAuditLog[]
   aiTools         AiTool[]
@@ -155,6 +156,20 @@ model UserCalculatorPreference {
   updatedAt     DateTime @updatedAt
 
   @@unique([userId, calculatorKey])
+  @@index([userId])
+}
+
+model SidebarMenuPreference {
+  id          String   @id @default(cuid())
+  userId      Int
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  itemKey     String
+  isVisible   Boolean  @default(true)
+  customOrder Int?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([userId, itemKey])
   @@index([userId])
 }
 

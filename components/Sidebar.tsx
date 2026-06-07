@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 import { signOut, useSession } from "next-auth/react";
 import { 
   LayoutDashboard, 
@@ -15,25 +16,72 @@ import {
   FlaskConical
 } from "lucide-react";
 import { useI18n } from "../lib/useI18n";
+import type { TranslationKey } from "../lib/i18n";
+import { getSortedSidebarItemDefinitions, type SidebarIconName } from "../lib/navigation/sidebarRegistry";
+
+type SidebarVisibilityItem = {
+  key: string;
+  href: string;
+  labelKey: TranslationKey;
+  icon: SidebarIconName;
+  sortOrder: number;
+  customOrder: number | null;
+  isVisible: boolean;
+};
+
+const iconMap = {
+  LayoutDashboard,
+  FileText,
+  Bot,
+  Zap,
+  LinkIcon,
+  Pill,
+  Calculator,
+  FlaskConical,
+};
 
 export default function Sidebar() {
   const pathname = usePathname();
   const { data: session } = useSession();
   const { t } = useI18n();
   const isAdmin = (session?.user as any)?.role === "ADMIN";
+  const [navItems, setNavItems] = useState<SidebarVisibilityItem[]>(() =>
+    getSortedSidebarItemDefinitions().map((item) => ({
+      ...item,
+      customOrder: null,
+      isVisible: item.defaultEnabled,
+    }))
+  );
 
   if (pathname === '/login') return null;
 
-  const navItems = [
-    { href: "/", label: t("sidebar.home"), icon: LayoutDashboard },
-    { href: "/malli", label: t("sidebar.templates"), icon: FileText },
-    { href: "/ai-tools", label: t("sidebar.aiTools"), icon: Bot },
-    { href: "/pikaohjeet-v2", label: t("sidebar.quickGuides"), icon: Zap },
-    { href: "/links", label: t("sidebar.links"), icon: LinkIcon },
-    { href: "/medicines", label: t("sidebar.medicines"), icon: Pill },
-    { href: "/calculators", label: t("sidebar.calculators"), icon: Calculator },
-    { href: "/calculators/peds-library", label: t("sidebar.drugLibraries"), icon: FlaskConical },
-  ];
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadSidebarVisibility() {
+      try {
+        const response = await fetch("/api/sidebar/visibility", { cache: "no-store" });
+        if (!response.ok) return;
+
+        const data = await response.json();
+        if (isMounted && Array.isArray(data.items)) {
+          setNavItems(data.items);
+        }
+      } catch (error) {
+        console.error("Sidebar visibility loading failed", error);
+      }
+    }
+
+    loadSidebarVisibility();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const visibleNavItems = useMemo(
+    () => navItems.filter((item) => item.isVisible),
+    [navItems]
+  );
 
   return (
     <aside className="w-64 bg-white border-r border-slate-200 flex flex-col shadow-sm z-10">
@@ -45,8 +93,8 @@ export default function Sidebar() {
       </div>
       
       <nav className="flex-1 p-4 space-y-2">
-        {navItems.map((item) => {
-          const Icon = item.icon;
+        {visibleNavItems.map((item) => {
+          const Icon = iconMap[item.icon] ?? LayoutDashboard;
           const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(`${item.href}/`));
           return (
             <Link 
@@ -57,7 +105,7 @@ export default function Sidebar() {
               }`}
             >
               <Icon size={20} className={isActive ? '' : 'group-hover:scale-110 transition-transform'} />
-              <span>{item.label}</span>
+              <span>{t(item.labelKey)}</span>
             </Link>
           );
         })}
