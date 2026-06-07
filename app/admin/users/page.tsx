@@ -130,7 +130,32 @@ export default function AdminUsersPage() {
         throw new Error(data.error || "Käyttäjän päivitys epäonnistui");
       }
 
-      setMessage(editForm.newPassword ? "Käyttäjän tiedot ja salasana päivitetty." : "Käyttäjän tiedot päivitetty.");
+      if (editForm.newPassword.trim().length > 0) {
+        const debugResponse = await fetch(`/api/admin/users/${userId}/debug-login`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ candidatePassword: editForm.newPassword }),
+        });
+
+        const debugData = await debugResponse.json();
+
+        if (!debugResponse.ok) {
+          throw new Error(debugData.error || "Salasanan palvelintarkistus epäonnistui");
+        }
+
+        if (!debugData.passwordMatches) {
+          if (debugData.trimmedPasswordMatches) {
+            throw new Error("Salasana tallentui, mutta syötetty arvo sisälsi alku- tai loppuvälilyöntejä. Kirjautumisessa käytä versiota ilman reuna-välilyöntejä.");
+          }
+
+          throw new Error("Salasana tallennettiin, mutta palvelimen kirjautumistesti epäonnistui. Älä luota tähän muutokseen vielä.");
+        }
+
+        setMessage("Käyttäjän tiedot ja salasana päivitetty. Palvelimen kirjautumistesti onnistui.");
+      } else {
+        setMessage("Käyttäjän tiedot päivitetty.");
+      }
+
       cancelEdit();
       await fetchUsers();
     } catch (err: any) {
