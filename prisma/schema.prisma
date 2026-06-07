@@ -42,6 +42,7 @@ model User {
   history         AIHistory[]
   aiRunAuditLogs  AiRunAuditLog[]
   aiTools         AiTool[]
+  aiCredentials   UserAiCredential[]
   aiProfile       UserAiProfile?
   clinicalSettings UserClinicalSettings?
   clinicalSourcePreferences UserClinicalSourcePreference[]
@@ -293,6 +294,23 @@ model AiProviderCredential {
   updatedAt       DateTime @updatedAt
 
   @@index([isEnabled])
+}
+
+model UserAiCredential {
+  id              String   @id @default(cuid())
+  userId          Int
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider        String
+  encryptedSecret String   @db.Text
+  keyPreview      String?
+  baseUrl         String?
+  defaultModel    String?
+  lastUsedAt      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([userId, provider])
+  @@index([userId])
 }
 
 model UserClinicalSettings {

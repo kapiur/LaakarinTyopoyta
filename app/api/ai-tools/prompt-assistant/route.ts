@@ -1,15 +1,9 @@
-import { OpenAI } from 'openai';
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '../../../../lib/auth';
+import { getOpenAiClientForUser } from '../../../../lib/ai/providers/getOpenAiClientForUser';
 import { preparePrivacyPayload } from '../../../../lib/privacy/gateway';
 import { hasCriticalPrivacyFindingTypes } from '../../../../lib/privacy/gateway/decision';
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
-const CURRENT_MODEL = 'gpt-5.4';
 
 const PROMPT_ASSISTANT_SYSTEM_PROMPT = `
 Olet asiantuntija, joka laatii ja muokkaa turvallisia ja käytännöllisiä system prompt -ohjeita lääkärin AI-työkaluja varten Suomen terveydenhuollon kontekstissa.
@@ -78,6 +72,11 @@ export async function POST(req: Request) {
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+    const userId = Number((session?.user as any)?.id);
+    if (!Number.isFinite(userId)) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const { client, model } = await getOpenAiClientForUser(userId);
 
     const body = await req.json();
     const description = typeof body.description === 'string' ? body.description.trim() : '';
@@ -113,8 +112,8 @@ export async function POST(req: Request) {
         : '',
     ].filter(Boolean).join('\n\n');
 
-    const response = await openai.chat.completions.create({
-      model: CURRENT_MODEL,
+    const response = await client.chat.completions.create({
+      model,
       temperature: 0.1,
       messages: [
         { role: 'system', content: PROMPT_ASSISTANT_SYSTEM_PROMPT },

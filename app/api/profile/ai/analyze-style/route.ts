@@ -1,16 +1,14 @@
 import { randomUUID } from 'crypto';
-import { OpenAI } from 'openai';
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '../../../../../lib/auth';
+import { getOpenAiClientForUser } from '../../../../../lib/ai/providers/getOpenAiClientForUser';
 import { prisma } from '../../../../../lib/prisma';
 import { anonymizePatientText } from '../../../../../lib/privacy/anonymizePatientText';
 import { preparePrivacyPayload } from '../../../../../lib/privacy/gateway';
 import { hasCriticalPrivacyFindingTypes } from '../../../../../lib/privacy/gateway/decision';
 import { sanitizeJsonValue } from '../../../../../lib/privacy/structured/sanitizeJsonValue';
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-const CURRENT_MODEL = 'gpt-5.4';
 const DEFAULT_RECENT_SAMPLE_LIMIT = 5;
 const MAX_SAVED_PROFILE_SAMPLES = 12;
 const MAX_STORED_SAMPLE_CHARS = 4000;
@@ -153,9 +151,16 @@ function buildMergePromptPayload(profile: ProfileRow, recentSamples: SampleRow[]
   return JSON.stringify(sanitizedPayload.value);
 }
 
-async function createMergedStyleSummary(profile: ProfileRow, recentSamples: SampleRow[], anonymizedText: string, sourceLabel: string | null) {
-  const response = await openai.chat.completions.create({
-    model: CURRENT_MODEL,
+async function createMergedStyleSummary(
+  profile: ProfileRow,
+  recentSamples: SampleRow[],
+  anonymizedText: string,
+  sourceLabel: string | null,
+  client: Awaited<ReturnType<typeof getOpenAiClientForUser>>["client"],
+  model: string
+) {
+  const response = await client.chat.completions.create({
+    model,
     temperature: 0,
     messages: [
       {
@@ -194,6 +199,7 @@ export async function POST(req: Request) {
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+    const { client, model } = await getOpenAiClientForUser(userId);
 
     const body = await req.json();
     const exampleText = typeof body?.text === 'string' ? body.text : '';
@@ -222,7 +228,14 @@ export async function POST(req: Request) {
     const anonymized = anonymizePatientText(inputPrivacy.sanitized.exampleText, { mode: 'profileSample' });
     const profile = await ensureProfile(userId);
     const recentSamples = await getRecentSamples(profile.id);
-    const styleSummary = await createMergedStyleSummary(profile, recentSamples, anonymized.sanitizedText, inputPrivacy.sanitized.sourceLabel || null);
+    const styleSummary = await createMergedStyleSummary(
+      profile,
+      recentSamples,
+      anonymized.sanitizedText,
+      inputPrivacy.sanitized.sourceLabel || null,
+      client,
+      model
+    );
     const outputPrivacy = preparePrivacyPayload([
       { key: 'styleSummary', value: styleSummary, mode: 'persistentStorage' },
     ]);

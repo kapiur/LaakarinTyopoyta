@@ -1,7 +1,7 @@
-import { OpenAI } from 'openai';
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '../../../../lib/auth';
+import { getOpenAiClientForUser } from '../../../../lib/ai/providers/getOpenAiClientForUser';
 import { prisma } from '../../../../lib/prisma';
 import { getTemplateFields, validateTemplate } from '../../../../lib/templates';
 import { mergeAnonymizationResults } from '../../../../lib/privacy/anonymizePatientText';
@@ -13,9 +13,6 @@ import {
   withUserAiProfileInstruction,
   type UserAiProfileRecord,
 } from '../../../../lib/ai/userAiProfile';
-
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-const CURRENT_MODEL = 'gpt-5.4';
 
 const TRUSTED_MEDICAL_DOMAINS = [
   'kaypahoito.fi',
@@ -390,10 +387,16 @@ function validateRequest(body: TemplateAiRequest) {
   return null;
 }
 
-async function runTemplateAiCompletion(body: TemplateAiRequest, profileInstruction: string, privacy?: { anonymized: boolean; findingTypes: string[] }) {
+async function runTemplateAiCompletion(
+  body: TemplateAiRequest,
+  profileInstruction: string,
+  model: string,
+  client: Awaited<ReturnType<typeof getOpenAiClientForUser>>["client"],
+  privacy?: { anonymized: boolean; findingTypes: string[] }
+) {
   const systemPrompt = withUserAiProfileInstruction(buildSystemPrompt(body.mode as TemplateAiMode), profileInstruction);
-  const response = await openai.chat.completions.create({
-    model: CURRENT_MODEL,
+  const response = await client.chat.completions.create({
+    model,
     temperature: 0,
     response_format: { type: 'json_object' },
     messages: [
@@ -412,7 +415,7 @@ export async function POST(req: Request) {
     const session = await getServerSession(authOptions);
     const userId = Number((session?.user as any)?.id);
     if (!Number.isFinite(userId)) return jsonError('Unauthorized', 401);
-    if (!process.env.OPENAI_API_KEY) return jsonError('OPENAI_API_KEY is not configured.', 500);
+    const { client, model } = await getOpenAiClientForUser(userId);
 
     const originalBody = await req.json() as TemplateAiRequest;
     const requestError = validateRequest(originalBody);
@@ -430,7 +433,7 @@ export async function POST(req: Request) {
     }
     const profile = await getUserAiProfile(userId);
     const profileInstruction = buildUserAiProfileInstruction(profile, 'styleOnly');
-    const normalized = await runTemplateAiCompletion(body, profileInstruction, privacy);
+    const normalized = await runTemplateAiCompletion(body, profileInstruction, model, client, privacy);
     const sanitizedOutput = sanitizeJsonValue(normalized, {
       defaultMode: 'storage',
       modeForPath(path) {

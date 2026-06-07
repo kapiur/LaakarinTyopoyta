@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { BrainCircuit, Loader2, Save } from "lucide-react";
+import { BrainCircuit, KeyRound, Loader2, Save, Trash2 } from "lucide-react";
 import { useI18n } from "../lib/useI18n";
 import { aiAdminT } from "./ai-admin/aiAdminI18n";
 
@@ -21,6 +21,16 @@ type AiPolicy = {
   allowedProviders: string[];
 };
 
+type PersonalCredentialSummary = {
+  provider: string;
+  keyPreview?: string | null;
+  baseUrl?: string | null;
+  defaultModel?: string | null;
+  lastUsedAt?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+};
+
 const defaultSettings: AiSettings = {
   defaultProvider: "openai",
   defaultModel: "gpt-5.4",
@@ -37,6 +47,10 @@ export default function AiProviderSettingsCard() {
   const [registry, setRegistry] = useState<Registry>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [credentialSaving, setCredentialSaving] = useState(false);
+  const [credentialDeleting, setCredentialDeleting] = useState(false);
+  const [personalCredentials, setPersonalCredentials] = useState<PersonalCredentialSummary[]>([]);
+  const [personalSecret, setPersonalSecret] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -50,18 +64,30 @@ export default function AiProviderSettingsCard() {
     return registry[settings.defaultProvider]?.models || [];
   }, [registry, settings.defaultProvider]);
 
+  const currentPersonalCredential = useMemo(
+    () => personalCredentials.find((credential) => credential.provider === settings.defaultProvider) ?? null,
+    [personalCredentials, settings.defaultProvider]
+  );
+
   async function loadSettings() {
     setLoading(true);
     setError(null);
 
     try {
-      const response = await fetch("/api/profile/ai-settings");
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || tt("loadFailed"));
+      const [settingsResponse, credentialsResponse] = await Promise.all([
+        fetch("/api/profile/ai-settings"),
+        fetch("/api/profile/ai-credentials"),
+      ]);
+      const settingsData = await settingsResponse.json();
+      const credentialsData = await credentialsResponse.json();
 
-      setSettings(data.settings || defaultSettings);
-      setPolicy(data.policy || null);
-      setRegistry(data.registry || {});
+      if (!settingsResponse.ok) throw new Error(settingsData.error || tt("loadFailed"));
+      if (!credentialsResponse.ok) throw new Error(credentialsData.error || tt("loadFailed"));
+
+      setSettings(settingsData.settings || defaultSettings);
+      setPolicy(settingsData.policy || null);
+      setRegistry(settingsData.registry || {});
+      setPersonalCredentials(Array.isArray(credentialsData.credentials) ? credentialsData.credentials : []);
     } catch (err: any) {
       setError(err.message || tt("loadFailed"));
     } finally {
@@ -94,6 +120,61 @@ export default function AiProviderSettingsCard() {
       setError(err.message || tt("saveFailed"));
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function savePersonalCredential() {
+    if (!personalSecret.trim()) {
+      setError(tt("personalCredentialSaveFailed"));
+      return;
+    }
+
+    setCredentialSaving(true);
+    setMessage(null);
+    setError(null);
+
+    try {
+      const response = await fetch("/api/profile/ai-credentials", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          provider: settings.defaultProvider,
+          secret: personalSecret,
+        }),
+      });
+      const data = await response.json();
+
+      if (!response.ok) throw new Error(data.error || tt("personalCredentialSaveFailed"));
+
+      setMessage(tt("personalCredentialSaved"));
+      setPersonalSecret("");
+      await loadSettings();
+    } catch (err: any) {
+      setError(err.message || tt("personalCredentialSaveFailed"));
+    } finally {
+      setCredentialSaving(false);
+    }
+  }
+
+  async function deletePersonalCredential() {
+    setCredentialDeleting(true);
+    setMessage(null);
+    setError(null);
+
+    try {
+      const response = await fetch(`/api/profile/ai-credentials?provider=${encodeURIComponent(settings.defaultProvider)}`, {
+        method: "DELETE",
+      });
+      const data = await response.json();
+
+      if (!response.ok) throw new Error(data.error || tt("personalCredentialDeleteFailed"));
+
+      setMessage(tt("personalCredentialDeleted"));
+      await loadSettings();
+    } catch (err: any) {
+      setError(err.message || tt("personalCredentialDeleteFailed"));
+    } finally {
+      setCredentialDeleting(false);
     }
   }
 
@@ -175,6 +256,62 @@ export default function AiProviderSettingsCard() {
           {policy?.requireUserCredentials && (
             <div className="rounded-2xl bg-amber-50 border border-amber-100 text-amber-800 px-5 py-4 text-sm font-semibold">
               {tt("userCredentialRequired")}
+            </div>
+          )}
+
+          {(policy?.allowUserCredentials || policy?.requireUserCredentials) && (
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 space-y-4">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-white border border-slate-200 text-slate-600 flex items-center justify-center">
+                  <KeyRound size={18} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">{tt("personalCredentialTitle")}</h3>
+                  <p className="text-sm text-slate-500">{tt("personalCredentialDescription")}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_auto] gap-3 items-end">
+                <label className="space-y-1">
+                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{tt("userCredential")}</span>
+                  <input
+                    type="password"
+                    value={personalSecret}
+                    onChange={(event) => setPersonalSecret(event.target.value)}
+                    className="w-full px-4 py-3 rounded-xl bg-white border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-blue-100"
+                    placeholder={tt("personalCredentialPlaceholder")}
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={savePersonalCredential}
+                  disabled={credentialSaving}
+                  className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-blue-600 text-white text-sm font-bold hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {credentialSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                  {tt("savePersonalCredential")}
+                </button>
+              </div>
+
+              {currentPersonalCredential ? (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-white border border-slate-200 px-4 py-3">
+                  <div className="space-y-1">
+                    <div className="text-xs font-bold uppercase tracking-wider text-slate-500">{tt("personalCredentialSavedPreview")}</div>
+                    <div className="text-sm font-semibold text-slate-800">{currentPersonalCredential.keyPreview}</div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={deletePersonalCredential}
+                    disabled={credentialDeleting}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-red-200 text-red-600 text-sm font-bold hover:bg-red-50 disabled:opacity-50"
+                  >
+                    {credentialDeleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                    {tt("deletePersonalCredential")}
+                  </button>
+                </div>
+              ) : (
+                <div className="text-sm text-slate-500">{tt("personalCredentialMissing")}</div>
+              )}
             </div>
           )}
 

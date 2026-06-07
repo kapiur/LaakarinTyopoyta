@@ -1,14 +1,11 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
-import { OpenAI } from "openai";
 import { authOptions } from "../../../../../lib/auth";
+import { getOpenAiClientForUser } from "../../../../../lib/ai/providers/getOpenAiClientForUser";
 import { mergeAnonymizationResults } from "../../../../../lib/privacy/anonymizePatientText";
 import { preparePrivacyPayload } from "../../../../../lib/privacy/gateway";
 import { hasCriticalPrivacyFindingTypes } from "../../../../../lib/privacy/gateway/decision";
 import { sanitizeJsonValue } from "../../../../../lib/privacy/structured/sanitizeJsonValue";
-
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-const CURRENT_MODEL = "gpt-5.4";
 
 // Direct mode is used for normal short material. Large material uses a two-pass pipeline:
 // 1) chunk-level extraction of actionable clinical points
@@ -154,9 +151,13 @@ function sanitizeClinicalCardValue(value: unknown) {
   });
 }
 
-async function createClinicalDraftDirect(params: { topic: string; rawText: string; sourceText: string }) {
-  const response = await openai.chat.completions.create({
-    model: CURRENT_MODEL,
+async function createClinicalDraftDirect(
+  params: { topic: string; rawText: string; sourceText: string },
+  client: Awaited<ReturnType<typeof getOpenAiClientForUser>>["client"],
+  model: string
+) {
+  const response = await client.chat.completions.create({
+    model,
     temperature: 0,
     messages: [
       { role: "system", content: baseSystemPrompt() },
@@ -168,13 +169,17 @@ async function createClinicalDraftDirect(params: { topic: string; rawText: strin
   return sanitizeClinicalCardValue(tryParseJson(content)).value;
 }
 
-async function extractChunkSummary(params: {
+async function extractChunkSummary(
+  params: {
   topic: string;
   chunk: string;
   index: number;
   total: number;
   isSource: boolean;
-}) {
+},
+  client: Awaited<ReturnType<typeof getOpenAiClientForUser>>["client"],
+  model: string
+) {
   const systemPrompt = `
 Olet kliininen tekstin tiivistäjä. Poimi annetusta fragmentista vain asiat, joista on hyötyä Terveysasema-lääkärin nopeassa Pikaohjeessa.
 
@@ -193,8 +198,8 @@ Palauta tiivis suomenkielinen JSON:
 }
 `;
 
-  const response = await openai.chat.completions.create({
-    model: CURRENT_MODEL,
+  const response = await client.chat.completions.create({
+    model,
     temperature: 0,
     messages: [
       { role: "system", content: systemPrompt },
@@ -216,20 +221,24 @@ async function runInBatches<T, R>(items: T[], batchSize: number, fn: (item: T, i
   return results;
 }
 
-async function createClinicalDraftChunked(params: { topic: string; rawText: string; sourceText: string }) {
+async function createClinicalDraftChunked(
+  params: { topic: string; rawText: string; sourceText: string },
+  client: Awaited<ReturnType<typeof getOpenAiClientForUser>>["client"],
+  model: string
+) {
   const materialChunks = splitText(params.rawText);
   const sourceChunks = params.sourceText ? splitText(params.sourceText, CHUNK_TARGET_CHARS, CHUNK_OVERLAP_CHARS) : [];
 
   const materialSummaries = await runInBatches(materialChunks, 3, (chunk, index) =>
-    extractChunkSummary({ topic: params.topic, chunk, index: index + 1, total: materialChunks.length, isSource: false })
+    extractChunkSummary({ topic: params.topic, chunk, index: index + 1, total: materialChunks.length, isSource: false }, client, model)
   );
 
   const sourceSummaries = await runInBatches(sourceChunks, 3, (chunk, index) =>
-    extractChunkSummary({ topic: params.topic, chunk, index: index + 1, total: sourceChunks.length, isSource: true })
+    extractChunkSummary({ topic: params.topic, chunk, index: index + 1, total: sourceChunks.length, isSource: true }, client, model)
   );
 
-  const response = await openai.chat.completions.create({
-    model: CURRENT_MODEL,
+  const response = await client.chat.completions.create({
+    model,
     temperature: 0,
     messages: [
       { role: "system", content: baseSystemPrompt() },
@@ -265,6 +274,9 @@ export async function POST(req: Request) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const userId = Number((session?.user as any)?.id);
+    if (!Number.isFinite(userId)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const { client, model } = await getOpenAiClientForUser(userId);
 
     const body = await req.json();
     const rawText = typeof body?.rawText === "string" ? body.rawText.trim() : "";
@@ -307,12 +319,12 @@ export async function POST(req: Request) {
           topic: inputPrivacy.sanitized.topic,
           rawText: inputPrivacy.sanitized.rawText,
           sourceText: inputPrivacy.sanitized.sourceText,
-        })
+        }, client, model)
       : await createClinicalDraftChunked({
           topic: inputPrivacy.sanitized.topic,
           rawText: inputPrivacy.sanitized.rawText,
           sourceText: inputPrivacy.sanitized.sourceText,
-        })) as Record<string, unknown>;
+        }, client, model)) as Record<string, unknown>;
     const outputPrivacy = preparePrivacyPayload([
       { key: "card", value: JSON.stringify(parsed), mode: "persistentStorage" },
     ]);

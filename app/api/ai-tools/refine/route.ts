@@ -1,8 +1,8 @@
-import { OpenAI } from 'openai';
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { DEFAULT_AI_TOOL_PROMPTS } from '../../../../lib/ai/defaultTools';
 import { authOptions } from '../../../../lib/auth';
+import { getOpenAiClientForUser } from '../../../../lib/ai/providers/getOpenAiClientForUser';
 import { prisma } from '../../../../lib/prisma';
 import { preparePrivacyPayload } from '../../../../lib/privacy/gateway';
 import { hasCriticalPrivacyFindingTypes } from '../../../../lib/privacy/gateway/decision';
@@ -14,12 +14,6 @@ import {
   type AiProfileMode,
   type UserAiProfileRecord,
 } from '../../../../lib/ai/userAiProfile';
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
-const CURRENT_MODEL = 'gpt-5.4';
 
 const PRIVACY_PLACEHOLDER_SYSTEM_PROMPT = `
 Privacy placeholders such as [NAME], [HETU], [DATE_OF_BIRTH], [DATE], [PHONE], [EMAIL], [ADDRESS], [PATIENT_ID], [PROFESSIONAL_NAME] and similar bracketed markers are internal server-side privacy markers.
@@ -121,6 +115,7 @@ export async function POST(req: Request) {
     if (!Number.isFinite(userId)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+    const { client, model } = await getOpenAiClientForUser(userId);
 
     const body = await req.json();
     const mode = typeof body?.mode === 'string' ? body.mode : '';
@@ -172,8 +167,8 @@ Käyttäjän tarkennusohje:
 ${inputPrivacy.sanitized.instruction}
 `;
 
-    const response = await openai.chat.completions.create({
-      model: CURRENT_MODEL,
+    const response = await client.chat.completions.create({
+      model,
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userContent },

@@ -1,14 +1,12 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
-import { OpenAI } from "openai";
 import { authOptions } from "../../../../../lib/auth";
+import { getOpenAiClientForUser } from "../../../../../lib/ai/providers/getOpenAiClientForUser";
 import { anonymizePatientText, mergeAnonymizationResults } from "../../../../../lib/privacy/anonymizePatientText";
 import { preparePrivacyPayload } from "../../../../../lib/privacy/gateway";
 import { hasCriticalPrivacyFindingTypes } from "../../../../../lib/privacy/gateway/decision";
 import { sanitizeJsonValue } from "../../../../../lib/privacy/structured/sanitizeJsonValue";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-const CURRENT_MODEL = "gpt-5.4";
 const MAX_SUMMARY_JSON_CHARS = 160000;
 
 function tryParseJson(content: string) {
@@ -47,6 +45,9 @@ export async function POST(req: Request) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const userId = Number((session?.user as any)?.id);
+    if (!Number.isFinite(userId)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const { client, model } = await getOpenAiClientForUser(userId);
 
     const body = await req.json();
     const topic = typeof body?.topic === "string" ? body.topic.trim() : "";
@@ -158,8 +159,8 @@ PALAUTA VAIN validi JSON:
 }
 `;
 
-    const response = await openai.chat.completions.create({
-      model: CURRENT_MODEL,
+    const response = await client.chat.completions.create({
+      model,
       temperature: 0,
       messages: [
         { role: "system", content: systemPrompt },
