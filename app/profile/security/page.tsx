@@ -1,13 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { signOut, useSession } from "next-auth/react";
 import { CheckCircle2, KeyRound, Loader2 } from "lucide-react";
 
 export default function ProfileSecurityPage() {
-  const router = useRouter();
-  const { data: session, update } = useSession();
+  const { data: session } = useSession();
   const [oldValue, setOldValue] = useState("");
   const [newValue, setNewValue] = useState("");
   const [repeatValue, setRepeatValue] = useState("");
@@ -40,17 +38,15 @@ export default function ProfileSecurityPage() {
         throw new Error(data.error || "Tunnisteen vaihtaminen epäonnistui");
       }
 
-      await update({ mustChangePassword: false });
-
-      setMessage("Tunniste vaihdettu.");
+      setMessage("Tunniste vaihdettu. Kirjaudu uudelleen sisään.");
       setOldValue("");
       setNewValue("");
       setRepeatValue("");
 
-      setTimeout(() => {
-        router.replace("/");
-        router.refresh();
-      }, 1200);
+      setTimeout(async () => {
+        await signOut({ redirect: false });
+        window.location.assign("/login");
+      }, 800);
     } catch (err: any) {
       setError(err.message || "Tunnisteen vaihtaminen epäonnistui");
     } finally {
@@ -137,7 +133,7 @@ export default function ProfileSecurityPage() {
           {!(session?.user as any)?.mustChangePassword && (
             <button
               type="button"
-              onClick={() => router.push("/")}
+              onClick={() => window.location.assign("/")}
               className="w-full px-5 py-3 rounded-xl border border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-50"
             >
               Palaa etusivulle
