@@ -14,11 +14,112 @@ function isLiteratureMode(value: unknown): value is LiteratureInterpretationMode
 }
 
 function safeJsonParse<T>(content: string): T | null {
-  try {
-    return JSON.parse(content) as T;
-  } catch {
-    return null;
+  const trimmed = content.trim();
+
+  const candidates = [
+    trimmed,
+    trimmed
+      .replace(/^```json\s*/i, "")
+      .replace(/^```\s*/i, "")
+      .replace(/\s*```$/i, "")
+      .trim(),
+  ];
+
+  const firstBrace = trimmed.indexOf("{");
+  const lastBrace = trimmed.lastIndexOf("}");
+  if (firstBrace >= 0 && lastBrace > firstBrace) {
+    candidates.push(trimmed.slice(firstBrace, lastBrace + 1));
   }
+
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    try {
+      return JSON.parse(candidate) as T;
+    } catch {
+      continue;
+    }
+  }
+
+  return null;
+}
+
+function normalizeStringArray(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+}
+
+function fallbackTranslationFromText(article: LiteratureArticle, content: string): LiteratureTranslationResult | null {
+  const normalized = content.trim();
+  if (!normalized) return null;
+
+  const titleMatch = normalized.match(/translatedTitle\s*[:\-]\s*(.+)/i) ?? normalized.match(/title\s*[:\-]\s*(.+)/i);
+  const abstractMatch = normalized.match(/translatedAbstract\s*[:\-]\s*([\s\S]+)/i) ?? normalized.match(/abstract\s*[:\-]\s*([\s\S]+)/i);
+
+  if (titleMatch || abstractMatch) {
+    return {
+      translatedTitle: titleMatch?.[1]?.trim() || article.title,
+      translatedAbstract: abstractMatch?.[1]?.trim() || normalized,
+    };
+  }
+
+  return {
+    translatedTitle: article.title,
+    translatedAbstract: normalized,
+  };
+}
+
+function fallbackSummaryFromText(article: LiteratureArticle, content: string): LiteratureSummaryResult | null {
+  const normalized = content.trim();
+  if (!normalized) return null;
+
+  const lines = normalized
+    .split(/\r?\n/)
+    .map((line) => line.replace(/^[-*•]\s*/, "").trim())
+    .filter(Boolean);
+
+  if (lines.length === 0) return null;
+
+  const summaryBullets = lines.slice(0, 4);
+  const limitationsStartIndex = lines.findIndex((line) => /limit/i.test(line));
+  const limitations =
+    limitationsStartIndex >= 0
+      ? lines.slice(limitationsStartIndex, Math.min(limitationsStartIndex + 3, lines.length))
+      : [];
+
+  return {
+    localizedTitle: article.title,
+    studyTypeLabel: article.studyType,
+    summaryBullets,
+    limitations,
+    clinicalRelevance: lines.slice(summaryBullets.length, Math.min(summaryBullets.length + 2, lines.length)).join(" "),
+    trustNote: article.trustReason,
+  };
+}
+
+function translationFromParsed(article: LiteratureArticle, parsed: LiteratureTranslationResult | null, rawContent: string) {
+  if (parsed?.translatedTitle || parsed?.translatedAbstract) {
+    return {
+      translatedTitle: parsed.translatedTitle || article.title,
+      translatedAbstract: parsed.translatedAbstract || "",
+    };
+  }
+
+  return fallbackTranslationFromText(article, rawContent);
+}
+
+function summaryFromParsed(article: LiteratureArticle, parsed: LiteratureSummaryResult | null, rawContent: string) {
+  if (parsed?.localizedTitle || Array.isArray(parsed?.summaryBullets)) {
+    return {
+      localizedTitle: parsed?.localizedTitle || article.title,
+      studyTypeLabel: parsed?.studyTypeLabel || article.studyType,
+      summaryBullets: normalizeStringArray(parsed?.summaryBullets),
+      limitations: normalizeStringArray(parsed?.limitations),
+      clinicalRelevance: typeof parsed?.clinicalRelevance === "string" ? parsed.clinicalRelevance : "",
+      trustNote: typeof parsed?.trustNote === "string" && parsed.trustNote.trim() ? parsed.trustNote : article.trustReason,
+    };
+  }
+
+  return fallbackSummaryFromText(article, rawContent);
 }
 
 function truncateText(value: string, maxLength: number) {
@@ -70,13 +171,13 @@ export async function POST(req: Request) {
             "Translate only the provided article title and abstract into the requested target language.",
             "Do not add explanations, extra facts, or clinical advice.",
             "Preserve meaning conservatively and keep uncertainty exactly as in the source.",
-            "Return valid JSON with keys translatedTitle and translatedAbstract.",
+            "Return JSON only with keys translatedTitle and translatedAbstract. Do not use markdown fences.",
           ].join(" ")
         : [
             "You are a source-grounded medical literature summariser for physicians.",
             "Use only the provided article metadata and abstract.",
             "Do not invent study details, treatment advice, outcomes, or guideline conclusions that are not present in the input.",
-            "Return valid JSON with keys localizedTitle, studyTypeLabel, summaryBullets, limitations, clinicalRelevance, trustNote.",
+            "Return JSON only with keys localizedTitle, studyTypeLabel, summaryBullets, limitations, clinicalRelevance, trustNote. Do not use markdown fences.",
             "summaryBullets and limitations must be arrays of short strings.",
           ].join(" ");
 
@@ -95,7 +196,6 @@ export async function POST(req: Request) {
     const result = await runRoutedAiCompletion({
       userId,
       taskType: mode === "translate" ? "translation" : "clinical_reference",
-      responseFormat: "json",
       temperature: 0,
       messages: [
         { role: "system", content: systemInstruction },
@@ -105,36 +205,38 @@ export async function POST(req: Request) {
 
     if (mode === "translate") {
       const parsed = safeJsonParse<LiteratureTranslationResult>(result.content);
-      if (!parsed?.translatedTitle && !parsed?.translatedAbstract) {
+      const translation = translationFromParsed(article, parsed, result.content);
+      if (!translation) {
+        console.error("Literature translation parse failed:", {
+          provider: result.provider,
+          model: result.model,
+          contentPreview: result.content.slice(0, 500),
+        });
         return NextResponse.json({ error: "Translation parse failed" }, { status: 502 });
       }
 
       return NextResponse.json({
         provider: result.provider,
         model: result.model,
-        translation: {
-          translatedTitle: parsed.translatedTitle || article.title,
-          translatedAbstract: parsed.translatedAbstract || "",
-        },
+        translation,
       });
     }
 
     const parsed = safeJsonParse<LiteratureSummaryResult>(result.content);
-    if (!parsed?.localizedTitle && !Array.isArray(parsed?.summaryBullets)) {
+    const summary = summaryFromParsed(article, parsed, result.content);
+    if (!summary) {
+      console.error("Literature summary parse failed:", {
+        provider: result.provider,
+        model: result.model,
+        contentPreview: result.content.slice(0, 500),
+      });
       return NextResponse.json({ error: "Summary parse failed" }, { status: 502 });
     }
 
     return NextResponse.json({
       provider: result.provider,
       model: result.model,
-      summary: {
-        localizedTitle: parsed.localizedTitle || article.title,
-        studyTypeLabel: parsed.studyTypeLabel || article.studyType,
-        summaryBullets: Array.isArray(parsed.summaryBullets) ? parsed.summaryBullets.filter(Boolean) : [],
-        limitations: Array.isArray(parsed.limitations) ? parsed.limitations.filter(Boolean) : [],
-        clinicalRelevance: parsed.clinicalRelevance || "",
-        trustNote: parsed.trustNote || article.trustReason,
-      },
+      summary,
     });
   } catch (routeError) {
     console.error("Literature interpretation failed:", routeError);
