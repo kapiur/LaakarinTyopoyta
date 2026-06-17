@@ -13,7 +13,8 @@ import {
   Zap,
   Link as LinkIcon,
   Bot,
-  FlaskConical
+  FlaskConical,
+  BookText
 } from "lucide-react";
 import { useI18n } from "../lib/useI18n";
 import type { TranslationKey } from "../lib/i18n";
@@ -38,6 +39,7 @@ const iconMap = {
   Pill,
   Calculator,
   FlaskConical,
+  BookText,
 };
 
 export default function Sidebar() {
