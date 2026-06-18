@@ -83,6 +83,51 @@ function buildLocalTranslationFallback(article: LiteratureArticle): LiteratureTr
   };
 }
 
+function parseAgentTranslation(article: LiteratureArticle, replyText: string): LiteratureTranslationResult {
+  const normalized = replyText.trim();
+  if (!normalized) {
+    return buildLocalTranslationFallback(article);
+  }
+
+  const cleaned = normalized
+    .replace(/^#+\s*/gm, "")
+    .replace(/^Название\s*:\s*/i, "")
+    .replace(/^Заголовок\s*:\s*/i, "")
+    .replace(/^Title\s*:\s*/i, "");
+
+  const parts = cleaned
+    .split(/\n\s*\n/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  if (parts.length >= 2) {
+    return {
+      translatedTitle: parts[0],
+      translatedAbstract: parts.slice(1).join("\n\n"),
+      translatedText: cleaned,
+    };
+  }
+
+  const lines = cleaned
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (lines.length >= 2) {
+    return {
+      translatedTitle: lines[0],
+      translatedAbstract: lines.slice(1).join("\n"),
+      translatedText: cleaned,
+    };
+  }
+
+  return {
+    translatedTitle: article.title,
+    translatedAbstract: cleaned,
+    translatedText: cleaned,
+  };
+}
+
 function buildLocalSummaryFallback(article: LiteratureArticle): LiteratureSummaryResult {
   const summaryBullets = splitIntoSentences(article.abstract).slice(0, 3);
   return {
@@ -173,7 +218,18 @@ export default function LiteraturePage() {
     try {
       const agentInstruction =
         mode === "translation"
-          ? `Translate the provided medical article title and abstract into ${targetLanguage}. Return only the translated text for a physician. Do not add commentary, notes, or explanations.`
+          ? [
+              `Translate the provided medical article title and abstract into ${targetLanguage}.`,
+              "Write in natural physician-facing medical language, not as a literal word-for-word calque.",
+              "Prefer established clinical terminology and readable medical syntax.",
+              "You may slightly restructure long sentences or titles to sound natural in medical writing, but do not change the meaning.",
+              "Keep standard drug names, biomarker names, and abbreviations such as SGLT2, GLP-1, CKD, HbA1c, MRI in their usual medical form.",
+              "Do not simplify the science and do not add commentary.",
+              "Return exactly this format with no labels:",
+              "1) first line: translated article title only",
+              "2) blank line",
+              "3) translated abstract only",
+            ].join(" ")
           : [
               `Provide a concise physician-facing summary of the provided medical article in ${targetLanguage}.`,
               "Use only the provided article metadata and abstract.",
@@ -203,11 +259,7 @@ export default function LiteraturePage() {
         setTranslationCache((current) => ({
           ...current,
           [selectedArticle.pmid]: replyText
-            ? {
-                translatedTitle: selectedArticle.title,
-                translatedAbstract: replyText,
-                translatedText: replyText,
-              }
+            ? parseAgentTranslation(selectedArticle, replyText)
             : buildLocalTranslationFallback(selectedArticle),
         }));
         setViewMode("translation");
