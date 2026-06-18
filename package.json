@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "db:sync": "ts-node scripts/sync-medicines.ts",
+    "guidelines:warm:ru": "ts-node -P tsconfig.scripts.json scripts/warm-guideline-cache-ru.ts",
     "seed:pikaohjeet": "node scripts/seed_pikaohjeet.cjs",
     "test:templates": "ts-node -P tsconfig.scripts.json scripts/test-template-parser.ts",
     "test:privacy": "ts-node -P tsconfig.scripts.json scripts/test-privacy-anonymizer.ts"
