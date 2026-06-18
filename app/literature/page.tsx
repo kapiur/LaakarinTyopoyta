@@ -46,6 +46,14 @@ type AgentResponse = {
   error?: string;
 };
 
+type ArticleContextResponse = {
+  contextText?: string;
+  fullTextAvailable?: boolean;
+  fullTextSource?: "pmc" | "publisher_html" | "abstract_only";
+  fullTextUrl?: string | null;
+  pmcid?: string | null;
+};
+
 function trustClasses(level: LiteratureArticle["trustLevel"]) {
   if (level === "high") return "bg-emerald-50 text-emerald-700 border-emerald-200";
   if (level === "moderate") return "bg-blue-50 text-blue-700 border-blue-200";
@@ -155,6 +163,7 @@ export default function LiteraturePage() {
   const [error, setError] = useState<string | null>(null);
   const [translationCache, setTranslationCache] = useState<Record<string, LiteratureTranslationResult>>({});
   const [summaryCache, setSummaryCache] = useState<Record<string, LiteratureSummaryResult>>({});
+  const [articleContextCache, setArticleContextCache] = useState<Record<string, ArticleContextResponse>>({});
 
   const targetLanguage = language || results?.context?.targetLanguage || "fi";
 
@@ -216,6 +225,30 @@ export default function LiteraturePage() {
     setLoadingMode(mode);
     setError(null);
     try {
+      const cachedContext = articleContextCache[selectedArticle.pmid];
+      let articleContext = cachedContext;
+
+      if (!articleContext) {
+        const contextResponse = await fetch("/api/literature/context", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            article: selectedArticle,
+          }),
+        });
+        const contextData = await contextResponse.json() as ArticleContextResponse & { error?: string };
+
+        if (!contextResponse.ok) {
+          throw new Error(contextData?.error || t("literature.interpretationFailed"));
+        }
+
+        articleContext = contextData;
+        setArticleContextCache((current) => ({
+          ...current,
+          [selectedArticle.pmid]: contextData,
+        }));
+      }
+
       const agentInstruction =
         mode === "translation"
           ? [
@@ -225,6 +258,9 @@ export default function LiteraturePage() {
               "You may slightly restructure long sentences or titles to sound natural in medical writing, but do not change the meaning.",
               "Keep standard drug names, biomarker names, and abbreviations such as SGLT2, GLP-1, CKD, HbA1c, MRI in their usual medical form.",
               "Do not simplify the science and do not add commentary.",
+              articleContext?.fullTextAvailable
+                ? "Use the available PMC full text as the primary source, and use the abstract only as supporting context."
+                : "Only abstract-level context is available, so do not imply that the full article was reviewed.",
               "Return exactly this format with no labels:",
               "1) first line: translated article title only",
               "2) blank line",
@@ -232,9 +268,14 @@ export default function LiteraturePage() {
             ].join(" ")
           : [
               `Provide a concise physician-facing summary of the provided medical article in ${targetLanguage}.`,
-              "Use only the provided article metadata and abstract.",
+              articleContext?.fullTextAvailable
+                ? "Use the provided article metadata, abstract, and available PMC full text."
+                : "Use only the provided article metadata and abstract.",
               "Structure the answer as short paragraphs or bullets covering main point, limitations, and clinical relevance.",
               "Do not add facts that are not present in the article text.",
+              articleContext?.fullTextAvailable
+                ? "If full text is available, base the summary on it rather than stating that only the abstract was provided."
+                : "If only the abstract is available, state uncertainty modestly and do not pretend to have reviewed the full paper.",
             ].join(" ");
 
       const response = await fetch("/api/agent", {
@@ -244,7 +285,7 @@ export default function LiteraturePage() {
           contextType: "general",
           uiLanguage: language,
           userMessage: agentInstruction,
-          currentText: buildArticleCurrentText(selectedArticle),
+          currentText: articleContext?.contextText || buildArticleCurrentText(selectedArticle),
         }),
       });
       const data = await response.json() as AgentResponse;

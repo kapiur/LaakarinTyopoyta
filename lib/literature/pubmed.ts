@@ -4,6 +4,7 @@ import type { LiteratureArticle, LiteratureRegionFilter, LiteratureSearchResult,
 
 const PUBMED_ESEARCH_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi";
 const PUBMED_EFETCH_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi";
+const PMC_EFETCH_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi";
 
 const xmlParser = new XMLParser({
   ignoreAttributes: false,
@@ -185,6 +186,19 @@ function extractDoi(pubmedDataNode: unknown): string {
     if (record.IdType === "doi") {
       const doi = textOf(record);
       if (doi) return doi;
+    }
+  }
+  return "";
+}
+
+function extractPmcId(pubmedDataNode: unknown): string {
+  const articleIds = ensureArray((pubmedDataNode as Record<string, unknown> | undefined)?.ArticleIdList?.["ArticleId"]);
+  for (const articleId of articleIds) {
+    if (!articleId || typeof articleId !== "object") continue;
+    const record = articleId as Record<string, unknown>;
+    if (record.IdType === "pmc") {
+      const pmcid = textOf(record);
+      if (pmcid) return pmcid.startsWith("PMC") ? pmcid : `PMC${pmcid}`;
     }
   }
   return "";
@@ -374,6 +388,13 @@ type SearchPubMedInput = {
   regionFilter: LiteratureRegionFilter;
 };
 
+type FullTextResult = {
+  pmcid?: string;
+  fullText: string;
+  fullTextUrl?: string;
+  source: "pmc" | "publisher_html" | "abstract_only";
+};
+
 export async function searchPubMedArticles(input: SearchPubMedInput): Promise<LiteratureSearchResult> {
   const query = input.query.trim();
   if (!query) {
@@ -438,16 +459,20 @@ export async function searchPubMedArticles(input: SearchPubMedInput): Promise<Li
     const sourceLanguageRaw = textOf(ensureArray(article?.Language)[0] ?? "eng") || "eng";
     const sourceLanguage = normalizeLanguageCode(sourceLanguageRaw);
     const doi = extractDoi(pubmedData);
+    const pmcid = extractPmcId(pubmedData);
     const { trustLevel, trustReason } = getTrust(publicationTypes);
 
     return {
       pmid,
+      pmcid: pmcid || undefined,
       title,
       abstract,
       journal: textOf(article?.Journal && (article.Journal as Record<string, unknown>).Title),
       year: extractYear(article),
       doi: doi || undefined,
       url: doi ? `https://doi.org/${doi}` : `https://pubmed.ncbi.nlm.nih.gov/${pmid}/`,
+      fullTextUrl: pmcid ? `https://pmc.ncbi.nlm.nih.gov/articles/${pmcid}/` : undefined,
+      fullTextAvailable: Boolean(pmcid),
       authors: extractAuthors(article?.AuthorList),
       sourceLanguage,
       sourceLanguageLabel: getLanguageLabel(sourceLanguageRaw),
@@ -500,5 +525,221 @@ export async function searchPubMedArticles(input: SearchPubMedInput): Promise<Li
     executedQuery: term,
     total,
     articles: orderedArticles,
+  };
+}
+
+function joinTextSegments(values: string[]) {
+  return values
+    .map((value) => value.replace(/\s+/g, " ").trim())
+    .filter(Boolean)
+    .join("\n\n")
+    .trim();
+}
+
+function collectBodyParagraphs(node: unknown, lines: string[] = [], depth = 0): string[] {
+  if (depth > 14 || node == null) return lines;
+
+  if (typeof node === "string" || typeof node === "number") {
+    const text = String(node).replace(/\s+/g, " ").trim();
+    if (text.length >= 40) lines.push(text);
+    return lines;
+  }
+
+  if (Array.isArray(node)) {
+    for (const item of node) {
+      collectBodyParagraphs(item, lines, depth + 1);
+    }
+    return lines;
+  }
+
+  if (typeof node !== "object") return lines;
+
+  const record = node as Record<string, unknown>;
+  const excludedKeys = new Set(["fig", "table-wrap", "table", "ref-list", "back", "floats-group", "supplementary-material"]);
+
+  for (const [key, value] of Object.entries(record)) {
+    if (excludedKeys.has(key)) continue;
+
+    if (key === "title") {
+      const titleText = textOf(value);
+      if (titleText.length >= 8) {
+        lines.push(titleText);
+      }
+      continue;
+    }
+
+    if (key === "p") {
+      const paragraphs = ensureArray(value)
+        .map((paragraph) => textOf(paragraph).replace(/\s+/g, " ").trim())
+        .filter((paragraph) => paragraph.length >= 40);
+      lines.push(...paragraphs);
+      continue;
+    }
+
+    collectBodyParagraphs(value, lines, depth + 1);
+  }
+
+  return lines;
+}
+
+function trimFullText(value: string, maxLength = 20000) {
+  if (value.length <= maxLength) return value;
+  return `${value.slice(0, maxLength)}\n\n[Full text truncated for processing]`;
+}
+
+function decodeHtmlEntities(value: string) {
+  return value
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&#x27;/gi, "'")
+    .replace(/&#x2F;/gi, "/");
+}
+
+function stripHtmlTags(value: string) {
+  return decodeHtmlEntities(
+    value
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<\/(p|div|section|article|li|ul|ol|h1|h2|h3|h4|h5|h6)>/gi, "\n")
+      .replace(/<[^>]+>/g, " "),
+  )
+    .replace(/\r/g, "")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
+}
+
+function extractReadableHtmlText(html: string) {
+  const bodyMatch = html.match(/<article[\s\S]*?<\/article>/i)
+    ?? html.match(/<main[\s\S]*?<\/main>/i)
+    ?? html.match(/<body[\s\S]*?<\/body>/i);
+
+  const relevantHtml = bodyMatch?.[0] ?? html;
+  const cleanedHtml = relevantHtml
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<svg[\s\S]*?<\/svg>/gi, " ")
+    .replace(/<noscript[\s\S]*?<\/noscript>/gi, " ")
+    .replace(/<form[\s\S]*?<\/form>/gi, " ")
+    .replace(/<nav[\s\S]*?<\/nav>/gi, " ")
+    .replace(/<header[\s\S]*?<\/header>/gi, " ")
+    .replace(/<footer[\s\S]*?<\/footer>/gi, " ")
+    .replace(/<aside[\s\S]*?<\/aside>/gi, " ");
+
+  const text = stripHtmlTags(cleanedHtml);
+  const paragraphs = text
+    .split(/\n\s*\n/)
+    .map((paragraph) => paragraph.replace(/\s+/g, " ").trim())
+    .filter((paragraph) => paragraph.length >= 60);
+
+  const uniqueParagraphs = Array.from(new Set(paragraphs));
+  return trimFullText(uniqueParagraphs.join("\n\n"));
+}
+
+function findPublisherFullTextCandidateUrls(article: Pick<LiteratureArticle, "url" | "fullTextUrl">) {
+  return Array.from(new Set([article.fullTextUrl, article.url].filter((value): value is string => Boolean(value))));
+}
+
+async function fetchPublisherHtmlFullText(article: Pick<LiteratureArticle, "url" | "fullTextUrl" | "abstract">): Promise<FullTextResult | null> {
+  const candidateUrls = findPublisherFullTextCandidateUrls(article);
+
+  for (const candidateUrl of candidateUrls) {
+    try {
+      const response = await axios.get(candidateUrl, {
+        timeout: 25000,
+        maxRedirects: 5,
+        headers: {
+          Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "User-Agent": "Mozilla/5.0 (compatible; LaakarinTyopoyta/1.0; +https://github.com/kapiur/LaakarinTyopoyta)",
+        },
+      });
+
+      const contentType = String(response.headers["content-type"] ?? "").toLowerCase();
+      if (!contentType.includes("html") && typeof response.data !== "string") {
+        continue;
+      }
+
+      const html = typeof response.data === "string" ? response.data : "";
+      if (!html.trim()) continue;
+
+      const fullText = extractReadableHtmlText(html);
+      if (fullText.length >= 1200) {
+        return {
+          fullText,
+          fullTextUrl: candidateUrl,
+          source: "publisher_html",
+        };
+      }
+    } catch (error) {
+      console.error("Publisher full text fetch failed:", {
+        candidateUrl,
+        error,
+      });
+    }
+  }
+
+  return null;
+}
+
+export async function fetchLiteratureFullText(
+  article: Pick<LiteratureArticle, "pmcid" | "abstract" | "pmid" | "title" | "url" | "fullTextUrl">
+): Promise<FullTextResult> {
+  const pmcid = article.pmcid?.trim();
+
+  if (pmcid) {
+    try {
+      const fetchResponse = await axios.get(PMC_EFETCH_URL, {
+        params: {
+          db: "pmc",
+          id: pmcid,
+          retmode: "xml",
+        },
+        timeout: 25000,
+      });
+
+      const parsed = xmlParser.parse(fetchResponse.data);
+      const articleNode =
+        parsed?.pmcarticleset?.article ??
+        parsed?.article ??
+        parsed?.["pmc-articleset"]?.article;
+
+      const bodyNode = (articleNode as Record<string, unknown> | undefined)?.body;
+      const bodyLines = collectBodyParagraphs(bodyNode);
+      const bodyText = trimFullText(joinTextSegments(bodyLines));
+
+      if (bodyText) {
+        return {
+          pmcid,
+          fullText: bodyText,
+          fullTextUrl: `https://pmc.ncbi.nlm.nih.gov/articles/${pmcid}/`,
+          source: "pmc",
+        };
+      }
+    } catch (error) {
+      console.error("PMC full text fetch failed:", {
+        pmcid,
+        pmid: article.pmid,
+        error,
+      });
+    }
+  }
+
+  const publisherResult = await fetchPublisherHtmlFullText(article);
+  if (publisherResult) {
+    return {
+      pmcid,
+      ...publisherResult,
+    };
+  }
+
+  return {
+    pmcid,
+    fullText: article.abstract,
+    fullTextUrl: `https://pmc.ncbi.nlm.nih.gov/articles/${pmcid}/`,
+    source: "abstract_only",
   };
 }

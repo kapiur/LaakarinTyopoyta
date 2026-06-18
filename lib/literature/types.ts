@@ -5,12 +5,15 @@ export type LiteratureTrustLevel = "high" | "moderate" | "low" | "preliminary" |
 
 export type LiteratureArticle = {
   pmid: string;
+  pmcid?: string;
   title: string;
   abstract: string;
   journal?: string;
   year?: string;
   doi?: string;
   url: string;
+  fullTextUrl?: string;
+  fullTextAvailable?: boolean;
   authors: string[];
   sourceLanguage: string;
   sourceLanguageLabel: string;
