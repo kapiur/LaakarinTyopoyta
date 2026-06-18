@@ -1,5 +1,6 @@
 import axios from "axios";
 import { runRoutedAiCompletion } from "../ai/runRoutedAiCompletion";
+import type { ClinicalCountryCode } from "../clinical/countries/countryRegistry";
 import type { UserClinicalEvidenceConfig } from "../clinical/evidence/userClinicalSettings";
 import {
   type CachedGuidelineDocument,
@@ -14,11 +15,11 @@ import type {
   LiteratureGuidelineComparisonStatus,
 } from "./types";
 
-type CompareLanguage = "fi" | "ru" | "en";
+type CompareLanguage = "fi" | "ru" | "en" | "de";
 
 type ComparisonSourceCandidate = {
   sourceId: string;
-  country: "FI" | "RU";
+  country: ClinicalCountryCode;
   externalId?: string;
   sourceName: string;
   sourceUrl: string;
@@ -44,6 +45,9 @@ const DEFAULT_REQUEST_HEADERS = {
   Accept: "text/html,application/xhtml+xml,application/json,text/plain;q=0.9,*/*;q=0.8",
   "User-Agent": "Mozilla/5.0 (compatible; LaakarinTyopoyta/1.0; +https://github.com/kapiur/LaakarinTyopoyta)",
 };
+
+const AWMF_API_BASE_URL = "https://leitlinien-api.awmf.org/v1/";
+const AWMF_API_KEY = "MkI5Y1VIOEJ0ZGpoelNBVXRNM1E6WVFld0pBUF9RLVdJa012UHVPTmRQUQ==";
 
 const QUERY_STOP_WORDS = new Set([
   "and",
@@ -85,6 +89,7 @@ function normalizeLanguage(value: string): CompareLanguage {
   const normalized = value.trim().toLowerCase();
   if (normalized.startsWith("fi")) return "fi";
   if (normalized.startsWith("ru")) return "ru";
+  if (normalized.startsWith("de")) return "de";
   return "en";
 }
 
@@ -111,6 +116,17 @@ function getLocalizedStrings(language: CompareLanguage): LocalizedComparisonStri
     };
   }
 
+  if (language === "de") {
+    return {
+      notFoundVerdict: "Es wurde nicht automatisch eine passende offizielle Leitlinie gefunden.",
+      notFoundSummary: "Der automatische Abgleich hat fuer diesen Artikel keine passende nationale Quelle gefunden. Bitte die offizielle Quelle manuell pruefen.",
+      manualVerdict: "Eine offizielle Quelle wurde gefunden, aber der Leitlinientext konnte fuer den automatischen Vergleich nicht zuverlaessig geladen werden.",
+      manualSummary: "Es wurde eine passende offizielle Quelle identifiziert, der Leitlinientext selbst konnte jedoch nicht extrahiert werden. Oeffne die Quelle und pruefe die Kernaussagen manuell.",
+      manualCheckLabel: "Manuell pruefen",
+      sourceUnavailableLabel: "Leitlinientext wurde nicht automatisch geladen.",
+    };
+  }
+
   return {
     notFoundVerdict: "No matching official guideline was found automatically.",
     notFoundSummary: "The automatic check did not find a relevant national source for this article. Review the official source manually.",
@@ -133,6 +149,19 @@ function decodeHtmlEntities(value: string) {
     .replace(/&#x2F;/gi, "/");
 }
 
+function decodePotentialMojibake(value: string) {
+  if (!/[ÃÂâ]/.test(value)) return value;
+
+  try {
+    const decoded = Buffer.from(value, "latin1").toString("utf8");
+    const decodedReplacementCount = (decoded.match(/�/g) ?? []).length;
+    const originalReplacementCount = (value.match(/�/g) ?? []).length;
+    return decodedReplacementCount <= originalReplacementCount ? decoded : value;
+  } catch {
+    return value;
+  }
+}
+
 function stripHtmlTags(value: string) {
   return decodeHtmlEntities(
     value
@@ -145,6 +174,27 @@ function stripHtmlTags(value: string) {
     .replace(/\n{3,}/g, "\n\n")
     .replace(/[ \t]{2,}/g, " ")
     .trim();
+}
+
+function removeContactDetails(value: string) {
+  return value
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[contact removed]")
+    .replace(/\+?\d[\d\s()./-]{7,}\d/g, "[contact removed]");
+}
+
+function normalizeExcerptText(value: string, maxLength = 6000) {
+  return truncateAtBoundary(
+    removeContactDetails(
+      decodePotentialMojibake(value)
+        .replace(/\u00ad/g, "")
+        .replace(/\r/g, "")
+        .replace(/[ \t]+\n/g, "\n")
+        .replace(/\n{3,}/g, "\n\n")
+        .replace(/[ \t]{2,}/g, " ")
+        .trim(),
+    ),
+    maxLength,
+  );
 }
 
 function extractReadableHtmlText(html: string) {
@@ -223,6 +273,178 @@ function deriveSearchQuery(query: string | undefined, article: LiteratureArticle
   return article.title.trim() || article.abstract.trim().slice(0, 120);
 }
 
+type AwmfSearchRecord = {
+  AWMFAssociationNumber?: string | number;
+  AWMFGuidelineNumber?: string | number;
+  AWMFDetailPage?: string;
+  name?: string;
+  description?: string;
+  releaseDate?: string;
+};
+
+type AwmfDetailSection = {
+  heading?: string;
+  text?: string;
+  content?: string;
+  sections?: AwmfDetailSection[];
+};
+
+type AwmfDetailRecord = {
+  sections?: AwmfDetailSection[];
+};
+
+type AwmfSearchResponse = {
+  records?: AwmfSearchRecord[];
+};
+
+type AwmfDetailResponse = {
+  records?: AwmfDetailRecord[];
+};
+
+function normalizeAwmfIdPart(value: unknown) {
+  return String(value ?? "")
+    .trim()
+    .replace(/[^0-9A-Za-z-]/g, "");
+}
+
+function buildAwmfExternalId(associationNumber: unknown, guidelineNumber: unknown) {
+  const association = normalizeAwmfIdPart(associationNumber);
+  const guideline = normalizeAwmfIdPart(guidelineNumber);
+  return association && guideline ? `${association}/${guideline}` : undefined;
+}
+
+function parseAwmfExternalId(value: string | undefined) {
+  if (!value) return null;
+  const match = value.match(/([0-9A-Za-z]+)\s*[-/|:]\s*([0-9A-Za-z]+)/);
+  if (!match) return null;
+  return {
+    associationNumber: match[1],
+    guidelineNumber: match[2],
+  };
+}
+
+function parseAwmfIdentifiersFromUrl(value: string | undefined) {
+  if (!value) return null;
+  const match = value.match(/\/detail\/([0-9A-Za-z]+)-([0-9A-Za-z-]+)(?:[/?#]|$)/i);
+  if (!match) return null;
+  return {
+    associationNumber: match[1],
+    guidelineNumber: match[2],
+  };
+}
+
+async function fetchAwmfJson<T>(path: string) {
+  const response = await axios.get<T>(`${AWMF_API_BASE_URL}${path}`, {
+    timeout: 20000,
+    headers: {
+      ...DEFAULT_REQUEST_HEADERS,
+      Accept: "application/json,text/plain,*/*",
+      "Api-Key": AWMF_API_KEY,
+    },
+  });
+
+  return response.data;
+}
+
+function findAwmfPreferredText(node: unknown, depth = 0): string {
+  if (depth > 8 || node == null) return "";
+
+  if (Array.isArray(node)) {
+    for (const item of node) {
+      const match = findAwmfPreferredText(item, depth + 1);
+      if (match) return match;
+    }
+    return "";
+  }
+
+  if (typeof node !== "object") return "";
+
+  const record = node as Record<string, unknown>;
+  const heading = typeof record.heading === "string" ? decodePotentialMojibake(record.heading).trim() : "";
+  const rawText =
+    typeof record.text === "string"
+      ? record.text
+      : typeof record.content === "string"
+        ? record.content
+        : "";
+
+  if (heading.toLowerCase() === "_langfassung_text" && rawText.trim()) {
+    return rawText;
+  }
+
+  for (const value of Object.values(record)) {
+    const match = findAwmfPreferredText(value, depth + 1);
+    if (match) return match;
+  }
+
+  return "";
+}
+
+function shouldSkipAwmfHeading(heading: string) {
+  const normalizedHeading = heading.toLowerCase();
+  if (!normalizedHeading) return false;
+  if (normalizedHeading === "_langfassung_text") return false;
+
+  return (
+    normalizedHeading.includes("kontakt") ||
+    normalizedHeading.includes("impress") ||
+    normalizedHeading.includes("author") ||
+    normalizedHeading.includes("herausgeber") ||
+    normalizedHeading.includes("federfuhr") ||
+    normalizedHeading.includes("federfuehr") ||
+    normalizedHeading.includes("beteiligte") ||
+    normalizedHeading.includes("zitier")
+  );
+}
+
+function looksLikeContactParagraph(text: string) {
+  const normalized = text.toLowerCase();
+  return (
+    (/@/.test(text) || /\b(?:tel|telefon|fax)\b/i.test(text)) &&
+    normalized.length < 500
+  );
+}
+
+function collectAwmfSectionTexts(node: unknown, output: string[] = [], depth = 0) {
+  if (depth > 8 || node == null || output.length >= 120) return output;
+
+  if (Array.isArray(node)) {
+    for (const item of node) collectAwmfSectionTexts(item, output, depth + 1);
+    return output;
+  }
+
+  if (typeof node !== "object") return output;
+
+  const record = node as Record<string, unknown>;
+  const heading = typeof record.heading === "string" ? decodePotentialMojibake(record.heading).trim() : "";
+  const rawText =
+    typeof record.text === "string"
+      ? record.text
+      : typeof record.content === "string"
+        ? record.content
+        : "";
+
+  if (rawText && !shouldSkipAwmfHeading(heading)) {
+    const text = rawText.includes("<") ? extractReadableHtmlText(rawText) : stripHtmlTags(rawText);
+    const normalizedText = normalizeExcerptText(text, 2000);
+    if (normalizedText.length >= 140 && !looksLikeContactParagraph(normalizedText)) {
+      output.push(normalizedText);
+    }
+  }
+
+  for (const value of Object.values(record)) {
+    if (typeof value === "object") {
+      collectAwmfSectionTexts(value, output, depth + 1);
+    }
+  }
+
+  return output;
+}
+
+function buildAwmfDetailUrl(associationNumber: string, guidelineNumber: string) {
+  return `https://register.awmf.org/de/leitlinien/detail/${associationNumber}-${guidelineNumber}`;
+}
+
 function parseHtmlAnchors(html: string, baseUrl: string) {
   const matches = Array.from(html.matchAll(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi));
 
@@ -253,6 +475,37 @@ async function fetchHtml(url: string) {
   });
 
   return typeof response.data === "string" ? response.data : "";
+}
+
+async function fetchAwmfGuidelineDetail(associationNumber: string, guidelineNumber: string) {
+  try {
+    const response = await fetchAwmfJson<AwmfDetailResponse>(
+      `get/${encodeURIComponent(associationNumber)}/${encodeURIComponent(guidelineNumber)}?limit=20&lang=de`,
+    );
+
+    const record = Array.isArray(response?.records) ? response.records[0] : null;
+    if (!record) return "";
+
+    const preferredText = findAwmfPreferredText(record.sections);
+    if (preferredText) {
+      const normalized = normalizeExcerptText(
+        preferredText.includes("<") ? extractReadableHtmlText(preferredText) : stripHtmlTags(preferredText),
+      );
+      if (normalized.length >= 300) return normalized;
+    }
+
+    const fallbackSections = collectAwmfSectionTexts(record.sections);
+    const fallbackText = normalizeExcerptText(Array.from(new Set(fallbackSections)).join("\n\n"));
+    if (fallbackText.length >= 300) return fallbackText;
+  } catch (error) {
+    console.error("AWMF guideline detail fetch failed:", {
+      associationNumber,
+      guidelineNumber,
+      error,
+    });
+  }
+
+  return "";
 }
 
 async function searchKaypaHoito(query: string) {
@@ -469,17 +722,49 @@ async function searchMinzdrav(query: string) {
   return result;
 }
 
+async function searchAwmfGuidelines(query: string) {
+  const response = await fetchAwmfJson<AwmfSearchResponse>(
+    `search?keywords=${encodeURIComponent(query)}&limit=3&lang=de`,
+  );
+
+  const items = Array.isArray(response?.records) ? response.records : [];
+  const result: ComparisonSourceCandidate[] = [];
+
+  for (const item of items.slice(0, 3)) {
+    const externalId = buildAwmfExternalId(item.AWMFAssociationNumber, item.AWMFGuidelineNumber);
+    const title = decodePotentialMojibake(String(item.name ?? "").trim());
+    if (!externalId || !title) continue;
+
+    const parsedId = parseAwmfExternalId(externalId);
+    if (!parsedId) continue;
+
+    const detailUrl = typeof item.AWMFDetailPage === "string" && item.AWMFDetailPage.trim()
+      ? new URL(item.AWMFDetailPage, "https://register.awmf.org").toString()
+      : buildAwmfDetailUrl(parsedId.associationNumber, parsedId.guidelineNumber);
+
+    const excerpt = await fetchAwmfGuidelineDetail(parsedId.associationNumber, parsedId.guidelineNumber);
+    const fallbackExcerpt = normalizeExcerptText(String(item.description ?? ""), 1200);
+
+    result.push({
+      sourceId: "de-awmf-guidelines",
+      country: "DE",
+      externalId,
+      sourceName: "AWMF Leitlinienregister",
+      sourceUrl: detailUrl,
+      sourceTitle: title,
+      excerpt: excerpt || fallbackExcerpt || undefined,
+      matchReason: "Search result from the AWMF guideline registry",
+      publishedAt: typeof item.releaseDate === "string" ? item.releaseDate : undefined,
+      retrievedText: Boolean(excerpt),
+    });
+  }
+
+  return result;
+}
+
 function buildNormalizedText(value?: string) {
   return value
-    ? truncateAtBoundary(
-        value
-          .replace(/\r/g, "")
-          .replace(/[ \t]+\n/g, "\n")
-          .replace(/\n{3,}/g, "\n\n")
-          .replace(/[ \t]{2,}/g, " ")
-          .trim(),
-        12000,
-      )
+    ? normalizeExcerptText(value, 12000)
     : undefined;
 }
 
@@ -493,6 +778,8 @@ function mapCachedDocumentToCandidate(document: CachedGuidelineDocument): Compar
         ? "Käypä hoito"
         : document.sourceId === "ru-minzdrav-clinical-recommendations"
           ? "Минздрав РФ — рубрикатор клинических рекомендаций"
+          : document.sourceId === "de-awmf-guidelines"
+            ? "AWMF Leitlinienregister"
           : document.sourceId,
     sourceUrl: document.sourceUrl,
     sourceTitle: document.title,
@@ -518,6 +805,16 @@ async function fetchGuidelineTextBySource(candidate: Pick<ComparisonSourceCandid
 
     const previewHtml = await fetchHtml(candidate.sourceUrl);
     return truncateAtBoundary(extractReadableHtmlText(previewHtml), 6000);
+  }
+
+  if (candidate.sourceId === "de-awmf-guidelines") {
+    const parsedId = parseAwmfExternalId(candidate.externalId) ?? parseAwmfIdentifiersFromUrl(candidate.sourceUrl);
+    if (parsedId) {
+      return fetchAwmfGuidelineDetail(parsedId.associationNumber, parsedId.guidelineNumber);
+    }
+
+    const pageHtml = await fetchHtml(candidate.sourceUrl);
+    return normalizeExcerptText(extractReadableHtmlText(pageHtml));
   }
 
   return "";
@@ -652,7 +949,7 @@ function safeJsonParse<T>(content: string): T | null {
 
 function buildNoSourceFallback(
   language: CompareLanguage,
-  clinicalCountry: "FI" | "RU",
+  clinicalCountry: ClinicalCountryCode,
   searchQuery: string,
   sources: ComparisonSourceCandidate[],
 ): LiteratureGuidelineComparisonResult {
@@ -713,7 +1010,11 @@ async function retrieveGuidelineCandidates(
   try {
     const liveCandidates = clinicalConfig.clinicalCountry === "FI"
       ? await searchKaypaHoito(searchQuery)
-      : await searchMinzdrav(searchQuery);
+      : clinicalConfig.clinicalCountry === "RU"
+        ? await searchMinzdrav(searchQuery)
+        : clinicalConfig.clinicalCountry === "DE"
+          ? await searchAwmfGuidelines(searchQuery)
+          : [];
 
     await persistGuidelineCandidates(liveCandidates, searchQuery);
     return mergeCandidates(cachedCandidates, liveCandidates).slice(0, 6);
