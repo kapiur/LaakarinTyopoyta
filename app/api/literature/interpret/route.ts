@@ -127,6 +127,14 @@ function truncateText(value: string, maxLength: number) {
   return `${value.slice(0, maxLength)}...`;
 }
 
+function splitSentences(value: string) {
+  return value
+    .replace(/\s+/g, " ")
+    .split(/(?<=[.!?])\s+/)
+    .map((sentence) => sentence.trim())
+    .filter(Boolean);
+}
+
 function buildArticleContext(article: LiteratureArticle) {
   return [
     `Title: ${article.title}`,
@@ -138,6 +146,52 @@ function buildArticleContext(article: LiteratureArticle) {
     article.publicationTypes.length > 0 ? `Publication types: ${article.publicationTypes.join("; ")}` : "",
     article.abstract ? `Abstract:\n${truncateText(article.abstract, 8000)}` : "Abstract: not available",
   ].filter(Boolean).join("\n\n");
+}
+
+function normalizeLanguageTag(value: string) {
+  return value.trim().toLowerCase().split(/[-_]/)[0];
+}
+
+function buildDeterministicSummaryFallback(article: LiteratureArticle): LiteratureSummaryResult {
+  const sentences = splitSentences(article.abstract);
+  const summaryBullets = sentences.slice(0, 3);
+
+  if (summaryBullets.length === 0) {
+    summaryBullets.push(
+      article.abstract
+        ? truncateText(article.abstract.replace(/\s+/g, " ").trim(), 280)
+        : "Abstract was not available for this record.",
+    );
+  }
+
+  const limitations: string[] = [];
+  if (!article.abstract) {
+    limitations.push("The article record did not include an abstract.");
+  }
+  if (article.trustLevel === "low" || article.trustLevel === "unknown" || article.trustLevel === "preliminary") {
+    limitations.push(article.trustReason);
+  }
+  if (article.publicationTypes.length > 0 && limitations.length === 0) {
+    limitations.push(`Publication type: ${article.publicationTypes.join(", ")}.`);
+  }
+
+  return {
+    localizedTitle: article.title,
+    studyTypeLabel: article.studyType,
+    summaryBullets,
+    limitations,
+    clinicalRelevance: article.abstract
+      ? "Review the original abstract before using the article in clinical reasoning."
+      : "Clinical interpretation is limited because no abstract was available.",
+    trustNote: article.trustReason,
+  };
+}
+
+function buildDeterministicTranslationFallback(article: LiteratureArticle): LiteratureTranslationResult {
+  return {
+    translatedTitle: article.title,
+    translatedAbstract: article.abstract,
+  };
 }
 
 export async function POST(req: Request) {
@@ -163,6 +217,17 @@ export async function POST(req: Request) {
       ? body.targetLanguage.trim()
       : clinicalConfig.clinicalOutputLanguage;
     const articleContext = buildArticleContext(article);
+
+    if (mode === "translate" && normalizeLanguageTag(article.sourceLanguage) === normalizeLanguageTag(targetLanguage)) {
+      return NextResponse.json({
+        provider: "local",
+        model: "identity",
+        translation: {
+          translatedTitle: article.title,
+          translatedAbstract: article.abstract,
+        },
+      });
+    }
 
     const systemInstruction =
       mode === "translate"
@@ -193,26 +258,59 @@ export async function POST(req: Request) {
             articleContext,
           ].join("\n\n");
 
-    const result = await runRoutedAiCompletion({
-      userId,
-      taskType: mode === "translate" ? "translation" : "clinical_reference",
-      temperature: 0,
-      messages: [
-        { role: "system", content: systemInstruction },
-        { role: "user", content: userInstruction },
-      ],
-    });
+    let result: Awaited<ReturnType<typeof runRoutedAiCompletion>> | null = null;
+
+    try {
+      result = await runRoutedAiCompletion({
+        userId,
+        taskType: mode === "translate" ? "translation" : "clinical_reference",
+        temperature: 0,
+        messages: [
+          { role: "system", content: systemInstruction },
+          { role: "user", content: userInstruction },
+        ],
+      });
+    } catch (aiError) {
+      console.error("Literature AI call failed:", aiError);
+
+      if (mode === "translate") {
+        return NextResponse.json({
+          provider: "local",
+          model: "fallback",
+          translation: buildDeterministicTranslationFallback(article),
+        });
+      }
+
+      return NextResponse.json({
+        provider: "local",
+        model: "fallback",
+        summary: buildDeterministicSummaryFallback(article),
+      });
+    }
 
     if (mode === "translate") {
+      if (!result.content.trim()) {
+        return NextResponse.json({
+          provider: result.provider,
+          model: result.model,
+          translation: buildDeterministicTranslationFallback(article),
+        });
+      }
+
       const parsed = safeJsonParse<LiteratureTranslationResult>(result.content);
       const translation = translationFromParsed(article, parsed, result.content);
-      if (!translation) {
+      const hasUsableTranslation = translation && (translation.translatedTitle.trim().length > 0 || translation.translatedAbstract.trim().length > 0);
+      if (!hasUsableTranslation) {
         console.error("Literature translation parse failed:", {
           provider: result.provider,
           model: result.model,
           contentPreview: result.content.slice(0, 500),
         });
-        return NextResponse.json({ error: "Translation parse failed" }, { status: 502 });
+        return NextResponse.json({
+          provider: result.provider,
+          model: result.model,
+          translation: buildDeterministicTranslationFallback(article),
+        });
       }
 
       return NextResponse.json({
@@ -222,15 +320,27 @@ export async function POST(req: Request) {
       });
     }
 
+    if (!result.content.trim()) {
+      return NextResponse.json({
+        provider: result.provider,
+        model: result.model,
+        summary: buildDeterministicSummaryFallback(article),
+      });
+    }
+
     const parsed = safeJsonParse<LiteratureSummaryResult>(result.content);
-    const summary = summaryFromParsed(article, parsed, result.content);
+    const summary = summaryFromParsed(article, parsed, result.content) ?? buildDeterministicSummaryFallback(article);
     if (!summary) {
       console.error("Literature summary parse failed:", {
         provider: result.provider,
         model: result.model,
         contentPreview: result.content.slice(0, 500),
       });
-      return NextResponse.json({ error: "Summary parse failed" }, { status: 502 });
+      return NextResponse.json({
+        provider: result.provider,
+        model: result.model,
+        summary: buildDeterministicSummaryFallback(article),
+      });
     }
 
     return NextResponse.json({

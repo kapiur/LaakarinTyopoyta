@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { requireAuthenticatedUser } from "../../../../lib/admin-auth";
 import { getUserClinicalEvidenceConfig } from "../../../../lib/clinical/evidence/userClinicalSettings";
 import { searchPubMedArticles } from "../../../../lib/literature/pubmed";
-import type { LiteratureStudyFilter } from "../../../../lib/literature/types";
+import { rewriteLiteratureSearchQuery } from "../../../../lib/literature/queryRewrite";
+import type { LiteratureRegionFilter, LiteratureStudyFilter } from "../../../../lib/literature/types";
 
 function normalizeStudyFilter(value: unknown): LiteratureStudyFilter {
   if (
@@ -24,6 +25,13 @@ function normalizeYearsBack(value: string | null) {
   return Math.max(1, Math.min(50, parsed));
 }
 
+function normalizeRegionFilter(value: unknown): LiteratureRegionFilter {
+  if (value === "us" || value === "europe") {
+    return value;
+  }
+  return "all";
+}
+
 export async function GET(req: Request) {
   const { session, error } = await requireAuthenticatedUser();
   if (error) return error;
@@ -38,23 +46,33 @@ export async function GET(req: Request) {
     const query = (url.searchParams.get("q") ?? "").trim();
     const yearsBack = normalizeYearsBack(url.searchParams.get("yearsBack"));
     const studyFilter = normalizeStudyFilter(url.searchParams.get("studyFilter"));
+    const regionFilter = normalizeRegionFilter(url.searchParams.get("regionFilter"));
     const maxResults = Math.max(1, Math.min(20, Number(url.searchParams.get("maxResults") ?? "12")));
 
     if (!query) {
       return NextResponse.json({
         query: "",
+        executedQuery: "",
         total: 0,
         articles: [],
       });
     }
 
+    const rewrittenQuery = await rewriteLiteratureSearchQuery({
+      userId,
+      query,
+      studyFilter,
+    });
+
     const [clinicalConfig, searchResult] = await Promise.all([
       getUserClinicalEvidenceConfig(userId),
-      searchPubMedArticles({ query, yearsBack, maxResults, studyFilter }),
+      searchPubMedArticles({ query: rewrittenQuery, yearsBack, maxResults, studyFilter, regionFilter }),
     ]);
 
     return NextResponse.json({
       ...searchResult,
+      query,
+      executedQuery: rewrittenQuery,
       context: {
         practiceCountry: clinicalConfig.practiceCountry,
         clinicalCountry: clinicalConfig.clinicalCountry,

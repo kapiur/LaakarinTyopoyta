@@ -1,4 +1,5 @@
 export type LiteratureStudyFilter = "all" | "guideline" | "review" | "trial" | "observational";
+export type LiteratureRegionFilter = "all" | "us" | "europe";
 
 export type LiteratureTrustLevel = "high" | "moderate" | "low" | "preliminary" | "unknown";
 
@@ -21,6 +22,7 @@ export type LiteratureArticle = {
 
 export type LiteratureSearchResult = {
   query: string;
+  executedQuery?: string;
   total: number;
   articles: LiteratureArticle[];
 };

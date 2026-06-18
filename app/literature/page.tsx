@@ -15,12 +15,14 @@ import {
 import { useI18n } from "../../lib/useI18n";
 import type {
   LiteratureArticle,
+  LiteratureRegionFilter,
   LiteratureSummaryResult,
   LiteratureTranslationResult,
 } from "../../lib/literature/types";
 
 type SearchResponse = {
   query: string;
+  executedQuery?: string;
   total: number;
   articles: LiteratureArticle[];
   context?: {
@@ -47,10 +49,11 @@ function trustClasses(level: LiteratureArticle["trustLevel"]) {
 }
 
 export default function LiteraturePage() {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const [query, setQuery] = useState("");
   const [yearsBack, setYearsBack] = useState("5");
   const [studyFilter, setStudyFilter] = useState("all");
+  const [regionFilter, setRegionFilter] = useState<LiteratureRegionFilter>("all");
   const [results, setResults] = useState<SearchResponse | null>(null);
   const [selectedArticle, setSelectedArticle] = useState<LiteratureArticle | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("original");
@@ -60,7 +63,7 @@ export default function LiteraturePage() {
   const [translationCache, setTranslationCache] = useState<Record<string, LiteratureTranslationResult>>({});
   const [summaryCache, setSummaryCache] = useState<Record<string, LiteratureSummaryResult>>({});
 
-  const targetLanguage = results?.context?.targetLanguage ?? "fi";
+  const targetLanguage = language || results?.context?.targetLanguage || "fi";
 
   const trustLabels = useMemo(
     () => ({
@@ -85,6 +88,7 @@ export default function LiteraturePage() {
         q: query.trim(),
         yearsBack,
         studyFilter,
+        regionFilter,
         maxResults: "12",
       });
       const response = await fetch(`/api/literature/search?${params.toString()}`, { cache: "no-store" });
@@ -228,6 +232,19 @@ export default function LiteraturePage() {
                   <option value="observational">{t("literature.studyTypeObservational")}</option>
                 </select>
               </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-500">{t("literature.regionLabel")}</label>
+                <select
+                  value={regionFilter}
+                  onChange={(event) => setRegionFilter(event.target.value as LiteratureRegionFilter)}
+                  className="w-full px-4 py-3 rounded-2xl border border-slate-200 bg-white text-sm outline-none focus:ring-2 focus:ring-blue-100"
+                >
+                  <option value="all">{t("literature.regionAll")}</option>
+                  <option value="us">{t("literature.regionUs")}</option>
+                  <option value="europe">{t("literature.regionEurope")}</option>
+                </select>
+              </div>
             </div>
 
             <button
@@ -256,7 +273,7 @@ export default function LiteraturePage() {
               </div>
               <div className="rounded-2xl bg-slate-50 border border-slate-200 p-4">
                 <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{t("literature.targetLanguage")}</div>
-                <div className="mt-2 text-base font-bold text-slate-900">{results?.context?.targetLanguage ?? "-"}</div>
+                <div className="mt-2 text-base font-bold text-slate-900">{targetLanguage || "-"}</div>
               </div>
             </div>
 
@@ -279,6 +296,11 @@ export default function LiteraturePage() {
             <p className="text-sm text-slate-500 mt-1">
               {results ? results.query : t("literature.emptyDescription")}
             </p>
+            {results?.executedQuery && results.executedQuery !== results.query && (
+              <p className="text-xs text-slate-400 mt-2">
+                {t("literature.searchExecutedAs")} {results.executedQuery}
+              </p>
+            )}
           </div>
 
           <div className="max-h-[70vh] overflow-y-auto">
