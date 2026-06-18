@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireAuthenticatedUser } from '../../../lib/admin-auth';
-import { sanitizeAgentInputs } from '../../../lib/ai/agent/agentPrivacy';
+import { sanitizeAgentInputs, type AgentPrivacyInputKind } from '../../../lib/ai/agent/agentPrivacy';
 import { createAgentPlan } from '../../../lib/ai/agent/agentPlanner';
 import { logAiRunAudit } from '../../../lib/ai/audit/logAiRunAudit';
 import type { AgentContextType, AgentRequestBody, AgentUiLanguage } from '../../../lib/ai/agent/types';
@@ -76,6 +76,21 @@ function inputKindForContext(contextType: AgentContextType) {
   if (contextType === 'malli') return 'general' as const;
   if (contextType === 'clinicalReference') return 'general' as const;
   return 'general' as const;
+}
+
+function normalizePrivacyInputKind(value: unknown, fallback: AgentPrivacyInputKind) {
+  if (
+    value === 'clinicalText' ||
+    value === 'profileSample' ||
+    value === 'storedInstruction' ||
+    value === 'publicSourceText' ||
+    value === 'templateSyntax' ||
+    value === 'general'
+  ) {
+    return value;
+  }
+
+  return fallback;
 }
 
 function normalizeHeadingLine(line: string) {
@@ -253,20 +268,23 @@ export async function POST(req: Request) {
     const currentText = optionalString(body.currentText);
     const currentTemplate = optionalString(body.currentTemplate);
     const conversationContext = buildConversationContext(body);
+    const defaultInputKind = inputKindForContext(contextType);
+    const currentTextKind = normalizePrivacyInputKind(
+      body.currentTextKind,
+      contextType === 'clinicalText' || contextType === 'pikaohje' ? 'clinicalText' : 'general',
+    );
+    const currentTemplateKind = normalizePrivacyInputKind(body.currentTemplateKind, 'templateSyntax');
+    const conversationContextKind = normalizePrivacyInputKind(body.conversationContextKind, defaultInputKind);
 
     if (!userMessage && !currentText && !currentTemplate && !conversationContext) {
       return NextResponse.json({ error: 'Puuttuvat tiedot' }, { status: 400 });
     }
 
     const privacyResult = sanitizeAgentInputs([
-      { key: 'userMessage', value: userMessage, kind: inputKindForContext(contextType) },
-      {
-        key: 'currentText',
-        value: currentText,
-        kind: contextType === 'clinicalText' || contextType === 'pikaohje' ? 'clinicalText' : 'general',
-      },
-      { key: 'currentTemplate', value: currentTemplate, kind: 'templateSyntax' },
-      { key: 'conversationContext', value: conversationContext, kind: inputKindForContext(contextType) },
+      { key: 'userMessage', value: userMessage, kind: defaultInputKind },
+      { key: 'currentText', value: currentText, kind: currentTextKind },
+      { key: 'currentTemplate', value: currentTemplate, kind: currentTemplateKind },
+      { key: 'conversationContext', value: conversationContext, kind: conversationContextKind },
     ]);
 
     if (privacyResult.privacy.blocked) {

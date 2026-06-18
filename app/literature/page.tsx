@@ -394,6 +394,7 @@ export default function LiteraturePage() {
           uiLanguage: language,
           userMessage: agentInstruction,
           currentText: articleContext?.contextText || buildArticleCurrentText(selectedArticle),
+          currentTextKind: "publicSourceText",
         }),
       });
       const data = await response.json() as AgentResponse;
@@ -503,10 +504,12 @@ export default function LiteraturePage() {
           uiLanguage: language,
           userMessage: agentInstruction,
           currentText: articleContext?.contextText || buildArticleCurrentText(selectedArticle),
+          currentTextKind: "publicSourceText",
           conversationContext: {
             latestDraft: currentInterpretationText,
             previousTurns: followUpHistory[currentInterpretationKey] ?? [],
           },
+          conversationContextKind: "publicSourceText",
         }),
       });
       const data = await response.json() as AgentResponse;

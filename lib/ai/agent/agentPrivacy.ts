@@ -4,6 +4,7 @@ export type AgentPrivacyInputKind =
   | 'clinicalText'
   | 'profileSample'
   | 'storedInstruction'
+  | 'publicSourceText'
   | 'templateSyntax'
   | 'general';
 
@@ -29,6 +30,7 @@ function modeForKind(kind: AgentPrivacyInputKind): PrivacyGatewayMode {
   if (kind === 'clinicalText') return 'clinicalTransform';
   if (kind === 'profileSample') return 'persistentSample';
   if (kind === 'storedInstruction') return 'persistentStorage';
+  if (kind === 'publicSourceText') return 'templateSyntax';
   if (kind === 'templateSyntax') return 'templateSyntax';
   return 'generalText';
 }

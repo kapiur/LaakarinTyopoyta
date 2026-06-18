@@ -34,12 +34,15 @@ export type AgentRequestBody = {
   uiLanguage?: AgentUiLanguage;
   userMessage?: string;
   currentText?: string;
+  currentTextKind?: 'clinicalText' | 'profileSample' | 'storedInstruction' | 'publicSourceText' | 'templateSyntax' | 'general';
   currentTemplate?: string;
+  currentTemplateKind?: 'clinicalText' | 'profileSample' | 'storedInstruction' | 'publicSourceText' | 'templateSyntax' | 'general';
   selectedTemplateId?: number | string;
   selectedToolId?: number | string;
   selectedCardId?: number | string;
   conversationId?: string;
   conversationContext?: AgentConversationContext;
+  conversationContextKind?: 'clinicalText' | 'profileSample' | 'storedInstruction' | 'publicSourceText' | 'templateSyntax' | 'general';
 };
 
 export type AgentPlan = {
