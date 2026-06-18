@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { CheckCircle2, ListChecks, X, AlertTriangle } from 'lucide-react';
+import { getLocalizedVariant } from '../lib/i18n';
 import { validateTemplate, type TemplateValidationResult } from '../lib/templates';
 import { useI18n } from '../lib/useI18n';
 
@@ -37,6 +38,16 @@ const copy = {
     fields: 'fields',
     close: 'Close',
   },
+  de: {
+    check: 'Vorlage prüfen',
+    title: 'Vorlagenprüfung',
+    ok: 'Der Syntax sieht gut aus.',
+    errors: 'Fehler',
+    warnings: 'Warnungen',
+    noEditor: 'Zuerst den Vorlageneditor öffnen.',
+    fields: 'Felder',
+    close: 'Schließen',
+  },
 } as const;
 
 function isMalliPath(pathname: string | null) {
@@ -55,7 +66,7 @@ function findTemplateContentTextarea() {
 export default function MalliTemplateValidatorEnhancer() {
   const pathname = usePathname();
   const { language } = useI18n();
-  const c = copy[language] ?? copy.fi;
+  const c = getLocalizedVariant(copy, language) ?? copy.en;
   const enabled = isMalliPath(pathname);
   const [editorOpen, setEditorOpen] = useState(false);
   const [result, setResult] = useState<TemplateValidationResult | null>(null);

@@ -8,6 +8,7 @@ import { runRoutedAiCompletion } from '../../../lib/ai/runRoutedAiCompletion';
 import { preparePrivacyPayload } from '../../../lib/privacy/gateway';
 import { hasCriticalPrivacyFindingTypes } from '../../../lib/privacy/gateway/decision';
 import { taskAllowsRegistryOnlyReference, taskRequiresEvidence } from '../../../lib/ai/taskTypes';
+import { normalizeUiLanguage as normalizeSharedUiLanguage } from '../../../lib/i18n/config';
 import {
   buildEvidencePackageFromRetrieved,
   buildNoEvidenceReply,
@@ -32,8 +33,7 @@ function normalizeContextType(value: unknown): AgentContextType {
 }
 
 function normalizeUiLanguage(value: unknown): AgentUiLanguage {
-  if (value === 'fi' || value === 'ru' || value === 'en') return value;
-  return 'fi';
+  return normalizeSharedUiLanguage(value);
 }
 
 function optionalString(value: unknown) {
@@ -234,6 +234,10 @@ function buildPrivacyBlockReply(language: AgentUiLanguage) {
     return 'Identifying details remain in the text after automatic anonymisation. The agent will not send this text to an external AI service. Remove names, contact details, identifiers, addresses and other personal data, then try again.';
   }
 
+  if (language === 'de') {
+    return 'Nach der automatischen Anonymisierung sind noch identifizierende Angaben im Text vorhanden. Der Agent sendet diesen Text nicht an einen externen AI-Dienst. Entferne Namen, Kontaktdaten, Kennungen, Adressen und andere personenbezogene Daten und versuche es erneut.';
+  }
+
   return 'Tekstiin jäi automaattisen anonymisoinnin jälkeen tunnistetietoja. Agentti ei lähetä tällaista tekstiä ulkoiseen AI-palveluun. Poista nimet, yhteystiedot, tunnisteet, osoitteet ja muut henkilötiedot ja yritä uudelleen.';
 }
 
@@ -244,6 +248,10 @@ function buildPrivacyOutputBlockReply(language: AgentUiLanguage) {
 
   if (language === 'en') {
     return 'The agent response appeared to contain personal data, so it has been withheld for safety. Please reformulate the request more generally and without identifiers.';
+  }
+
+  if (language === 'de') {
+    return 'Die Antwort des Agenten schien personenbezogene Daten zu enthalten und wurde deshalb aus Sicherheitsgruenden ausgeblendet. Bitte formuliere die Anfrage allgemeiner und ohne Identifikatoren neu.';
   }
 
   return 'Agentin vastaus sisälsi henkilötietoihin viittaavia tietoja, joten sitä ei näytetä turvallisuussyistä. Muotoile pyyntö yleisemmin ilman tunnistetietoja ja yritä uudelleen.';

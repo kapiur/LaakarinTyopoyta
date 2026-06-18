@@ -6,6 +6,7 @@ import {
   FolderPlus, Loader2, Link as LinkIcon, X, 
   MoveHorizontal
 } from "lucide-react";
+import { getLocalizedVariant } from "../../lib/i18n";
 import { useI18n } from "../../lib/useI18n";
 
 const copy = {
@@ -75,11 +76,33 @@ const copy = {
     deleteCategoryFailed: "Could not delete the category. Make sure it is empty.",
     errorPrefix: "Error:",
   },
+  de: {
+    title: "Links und Anleitungen",
+    subtitle: "Wichtige Ressourcen und persönliche Favoriten.",
+    newCategory: "Neue Kategorie",
+    addLink: "Link hinzufügen",
+    own: "Persönlich",
+    common: "Gemeinsam",
+    practiceDefault: "Standard des Arbeitslandes",
+    move: "Verschieben",
+    emptyCategory: "Leere Kategorie",
+    addNewLink: "Neuen Link hinzufügen",
+    description: "Beschreibung",
+    url: "URL (https://...)",
+    categoryName: "Kategoriename",
+    personalOnly: "Nur für mich",
+    cancel: "Abbrechen",
+    save: "Speichern",
+    deleteLinkConfirm: "Diesen Link wirklich löschen?",
+    deleteCategoryConfirm: "Diese Kategorie löschen? Das funktioniert nur, wenn die Kategorie leer ist.",
+    deleteCategoryFailed: "Die Kategorie konnte nicht gelöscht werden. Bitte sicherstellen, dass sie leer ist.",
+    errorPrefix: "Fehler:",
+  },
 } as const;
 
 export default function LinksPage() {
   const { language } = useI18n();
-  const c = copy[language] ?? copy.fi;
+  const c = getLocalizedVariant(copy, language) ?? copy.en;
   const [categories, setCategories] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);

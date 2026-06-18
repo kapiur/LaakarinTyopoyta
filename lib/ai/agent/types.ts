@@ -1,4 +1,5 @@
 import type { AiTaskType } from '../taskTypes';
+import type { UiLanguage } from '../../i18n/config';
 
 export type AgentContextType =
   | 'general'
@@ -7,7 +8,7 @@ export type AgentContextType =
   | 'aiTool'
   | 'clinicalText'
   | 'pikaohje';
-export type AgentUiLanguage = 'fi' | 'ru' | 'en';
+export type AgentUiLanguage = UiLanguage;
 
 export type AgentSuggestedAction =
   | { type: 'copy_draft'; label: string }

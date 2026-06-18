@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, ClipboardCopy, FileText, Loader2, MessageSquare } from 'lucide-react';
+import { normalizeUiLanguage, type UiLanguage } from '../../../lib/i18n';
 import {
   getTemplateFields,
   isTemplateFieldVisible,
@@ -11,8 +12,71 @@ import {
   type TemplateItem,
   type TemplateValues,
 } from '../../../lib/templates';
+import { useI18n } from '../../../lib/useI18n';
+
+const copy = {
+  fi: {
+    title: 'Mallin täyttö',
+    subtitle: 'Input-, textarea-, select- ja showIf-kentät',
+    loadFailed: 'Mallien lataus epäonnistui',
+    section: 'Osio',
+    template: 'Malli',
+    templateFields: 'Mallin kentät',
+    noInteractiveFields: 'Tässä mallissa ei ole interaktiivisia kenttiä.',
+    result: 'Lopullinen teksti',
+    noTemplate: 'Mallia ei ole valittu',
+    copy: 'Kopioi',
+    copied: 'Kopioitu',
+    emptyResult: 'Valitse malli ja täytä kentät...',
+  },
+  ru: {
+    title: 'Заполнение шаблона',
+    subtitle: 'Поля input, textarea, select и showIf',
+    loadFailed: 'Не удалось загрузить шаблоны',
+    section: 'Раздел',
+    template: 'Шаблон',
+    templateFields: 'Поля шаблона',
+    noInteractiveFields: 'В этом шаблоне нет интерактивных полей.',
+    result: 'Итоговый текст',
+    noTemplate: 'Шаблон не выбран',
+    copy: 'Копировать',
+    copied: 'Скопировано',
+    emptyResult: 'Выбери шаблон и заполни поля...',
+  },
+  en: {
+    title: 'Template filling',
+    subtitle: 'Input, textarea, select and showIf fields',
+    loadFailed: 'Could not load templates',
+    section: 'Section',
+    template: 'Template',
+    templateFields: 'Template fields',
+    noInteractiveFields: 'This template has no interactive fields.',
+    result: 'Final text',
+    noTemplate: 'No template selected',
+    copy: 'Copy',
+    copied: 'Copied',
+    emptyResult: 'Select a template and fill in the fields...',
+  },
+  de: {
+    title: 'Vorlage ausfüllen',
+    subtitle: 'Input-, Textarea-, Select- und ShowIf-Felder',
+    loadFailed: 'Vorlagen konnten nicht geladen werden',
+    section: 'Bereich',
+    template: 'Vorlage',
+    templateFields: 'Vorlagenfelder',
+    noInteractiveFields: 'Diese Vorlage enthält keine interaktiven Felder.',
+    result: 'Endgültiger Text',
+    noTemplate: 'Keine Vorlage ausgewählt',
+    copy: 'Kopieren',
+    copied: 'Kopiert',
+    emptyResult: 'Vorlage auswählen und Felder ausfüllen...',
+  },
+} as const;
 
 export default function TemplateFillPage() {
+  const { language } = useI18n();
+  const lang = normalizeUiLanguage(language);
+  const c = copy[lang] ?? copy.en;
   const [categories, setCategories] = useState<TemplateCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [categoryId, setCategoryId] = useState<number | null>(null);
@@ -31,14 +95,14 @@ export default function TemplateFillPage() {
         setCategories(nextCategories);
         if (nextCategories[0]?.id) setCategoryId(nextCategories[0].id);
       } catch (err: any) {
-        setErrorMsg(err.message || 'Mallien lataus epäonnistui');
+        setErrorMsg(err.message || c.loadFailed);
       } finally {
         setLoading(false);
       }
     };
 
     fetchTemplates();
-  }, []);
+  }, [c.loadFailed]);
 
   const activeCategory = categories.find((category) => category.id === categoryId) || null;
   const templates = activeCategory?.templates || [];
@@ -80,8 +144,8 @@ export default function TemplateFillPage() {
             <ArrowLeft size={18} />
           </Link>
           <div>
-            <h1 className="text-2xl font-black tracking-tight">Заполнение шаблона</h1>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">input, textarea, select и showIf</p>
+            <h1 className="text-2xl font-black tracking-tight">{c.title}</h1>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{c.subtitle}</p>
           </div>
         </div>
         <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-blue-100">
@@ -105,7 +169,7 @@ export default function TemplateFillPage() {
             <div className="bg-white border shadow-sm rounded-[2rem] p-6 space-y-4">
               <div className="grid md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-3">Раздел</label>
+                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-3">{c.section}</label>
                   <select
                     value={categoryId || ''}
                     onChange={(event) => setCategoryId(Number(event.target.value))}
@@ -118,7 +182,7 @@ export default function TemplateFillPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-3">Шаблон</label>
+                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-3">{c.template}</label>
                   <select
                     value={selectedTemplate?.id || ''}
                     onChange={(event) => setTemplateId(Number(event.target.value))}
@@ -135,12 +199,12 @@ export default function TemplateFillPage() {
             <div className="bg-white border shadow-sm rounded-[2rem] p-6 space-y-6">
               <div className="flex items-center gap-2 text-slate-400">
                 <FileText size={15} />
-                <span className="text-[10px] font-black uppercase tracking-widest">Поля шаблона</span>
+                <span className="text-[10px] font-black uppercase tracking-widest">{c.templateFields}</span>
               </div>
 
               {fields.length === 0 ? (
                 <div className="p-6 bg-slate-50 rounded-2xl text-sm text-slate-400 font-bold">
-                  В этом шаблоне нет интерактивных полей.
+                  {c.noInteractiveFields}
                 </div>
               ) : fields.map((field, index) => {
                 if (!isTemplateFieldVisible(field.condition, values)) return null;
@@ -188,8 +252,8 @@ export default function TemplateFillPage() {
             <div className="bg-blue-50/20 border border-blue-50 shadow-sm rounded-[2rem] overflow-hidden">
               <div className="p-5 bg-white/70 border-b border-blue-50 flex items-center justify-between">
                 <div>
-                  <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Итоговый текст</div>
-                  <div className="font-black text-slate-800">{selectedTemplate?.title || 'Шаблон не выбран'}</div>
+                  <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{c.result}</div>
+                  <div className="font-black text-slate-800">{selectedTemplate?.title || c.noTemplate}</div>
                 </div>
                 <button
                   onClick={copyResult}
@@ -197,11 +261,11 @@ export default function TemplateFillPage() {
                   className="px-5 py-3 bg-white text-emerald-600 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-sm ring-1 ring-emerald-100 hover:bg-emerald-50 disabled:opacity-50 flex items-center gap-2"
                 >
                   <ClipboardCopy size={14} />
-                  {copied ? 'Скопировано' : 'Копировать'}
+                  {copied ? c.copied : c.copy}
                 </button>
               </div>
               <div className="p-8 min-h-[560px] whitespace-pre-wrap text-slate-800 text-lg leading-relaxed bg-white/40">
-                {finalText || <span className="text-slate-300 italic">Выбери шаблон и заполни поля...</span>}
+                {finalText || <span className="text-slate-300 italic">{c.emptyResult}</span>}
               </div>
             </div>
           </div>
