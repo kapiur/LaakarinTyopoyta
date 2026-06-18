@@ -53,6 +53,7 @@ const texts = {
       chads: "Eteisvärinäpotilaan aivohalvaus- ja vuotoriskin arvio erillisessä kaksoislaskurissa.",
       bmi: "Painoindeksin laskuri.",
       gfr: "Munuaistoiminnan arvio Cockcroft-Gault-tyylisellä kaavalla.",
+      abg: "Happo-emästasapainon ja verikaasujen jäsennelty tulkinta anionivajeen, kompensaation, hapetuksen ja DKA-seulan kanssa.",
     },
   },
   ru: {
@@ -79,6 +80,7 @@ const texts = {
       chads: "Оценка риска инсульта и кровотечения при фибрилляции предсердий в отдельном двойном калькуляторе.",
       bmi: "Калькулятор индекса массы тела.",
       gfr: "Оценка функции почек по формуле в стиле Cockcroft-Gault.",
+      abg: "Структурированная интерпретация КОС и газов крови с расчетом компенсации, AG, оксигенации и проверкой на ДКА.",
     },
   },
   en: {
@@ -105,6 +107,7 @@ const texts = {
       chads: "Atrial fibrillation stroke and bleeding risk support in a standalone dual-score calculator.",
       bmi: "Body mass index calculator.",
       gfr: "Cockcroft-Gault style renal function estimate.",
+      abg: "Structured acid-base and blood-gas interpretation with compensation, anion gap, oxygenation, and DKA checks.",
     },
   },
 } as const;

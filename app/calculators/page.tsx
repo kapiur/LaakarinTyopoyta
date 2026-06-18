@@ -45,6 +45,17 @@ const texts = {
       cardiology: "Kardiologia",
       general: "Yleiset",
     },
+    calculatorDescriptions: {
+      pca: "PCA-annostelun suunnittelu käyttäjän oman lääkevalikoiman tuella.",
+      peds: "Pediatrinen annoslaskuri käyttäjäkohtaisilla indikaatioilla ja lääkevalikoiman oletuksilla.",
+      vte: "Syvän laskimotromboosin todennäköisyyden arvio erillisellä Wells-tyylisellä laskurilla.",
+      pe: "Keuhkoembolian todennäköisyyden arvio erillisellä Wells-tyylisellä laskurilla.",
+      cad: "Sepelvaltimotaudin esitodennäköisyyden arvio erillisessä rakenteisessa näkymässä.",
+      chads: "Eteisvärinäpotilaan aivohalvaus- ja vuotoriskin arvio kaksoislaskurissa.",
+      bmi: "Painoindeksin laskuri.",
+      gfr: "Munuaistoiminnan arvio Cockcroft-Gault-tyylisellä kaavalla.",
+      abg: "Happo-emästasapainon ja verikaasujen jäsennelty tulkinta kompensaation, AG:n, hapetuksen ja DKA-seulan kanssa.",
+    },
   },
   ru: {
     title: "Калькуляторы",
@@ -62,6 +73,17 @@ const texts = {
       cardiology: "Кардиология",
       general: "Общие",
     },
+    calculatorDescriptions: {
+      pca: "Планирование дозировок PCA с поддержкой вашей пользовательской библиотеки препаратов.",
+      peds: "Педиатрический калькулятор дозировок с пользовательскими показаниями и настройками библиотеки препаратов.",
+      vte: "Оценка вероятности тромбоза глубоких вен по отдельному калькулятору в стиле Wells.",
+      pe: "Оценка вероятности ТЭЛА по отдельному калькулятору в стиле Wells.",
+      cad: "Оценка предтестовой вероятности ишемической болезни сердца в отдельной структурированной форме.",
+      chads: "Оценка риска инсульта и кровотечения при фибрилляции предсердий в двойном калькуляторе.",
+      bmi: "Калькулятор индекса массы тела.",
+      gfr: "Оценка функции почек по формуле в стиле Cockcroft-Gault.",
+      abg: "Структурированная интерпретация КОС и газов крови с расчетом компенсации, AG, оксигенации и проверкой на ДКА.",
+    },
   },
   en: {
     title: "Calculators",
@@ -78,6 +100,17 @@ const texts = {
       thrombosis: "Thrombosis",
       cardiology: "Cardiology",
       general: "General",
+    },
+    calculatorDescriptions: {
+      pca: "Patient-controlled analgesia dose planning with support for your personal drug library.",
+      peds: "Pediatric dose calculator with personal indication presets and drug-library defaults.",
+      vte: "Deep vein thrombosis probability support in a standalone Wells-style calculator.",
+      pe: "Pulmonary embolism probability support in a standalone Wells-style calculator.",
+      cad: "Pre-test coronary artery disease probability support in a standalone structured view.",
+      chads: "Atrial fibrillation stroke and bleeding risk support in a standalone dual-score view.",
+      bmi: "Body mass index calculator.",
+      gfr: "Cockcroft-Gault style renal function estimate.",
+      abg: "Structured acid-base and blood-gas interpretation with compensation, anion gap, oxygenation, and DKA checks.",
     },
   },
 } as const;
@@ -183,7 +216,9 @@ export default function CalculatorsCatalogPage() {
                         </div>
                         <div className="min-w-0">
                           <div className="text-lg font-black text-slate-900">{calculator.title}</div>
-                          <p className="mt-1 text-sm text-slate-500 leading-relaxed">{calculator.description}</p>
+                          <p className="mt-1 text-sm text-slate-500 leading-relaxed">
+                            {i18n.calculatorDescriptions[calculator.key as keyof typeof i18n.calculatorDescriptions] || calculator.description}
+                          </p>
                         </div>
                       </div>
                       <div className="mt-5 text-[11px] font-black uppercase tracking-[0.16em] text-blue-600">
