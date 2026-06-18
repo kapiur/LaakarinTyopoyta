@@ -106,6 +106,17 @@ export const CALCULATOR_DEFINITIONS: CalculatorDefinition[] = [
     sortOrder: 80,
     tags: ['renal', 'creatinine'],
   },
+  {
+    key: 'abg',
+    title: 'ABG',
+    description: 'Structured acid-base and blood-gas interpretation support with compensation, anion gap, oxygenation, and DKA checks.',
+    route: '/calculators/abg',
+    icon: 'Wind',
+    category: 'general',
+    defaultEnabled: true,
+    sortOrder: 90,
+    tags: ['acid-base', 'blood gas', 'dka'],
+  },
 ];
 
 export const CALCULATOR_KEYS = new Set(CALCULATOR_DEFINITIONS.map((calculator) => calculator.key));
