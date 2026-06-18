@@ -13,6 +13,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useI18n } from "../../lib/useI18n";
+import type { AgentConversationTurn } from "../../lib/ai/agent/types";
 import type {
   LiteratureArticle,
   LiteratureRegionFilter,
@@ -39,6 +40,7 @@ type SearchResponse = {
 };
 
 type ViewMode = "original" | "translation" | "summary";
+type InterpretationMode = "translation" | "summary";
 
 type AgentResponse = {
   reply?: string;
@@ -53,6 +55,10 @@ type ArticleContextResponse = {
   fullTextUrl?: string | null;
   pmcid?: string | null;
 };
+
+function buildInterpretationKey(pmid: string, mode: InterpretationMode) {
+  return `${pmid}:${mode}`;
+}
 
 function trustClasses(level: LiteratureArticle["trustLevel"]) {
   if (level === "high") return "bg-emerald-50 text-emerald-700 border-emerald-200";
@@ -149,6 +155,40 @@ function buildLocalSummaryFallback(article: LiteratureArticle): LiteratureSummar
   };
 }
 
+function buildSummaryDraftText(summary?: LiteratureSummaryResult | null) {
+  if (!summary) return "";
+  if (summary.summaryText) return summary.summaryText;
+
+  const sections = [
+    summary.localizedTitle,
+    summary.summaryBullets.length > 0 ? summary.summaryBullets.map((item) => `- ${item}`).join("\n") : "",
+    summary.limitations.length > 0 ? `Limitations:\n${summary.limitations.map((item) => `- ${item}`).join("\n")}` : "",
+    summary.clinicalRelevance ? `Clinical relevance:\n${summary.clinicalRelevance}` : "",
+    summary.trustNote ? `Trust note:\n${summary.trustNote}` : "",
+  ].filter(Boolean);
+
+  return sections.join("\n\n");
+}
+
+function stripServiceScaffolding(value: string) {
+  const normalized = value.replace(/\r/g, "").trim();
+  if (!normalized) return "";
+
+  const lines = normalized.split("\n");
+  const heading1Index = lines.findIndex((line) => /^\s*1[.)]\s+/.test(line));
+  const heading2Index = lines.findIndex((line, index) => index > heading1Index && /^\s*2[.)]\s+/.test(line));
+  const heading3Index = lines.findIndex((line, index) => index > heading2Index && /^\s*3[.)]\s+/.test(line));
+  const heading4Index = lines.findIndex((line, index) => index > heading3Index && /^\s*4[.)]\s+/.test(line));
+
+  if (heading1Index !== -1 && heading2Index !== -1 && heading3Index !== -1) {
+    const keptLines = heading4Index === -1 ? lines.slice(heading3Index + 1) : lines.slice(heading3Index + 1, heading4Index);
+    const cleaned = keptLines.join("\n").trim();
+    if (cleaned) return cleaned;
+  }
+
+  return normalized;
+}
+
 export default function LiteraturePage() {
   const { t, language } = useI18n();
   const [query, setQuery] = useState("");
@@ -164,6 +204,9 @@ export default function LiteraturePage() {
   const [translationCache, setTranslationCache] = useState<Record<string, LiteratureTranslationResult>>({});
   const [summaryCache, setSummaryCache] = useState<Record<string, LiteratureSummaryResult>>({});
   const [articleContextCache, setArticleContextCache] = useState<Record<string, ArticleContextResponse>>({});
+  const [followUpDrafts, setFollowUpDrafts] = useState<Record<string, string>>({});
+  const [followUpHistory, setFollowUpHistory] = useState<Record<string, AgentConversationTurn[]>>({});
+  const [refiningMode, setRefiningMode] = useState<InterpretationMode | null>(null);
 
   const targetLanguage = language || results?.context?.targetLanguage || "fi";
 
@@ -211,7 +254,35 @@ export default function LiteraturePage() {
     }
   }
 
-  async function loadInterpretation(mode: "translation" | "summary") {
+  async function ensureArticleContext(article: LiteratureArticle, mode: InterpretationMode) {
+    const cachedContext = articleContextCache[article.pmid];
+    if (cachedContext) {
+      return cachedContext;
+    }
+
+    const contextResponse = await fetch("/api/literature/context", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        article,
+        mode,
+      }),
+    });
+    const contextData = await contextResponse.json() as ArticleContextResponse & { error?: string };
+
+    if (!contextResponse.ok) {
+      throw new Error(contextData?.error || t("literature.interpretationFailed"));
+    }
+
+    setArticleContextCache((current) => ({
+      ...current,
+      [article.pmid]: contextData,
+    }));
+
+    return contextData;
+  }
+
+  async function loadInterpretation(mode: InterpretationMode) {
     if (!selectedArticle) return;
     if (mode === "translation" && translationCache[selectedArticle.pmid]) {
       setViewMode("translation");
@@ -225,30 +296,7 @@ export default function LiteraturePage() {
     setLoadingMode(mode);
     setError(null);
     try {
-      const cachedContext = articleContextCache[selectedArticle.pmid];
-      let articleContext = cachedContext;
-
-      if (!articleContext) {
-        const contextResponse = await fetch("/api/literature/context", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            article: selectedArticle,
-            mode,
-          }),
-        });
-        const contextData = await contextResponse.json() as ArticleContextResponse & { error?: string };
-
-        if (!contextResponse.ok) {
-          throw new Error(contextData?.error || t("literature.interpretationFailed"));
-        }
-
-        articleContext = contextData;
-        setArticleContextCache((current) => ({
-          ...current,
-          [selectedArticle.pmid]: contextData,
-        }));
-      }
+      const articleContext = await ensureArticleContext(selectedArticle, mode);
 
       const agentInstruction =
         mode === "translation"
@@ -270,12 +318,15 @@ export default function LiteraturePage() {
           : [
               `Provide a concise physician-facing summary of the provided medical article in ${targetLanguage}.`,
               articleContext?.fullTextAvailable
-                ? "Use the provided article metadata, abstract, and available PMC full text."
+                ? "Use the provided article metadata, abstract, and retrieved article text."
                 : "Use only the provided article metadata and abstract.",
               "Structure the answer as short paragraphs or bullets covering main point, limitations, and clinical relevance.",
               "Do not add facts that are not present in the article text.",
+              "Write the medical summary directly. Do not begin with meta-commentary about what was or was not provided.",
+              "Do not write phrases such as 'the full text was not fully available', 'the available fragment shows', or 'below is a cautious summary' unless the user explicitly asks about source completeness.",
+              "If some numeric details or subgroup results are genuinely missing, mention that only briefly at the end and only when it materially limits interpretation.",
               articleContext?.fullTextAvailable
-                ? "If full text is available, base the summary on it rather than stating that only the abstract was provided."
+                ? "Base the summary on the retrieved article text and abstract rather than discussing source availability."
                 : "If only the abstract is available, state uncertainty modestly and do not pretend to have reviewed the full paper.",
             ].join(" ");
 
@@ -295,7 +346,7 @@ export default function LiteraturePage() {
         throw new Error(data?.error || t("literature.interpretationFailed"));
       }
 
-      const replyText = (data.draft || data.reply || "").trim();
+      const replyText = stripServiceScaffolding((data.draft || data.reply || "").trim());
 
       if (mode === "translation") {
         setTranslationCache((current) => ({
@@ -344,6 +395,118 @@ export default function LiteraturePage() {
 
   const selectedTranslation = selectedArticle ? translationCache[selectedArticle.pmid] : null;
   const selectedSummary = selectedArticle ? summaryCache[selectedArticle.pmid] : null;
+  const currentInterpretationKey =
+    selectedArticle && viewMode !== "original" ? buildInterpretationKey(selectedArticle.pmid, viewMode) : null;
+  const currentInterpretationText =
+    viewMode === "translation"
+      ? selectedTranslation?.translatedText || selectedTranslation?.translatedAbstract || ""
+      : viewMode === "summary"
+        ? buildSummaryDraftText(selectedSummary)
+        : "";
+  const currentFollowUpValue = currentInterpretationKey ? followUpDrafts[currentInterpretationKey] ?? "" : "";
+
+  async function submitFollowUp() {
+    if (!selectedArticle || viewMode === "original" || !currentInterpretationKey) return;
+
+    const followUpMessage = currentFollowUpValue.trim();
+    if (!followUpMessage) return;
+
+    setRefiningMode(viewMode);
+    setError(null);
+
+    try {
+      const articleContext = await ensureArticleContext(selectedArticle, viewMode);
+      const agentInstruction =
+        viewMode === "translation"
+          ? [
+              `Revise the existing physician-facing medical translation of the same article in ${targetLanguage}.`,
+              "Follow the user's latest request while keeping the meaning faithful to the source text.",
+              "Use natural medical language, not literal word-for-word phrasing.",
+              "Keep standard drug names, biomarker names, and medical abbreviations in their usual clinical form.",
+              "Return only the revised translated text.",
+              `User request: ${followUpMessage}`,
+            ].join(" ")
+          : [
+              `Refine or extend the existing physician-facing output for the same medical article in ${targetLanguage}.`,
+              articleContext?.fullTextAvailable
+                ? "Use the available article metadata, abstract, and retrieved article text."
+                : "Use only the available article metadata and abstract context.",
+              "Follow the user's latest request and stay grounded strictly in the article text.",
+              "Do not add unsupported facts or imply access to sections that were not available.",
+              "Return the revised medical answer directly without meta-commentary about missing fragments unless that limitation is essential to the requested interpretation.",
+              "If the user asks for a different structure such as bullets, a critical appraisal, or a compact table, provide it from the same article context.",
+              "Return only the revised answer.",
+              `User request: ${followUpMessage}`,
+            ].join(" ");
+
+      const response = await fetch("/api/agent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contextType: "general",
+          uiLanguage: language,
+          userMessage: agentInstruction,
+          currentText: articleContext?.contextText || buildArticleCurrentText(selectedArticle),
+          conversationContext: {
+            latestDraft: currentInterpretationText,
+            previousTurns: followUpHistory[currentInterpretationKey] ?? [],
+          },
+        }),
+      });
+      const data = await response.json() as AgentResponse;
+
+      if (!response.ok) {
+        throw new Error(data?.error || t("literature.interpretationFailed"));
+      }
+
+      const replyText = stripServiceScaffolding((data.draft || data.reply || "").trim());
+      if (!replyText) {
+        throw new Error(t("literature.interpretationFailed"));
+      }
+
+      if (viewMode === "translation") {
+        setTranslationCache((current) => ({
+          ...current,
+          [selectedArticle.pmid]: parseAgentTranslation(selectedArticle, replyText),
+        }));
+      } else {
+        setSummaryCache((current) => ({
+          ...current,
+          [selectedArticle.pmid]: {
+            localizedTitle: selectedArticle.title,
+            studyTypeLabel: selectedArticle.studyType,
+            summaryBullets: [],
+            limitations: [],
+            clinicalRelevance: "",
+            trustNote: selectedArticle.trustReason,
+            summaryText: replyText,
+          },
+        }));
+      }
+
+      setFollowUpHistory((current) => ({
+        ...current,
+        [currentInterpretationKey]: [
+          ...(current[currentInterpretationKey] ?? []).slice(-3),
+          {
+            userMessage: followUpMessage,
+            assistantReply: replyText,
+            assistantDraft: replyText,
+            taskType: viewMode === "translation" ? "literature_translation_refinement" : "literature_summary_refinement",
+          },
+        ],
+      }));
+      setFollowUpDrafts((current) => ({
+        ...current,
+        [currentInterpretationKey]: "",
+      }));
+    } catch (followUpError) {
+      console.error("Literature follow-up failed", followUpError);
+      setError(t("literature.interpretationFailed"));
+    } finally {
+      setRefiningMode(null);
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -633,7 +796,7 @@ export default function LiteraturePage() {
             )}
 
             {selectedArticle && viewMode === "translation" && (
-              <div className="space-y-4">
+              <div className="space-y-5">
                 <div className="rounded-2xl bg-blue-50 border border-blue-200 px-4 py-3 text-sm text-blue-800">
                   {t("literature.machineTranslationNotice")}
                 </div>
@@ -643,6 +806,34 @@ export default function LiteraturePage() {
                 <div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm leading-relaxed text-slate-700 whitespace-pre-line">
                   {selectedTranslation?.translatedText || selectedTranslation?.translatedAbstract || t("literature.translationEmpty")}
                 </div>
+                {currentInterpretationKey && currentInterpretationText && (
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+                    <div>
+                      <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{t("literature.followUpTitle")}</div>
+                      <p className="mt-1 text-sm text-slate-500">{t("literature.followUpDescription")}</p>
+                    </div>
+                    <textarea
+                      value={currentFollowUpValue}
+                      onChange={(event) => setFollowUpDrafts((current) => ({
+                        ...current,
+                        [currentInterpretationKey]: event.target.value,
+                      }))}
+                      placeholder={t("literature.followUpPlaceholder")}
+                      className="w-full h-28 px-4 py-3 rounded-2xl border border-slate-200 bg-white text-sm outline-none focus:ring-2 focus:ring-blue-100 resize-none"
+                    />
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        onClick={submitFollowUp}
+                        disabled={refiningMode === viewMode || !currentFollowUpValue.trim()}
+                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-slate-800 disabled:opacity-50"
+                      >
+                        {refiningMode === viewMode ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}
+                        {refiningMode === viewMode ? t("literature.followUpLoading") : t("literature.followUpButton")}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -709,6 +900,35 @@ export default function LiteraturePage() {
                     <p className="mt-2 text-sm leading-relaxed text-slate-700">
                       {selectedSummary?.trustNote || selectedArticle.trustReason}
                     </p>
+                  </div>
+                )}
+
+                {currentInterpretationKey && currentInterpretationText && (
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+                    <div>
+                      <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{t("literature.followUpTitle")}</div>
+                      <p className="mt-1 text-sm text-slate-500">{t("literature.followUpDescription")}</p>
+                    </div>
+                    <textarea
+                      value={currentFollowUpValue}
+                      onChange={(event) => setFollowUpDrafts((current) => ({
+                        ...current,
+                        [currentInterpretationKey]: event.target.value,
+                      }))}
+                      placeholder={t("literature.followUpPlaceholder")}
+                      className="w-full h-28 px-4 py-3 rounded-2xl border border-slate-200 bg-white text-sm outline-none focus:ring-2 focus:ring-emerald-100 resize-none"
+                    />
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        onClick={submitFollowUp}
+                        disabled={refiningMode === viewMode || !currentFollowUpValue.trim()}
+                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-slate-800 disabled:opacity-50"
+                      >
+                        {refiningMode === viewMode ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}
+                        {refiningMode === viewMode ? t("literature.followUpLoading") : t("literature.followUpButton")}
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>

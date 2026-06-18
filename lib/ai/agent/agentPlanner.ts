@@ -202,6 +202,9 @@ function systemInstructionForTask(taskType: AiTaskType, contextType: AgentContex
     'Do not invent clinical facts not present in the provided material.',
     'If important information is missing, state it clearly and continue with a draft only when reasonable.',
     'Use the clinical output language and clinical country provided by the backend.',
+    'Prefer a clean user-facing answer.',
+    'Do not use meta sections such as "Brief interpretation of the task", "Missing or uncertain information", "Draft or proposed solution", or "Suggested next action" unless the user explicitly asks for that format.',
+    'When uncertainty matters, mention it briefly inside the answer or as one short final note, not as a separate service block.',
   ].join('\n');
 
   if (taskType === 'template_generation' || taskType === 'template_polish') {
@@ -260,13 +263,9 @@ export function createAgentPlan(input: {
     userParts.push('If you produce an updated quick-guide draft, preserve the same structured format and field labels shown in Current template.');
   }
 
-  userParts.push([
-    'Return the answer in this structure when applicable:',
-    '1. Brief interpretation of the task.',
-    '2. Missing or uncertain information, if any.',
-    '3. Draft or proposed solution.',
-    '4. Suggested next action for the user.',
-  ].join('\n'));
+  userParts.push(
+    'Return the final user-facing answer directly. Use bullets or short sections only when they genuinely improve readability for this task.'
+  );
 
   return {
     taskType,

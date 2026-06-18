@@ -55,11 +55,11 @@ function buildSummaryFocusedExcerpt(fullText: string) {
   }
 
   const orderedSections: Array<keyof typeof buckets> = [
-    "introduction",
-    "methods",
     "results",
-    "discussion",
     "conclusion",
+    "discussion",
+    "methods",
+    "introduction",
     "other",
   ];
 
@@ -74,8 +74,12 @@ function buildSummaryFocusedExcerpt(fullText: string) {
     let taken = 0;
     for (const item of items) {
       if (totalChars >= maxChars) break;
-      if (taken >= 6 && section !== "results") break;
-      if (taken >= 10 && section === "results") break;
+      if (section === "results" && taken >= 14) break;
+      if (section === "conclusion" && taken >= 8) break;
+      if (section === "discussion" && taken >= 6) break;
+      if (section === "methods" && taken >= 4) break;
+      if (section === "introduction" && taken >= 3) break;
+      if (section === "other" && taken >= 4) break;
 
       const next = item.trim();
       if (!next) continue;
@@ -121,7 +125,13 @@ function buildArticleContext(
     `Trust level: ${article.trustLevel}`,
     article.abstract ? `Abstract:\n${article.abstract}` : "Abstract: not available",
     interpretationText
-      ? `Full text source: ${sourceLabel}\n\nText for interpretation:\n${interpretationText}`
+      ? [
+          `Retrieved article text source: ${sourceLabel}`,
+          mode === "summary"
+            ? "Use the retrieved article text below as the primary working context for the summary. It may be a curated excerpt chosen to prioritize results and conclusions."
+            : "Use the retrieved article text below as supporting context.",
+          `Text for interpretation:\n${interpretationText}`,
+        ].join("\n\n")
       : "",
   ].filter(Boolean).join("\n\n");
 }

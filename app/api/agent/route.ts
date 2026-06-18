@@ -78,13 +78,86 @@ function inputKindForContext(contextType: AgentContextType) {
   return 'general' as const;
 }
 
-function parseDraftFromContent(content: string) {
-  const draftHeading =
-    /(?:^|\n)(?:3\.\s*)?(?:Draft|Luonnos|Ehdotus|Proposed solution|Korjattu luonnos|Malliluonnos|Promptiluonnos)\s*:?\s*\n/i;
-  const match = draftHeading.exec(content);
+function normalizeHeadingLine(line: string) {
+  return line
+    .toLowerCase()
+    .replace(/\r/g, '')
+    .replace(/\*\*/g, '')
+    .replace(/^[-\s]+/, '')
+    .replace(/^\d+\.\s*/, '')
+    .replace(/\s*[:：]\s*$/, '')
+    .replace(/\s*\/\s*/g, '/')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
 
-  if (!match || match.index === undefined) return content.trim();
-  return content.slice(match.index + match[0].length).trim();
+function isDraftHeading(line: string) {
+  const normalized = normalizeHeadingLine(line);
+  return [
+    'draft',
+    'luonnos',
+    'ehdotus',
+    'proposed solution',
+    'korjattu luonnos',
+    'malliluonnos',
+    'promptiluonnos',
+    'черновик/предлагаемое решение',
+    'предлагаемое решение',
+    'предлагаемый вариант',
+  ].some((candidate) => normalized === candidate || normalized.startsWith(candidate));
+}
+
+function isNextActionHeading(line: string) {
+  const normalized = normalizeHeadingLine(line);
+  return [
+    'suggested next action',
+    'recommended next action',
+    'ehdotettu seuraava toiminto',
+    'suositeltu seuraava toiminto',
+    'рекомендуемое следующее действие',
+  ].some((candidate) => normalized === candidate || normalized.startsWith(candidate));
+}
+
+function parseDraftFromContent(content: string) {
+  const normalizedContent = content.replace(/\r/g, '').trim();
+  if (!normalizedContent) return '';
+
+  const lines = normalizedContent.split('\n');
+  const draftStartIndex = lines.findIndex((line) => isDraftHeading(line));
+  if (draftStartIndex !== -1) {
+    const afterDraftLines = lines.slice(draftStartIndex + 1);
+    const nextActionIndex = afterDraftLines.findIndex((line) => isNextActionHeading(line));
+    const keptLines = nextActionIndex === -1 ? afterDraftLines : afterDraftLines.slice(0, nextActionIndex);
+
+    return keptLines.join('\n').trim();
+  }
+
+  const heading1Index = lines.findIndex((line) => /^\s*1[.)]\s+/.test(line));
+  const heading2Index = lines.findIndex((line, index) => index > heading1Index && /^\s*2[.)]\s+/.test(line));
+  const heading3Index = lines.findIndex((line, index) => index > heading2Index && /^\s*3[.)]\s+/.test(line));
+  const heading4Index = lines.findIndex((line, index) => index > heading3Index && /^\s*4[.)]\s+/.test(line));
+
+  if (heading1Index !== -1 && heading2Index !== -1 && heading3Index !== -1) {
+    const keptLines = heading4Index === -1 ? lines.slice(heading3Index + 1) : lines.slice(heading3Index + 1, heading4Index);
+    const fallbackDraft = keptLines.join('\n').trim();
+    if (fallbackDraft) {
+      return fallbackDraft;
+    }
+  }
+
+  return normalizedContent;
+}
+
+function normalizeReplyForDisplay(content: string) {
+  const trimmed = content.trim();
+  if (!trimmed) return trimmed;
+
+  const extractedDraft = parseDraftFromContent(trimmed);
+  if (extractedDraft && extractedDraft !== trimmed) {
+    return extractedDraft;
+  }
+
+  return trimmed;
 }
 
 function localizedEvidenceWarnings(
@@ -447,9 +520,12 @@ export async function POST(req: Request) {
       success: true,
     });
 
+    const displayContent = normalizeReplyForDisplay(safeOutputContent);
+    const displayDraft = parseDraftFromContent(displayContent);
+
     return NextResponse.json({
-      reply: safeOutputContent,
-      draft: parseDraftFromContent(safeOutputContent),
+      reply: displayContent,
+      draft: displayDraft,
       suggestedActions: plan.suggestedActions,
       taskType: plan.taskType,
       provider: result.provider,

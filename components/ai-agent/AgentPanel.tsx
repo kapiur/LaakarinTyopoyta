@@ -142,6 +142,25 @@ async function copyToClipboard(text: string) {
   await navigator.clipboard.writeText(text);
 }
 
+function stripServiceScaffolding(value?: string) {
+  const normalized = (value || "").replace(/\r/g, "").trim();
+  if (!normalized) return "";
+
+  const lines = normalized.split("\n");
+  const heading1Index = lines.findIndex((line) => /^\s*1[.)]\s+/.test(line));
+  const heading2Index = lines.findIndex((line, index) => index > heading1Index && /^\s*2[.)]\s+/.test(line));
+  const heading3Index = lines.findIndex((line, index) => index > heading2Index && /^\s*3[.)]\s+/.test(line));
+  const heading4Index = lines.findIndex((line, index) => index > heading3Index && /^\s*4[.)]\s+/.test(line));
+
+  if (heading1Index !== -1 && heading2Index !== -1 && heading3Index !== -1) {
+    const keptLines = heading4Index === -1 ? lines.slice(heading3Index + 1) : lines.slice(heading3Index + 1, heading4Index);
+    const cleaned = keptLines.join("\n").trim();
+    if (cleaned) return cleaned;
+  }
+
+  return normalized;
+}
+
 export default function AgentPanel({ defaultContextType = "general", initialText = "", initialTemplate = "", compact = false, onApplyDraft }: AgentPanelProps) {
   const { t, language } = useI18n();
   const l = localLabels[language] || localLabels.fi;
@@ -168,6 +187,8 @@ export default function AgentPanel({ defaultContextType = "general", initialText
   const selectedContext = useMemo(() => contextOptions.find((option) => option.value === contextType), [contextOptions, contextType]);
   const contextLabelMap = useMemo(() => new Map(contextOptions.map((option) => [option.value, option.label])), [contextOptions]);
   const visibleHistory = turns.slice(0, -1);
+  const visibleReply = stripServiceScaffolding(response?.reply);
+  const visibleDraft = stripServiceScaffolding(response?.draft);
 
   async function callAgent(message: string, previousTurns: AgentTurn[]) {
     setLoading(true);
@@ -361,7 +382,7 @@ export default function AgentPanel({ defaultContextType = "general", initialText
                 {visibleHistory.map((turn, index) => (
                   <div key={index} className="rounded-2xl bg-slate-50 border border-slate-100 p-3 text-xs text-slate-600 space-y-2">
                     <div><span className="font-bold text-slate-800">{l.turnUser}:</span> {turn.userMessage}</div>
-                    <div className="whitespace-pre-wrap"><span className="font-bold text-slate-800">{l.turnAssistant}:</span> {turn.response.draft || turn.response.reply}</div>
+                    <div className="whitespace-pre-wrap"><span className="font-bold text-slate-800">{l.turnAssistant}:</span> {stripServiceScaffolding(turn.response.draft || turn.response.reply)}</div>
                   </div>
                 ))}
               </div>
@@ -449,27 +470,27 @@ export default function AgentPanel({ defaultContextType = "general", initialText
                 )}
 
                 <div className="prose prose-sm max-w-none whitespace-pre-wrap text-slate-800">
-                  {response.reply}
+                  {visibleReply}
                 </div>
 
-                {response.draft && response.draft !== response.reply && (
+                {visibleDraft && visibleDraft !== visibleReply && (
                   <div className="rounded-2xl bg-white border border-slate-200 p-4 space-y-2">
                     <h3 className="text-sm font-bold text-slate-900">{l.latestDraftLabel}</h3>
-                    <div className="whitespace-pre-wrap text-sm text-slate-700">{response.draft}</div>
+                    <div className="whitespace-pre-wrap text-sm text-slate-700">{visibleDraft}</div>
                   </div>
                 )}
 
                 <div className="flex flex-wrap gap-2 pt-2">
-                  <button onClick={() => copyValue("reply", response.reply)} className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-600 hover:bg-slate-50">
+                  <button onClick={() => copyValue("reply", visibleReply)} className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-600 hover:bg-slate-50">
                     <Clipboard size={14} /> {t("agent.copyReply")}
                   </button>
-                  {response.draft && (
-                    <button onClick={() => copyValue("draft", response.draft)} className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-600 hover:bg-slate-50">
+                  {visibleDraft && (
+                    <button onClick={() => copyValue("draft", visibleDraft)} className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-600 hover:bg-slate-50">
                       <Clipboard size={14} /> {t("agent.copyDraft")}
                     </button>
                   )}
-                  {onApplyDraft && response.draft && (
-                    <button onClick={() => applyDraft(response.draft)} className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-purple-100 bg-purple-50 text-xs font-bold text-purple-700 hover:bg-purple-100">
+                  {onApplyDraft && visibleDraft && (
+                    <button onClick={() => applyDraft(visibleDraft)} className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-purple-100 bg-purple-50 text-xs font-bold text-purple-700 hover:bg-purple-100">
                       <Sparkles size={14} /> {l.applyDraft}
                     </button>
                   )}
