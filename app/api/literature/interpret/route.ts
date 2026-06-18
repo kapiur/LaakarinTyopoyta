@@ -194,6 +194,26 @@ function buildDeterministicTranslationFallback(article: LiteratureArticle): Lite
   };
 }
 
+function buildFallbackResponse(article: LiteratureArticle, mode: LiteratureInterpretationMode) {
+  if (mode === "translate") {
+    return {
+      provider: "local",
+      model: "fallback",
+      translation: buildDeterministicTranslationFallback(article),
+    } as const;
+  }
+
+  return {
+    provider: "local",
+    model: "fallback",
+    summary: buildDeterministicSummaryFallback(article),
+  } as const;
+}
+
+function readResultContent(result: Awaited<ReturnType<typeof runRoutedAiCompletion>> | null) {
+  return typeof result?.content === "string" ? result.content : "";
+}
+
 export async function POST(req: Request) {
   const { session, error } = await requireAuthenticatedUser();
   if (error) return error;
@@ -203,12 +223,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  let article: LiteratureArticle | undefined;
+  let mode: LiteratureInterpretationMode | undefined;
+
   try {
     const body = await req.json();
-    const article = body?.article as LiteratureArticle | undefined;
-    const mode = body?.mode;
+    article = body?.article as LiteratureArticle | undefined;
+    mode = isLiteratureMode(body?.mode) ? body.mode : undefined;
 
-    if (!article || !isLiteratureMode(mode) || !article.title) {
+    if (!article || !mode || !article.title) {
       return NextResponse.json({ error: "Invalid request" }, { status: 400 });
     }
 
@@ -272,24 +295,12 @@ export async function POST(req: Request) {
       });
     } catch (aiError) {
       console.error("Literature AI call failed:", aiError);
-
-      if (mode === "translate") {
-        return NextResponse.json({
-          provider: "local",
-          model: "fallback",
-          translation: buildDeterministicTranslationFallback(article),
-        });
-      }
-
-      return NextResponse.json({
-        provider: "local",
-        model: "fallback",
-        summary: buildDeterministicSummaryFallback(article),
-      });
+      return NextResponse.json(buildFallbackResponse(article, mode));
     }
 
     if (mode === "translate") {
-      if (!result.content.trim()) {
+      const resultContent = readResultContent(result);
+      if (!resultContent.trim()) {
         return NextResponse.json({
           provider: result.provider,
           model: result.model,
@@ -297,14 +308,14 @@ export async function POST(req: Request) {
         });
       }
 
-      const parsed = safeJsonParse<LiteratureTranslationResult>(result.content);
-      const translation = translationFromParsed(article, parsed, result.content);
+      const parsed = safeJsonParse<LiteratureTranslationResult>(resultContent);
+      const translation = translationFromParsed(article, parsed, resultContent);
       const hasUsableTranslation = translation && (translation.translatedTitle.trim().length > 0 || translation.translatedAbstract.trim().length > 0);
       if (!hasUsableTranslation) {
         console.error("Literature translation parse failed:", {
           provider: result.provider,
           model: result.model,
-          contentPreview: result.content.slice(0, 500),
+          contentPreview: resultContent.slice(0, 500),
         });
         return NextResponse.json({
           provider: result.provider,
@@ -320,7 +331,8 @@ export async function POST(req: Request) {
       });
     }
 
-    if (!result.content.trim()) {
+    const resultContent = readResultContent(result);
+    if (!resultContent.trim()) {
       return NextResponse.json({
         provider: result.provider,
         model: result.model,
@@ -328,13 +340,13 @@ export async function POST(req: Request) {
       });
     }
 
-    const parsed = safeJsonParse<LiteratureSummaryResult>(result.content);
-    const summary = summaryFromParsed(article, parsed, result.content) ?? buildDeterministicSummaryFallback(article);
+    const parsed = safeJsonParse<LiteratureSummaryResult>(resultContent);
+    const summary = summaryFromParsed(article, parsed, resultContent) ?? buildDeterministicSummaryFallback(article);
     if (!summary) {
       console.error("Literature summary parse failed:", {
         provider: result.provider,
         model: result.model,
-        contentPreview: result.content.slice(0, 500),
+        contentPreview: resultContent.slice(0, 500),
       });
       return NextResponse.json({
         provider: result.provider,
@@ -350,6 +362,9 @@ export async function POST(req: Request) {
     });
   } catch (routeError) {
     console.error("Literature interpretation failed:", routeError);
+    if (article && mode) {
+      return NextResponse.json(buildFallbackResponse(article, mode));
+    }
     return NextResponse.json({ error: "Literature interpretation failed" }, { status: 500 });
   }
 }
