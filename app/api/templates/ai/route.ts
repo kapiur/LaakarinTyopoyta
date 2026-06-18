@@ -2,12 +2,15 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '../../../../lib/auth';
 import { getOpenAiClientForUser } from '../../../../lib/ai/providers/getOpenAiClientForUser';
+import { getUserClinicalEvidenceConfig } from '../../../../lib/clinical/evidence/userClinicalSettings';
 import { prisma } from '../../../../lib/prisma';
 import { getTemplateFields, validateTemplate } from '../../../../lib/templates';
 import { mergeAnonymizationResults } from '../../../../lib/privacy/anonymizePatientText';
 import { preparePrivacyPayload } from '../../../../lib/privacy/gateway';
 import { hasCriticalPrivacyFindingTypes } from '../../../../lib/privacy/gateway/decision';
 import { sanitizeJsonValue } from '../../../../lib/privacy/structured/sanitizeJsonValue';
+import { normalizeUiLanguage, type UiLanguage } from '../../../../lib/i18n';
+import { buildWorkspaceContextInstruction, type AiWorkspaceContext } from '../../../../lib/ai/workspaceContext';
 import {
   buildUserAiProfileInstruction,
   withUserAiProfileInstruction,
@@ -42,7 +45,6 @@ const ALLOWED_MODES = [
 ] as const;
 
 type TemplateAiMode = typeof ALLOWED_MODES[number];
-type UiLanguage = 'fi' | 'ru' | 'en';
 
 type AllowedSource = {
   title: string;
@@ -92,9 +94,8 @@ function isMode(value: unknown): value is TemplateAiMode {
   return typeof value === 'string' && ALLOWED_MODES.includes(value as TemplateAiMode);
 }
 
-function normalizeLanguage(value: unknown): UiLanguage {
-  if (value === 'ru' || value === 'en' || value === 'fi') return value;
-  return 'fi';
+function normalizeTemplateAiLanguage(value: unknown): UiLanguage {
+  return normalizeUiLanguage(value);
 }
 
 function jsonError(message: string, status = 400) {
@@ -149,14 +150,18 @@ async function getUserAiProfile(userId: number) {
   }
 }
 
-function buildSystemPrompt(mode: TemplateAiMode) {
+function buildSystemPrompt(mode: TemplateAiMode, workspaceContext: AiWorkspaceContext) {
   const basePrompt = `You are an AI assistant for dr.kapustin.fi / Lääkärin Työpöytä.
 
-Your task is to create and edit Finnish clinical documentation templates.
+${buildWorkspaceContextInstruction(workspaceContext, {
+  contentLabel: 'template content and clinician-facing template guidance',
+})}
+
+Your task is to create and edit clinical documentation templates.
 
 Critical rules:
 - Return valid JSON only. No markdown.
-- The clinical template content must always be in Finnish.
+- The clinical template content must by default follow the clinical output language from the workspace context unless the user explicitly asks for another documentation language or the existing template clearly needs to stay in its current language.
 - UI explanation fields may follow the requested uiLanguage.
 - Do not save anything. You only return a suggestion.
 - Do not invent patient facts.
@@ -165,7 +170,7 @@ Critical rules:
 - If the input contains privacy placeholders such as [NAME], [HETU], [DATE], [PHONE], [EMAIL], treat them as generic anonymized details and do not explain them.
 - Do not include guideline citations inside templateText. Sources must be returned separately in usedSources.
 - Technical field names must use lowercase Latin letters, numbers and underscore only: /^[a-z0-9_]+$/.
-- Prefer concise Finnish clinical wording suitable for potilaskertomus.
+- Prefer concise clinician-facing clinical wording suitable for the selected clinical country and output language.
 - Use the project template syntax:
   {{field}}
   {{field:input}}
@@ -211,7 +216,7 @@ Additional rules for editing an existing template:
 - Do not rewrite the entire template unless the user explicitly asks for a full rewrite.
 - Apply only the requested change or improvement.
 - Preserve existing field names, options and showIf logic unless the user asks to change them or they are clearly invalid.
-- Preserve the user's Finnish clinical writing style and structure when possible.
+- Preserve the user's existing clinical writing style, structure and documentation language when possible.
 - If the user instruction is vague, make the smallest safe improvement and explain it briefly in summary.
 - Return the full updated templateText, not a diff.`;
   }
@@ -220,7 +225,7 @@ Additional rules for editing an existing template:
     return `${basePrompt}
 
 Additional rules for creating a template from a sample:
-- Convert the sample into a reusable interactive Finnish template.
+- Convert the sample into a reusable interactive clinical template in the default workspace clinical language unless the user explicitly asks for another language.
 - Replace case-specific facts with suitable fields.
 - Do not preserve any patient-identifying details.
 - Preserve clinically useful structure and writing style.
@@ -233,17 +238,16 @@ Additional rules for creating a template from a sample:
 
 Additional rules for mode create_base_template_from_topic:
 - This mode creates a base clinical documentation template from a topic.
-- Base the clinical content primarily on trusted Finnish and European medical recommendations.
-- Prioritize: Käypä hoito, Terveyskirjasto / Duodecim, THL, Fimea, HUS / official Finnish wellbeing service county instructions, and European professional guidelines when applicable.
+- Base the clinical content primarily on trusted official sources relevant to the selected clinical country, plus high-quality European or international professional recommendations when applicable.
 - Sources are NOT expected to contain ready-made templates.
-- Use trusted recommendations as the clinical evidence/checklist basis for deciding what the physician should ask, examine, assess and document.
+- Use trusted recommendations as the clinical evidence/checklist basis for deciding what the physician should ask, examine, assess and document in the selected clinical country context.
 - Do not use non-medical, commercial, marketing, patient forum, blog or social media sources.
-- Do not copy source text. Convert source-based clinical requirements into a practical Finnish primary-care template.
+- Do not copy source text. Convert source-based clinical requirements into a practical template for the selected clinical country and output language.
 - Internally derive a clinical checklist: anamnesis, symptom characterization, duration, severity, functional impact, risk factors, medication/context factors, status, red flags, investigations/referral/follow-up and practical plan fields.
 - Convert that checklist into an interactive Lääkärin Työpöytä template using radio/select/multiselect/checkbox/date/number/textarea and showIf rules.
 - Include ordinary normal-findings options and abnormal findings options where clinically useful.
 - Use conditional fields to avoid clutter.
-- The final templateText must be usable directly as a Finnish physician note template.
+- The final templateText must be usable directly as a physician note template in the selected clinical output language.
 - The template should usually include: Tulosyy, Esitiedot/anamneesi, Oireen kuvaus, Riskitekijät/context, Status, Hälytysmerkit, Arvio, Suunnitelma.
 - Do not include links in templateText. Put sources only in usedSources.`;
 }
@@ -302,17 +306,19 @@ function sanitizeRequest(body: TemplateAiRequest) {
 function buildUserPayload(body: TemplateAiRequest) {
   return JSON.stringify({
     mode: body.mode,
-    uiLanguage: normalizeLanguage(body.uiLanguage),
+    uiLanguage: normalizeTemplateAiLanguage(body.uiLanguage),
     currentTemplate: body.currentTemplate || '',
     selectedText: body.selectedText || '',
     userInstruction: body.userInstruction || '',
     sampleText: body.sampleText || '',
     topic: body.topic || '',
     clinicalContext: body.clinicalContext || 'terveysasema',
+    clinicalCountry: (body as any).clinicalCountry || '',
+    clinicalOutputLanguage: (body as any).clinicalOutputLanguage || '',
     allowedSources: Array.isArray(body.allowedSources) ? body.allowedSources : [],
     allowGeneralTechnicalSkeleton: Boolean(body.allowGeneralTechnicalSkeleton),
     trustedDomains: TRUSTED_MEDICAL_DOMAINS,
-    expectedWorkflow: 'Create or improve an interactive Finnish clinical template. For existing templates, preserve current structure and only apply the requested changes unless a full rewrite is explicitly requested.',
+    expectedWorkflow: 'Create or improve an interactive clinical template. For existing templates, preserve current structure and only apply the requested changes unless a full rewrite is explicitly requested.',
   });
 }
 
@@ -390,11 +396,12 @@ function validateRequest(body: TemplateAiRequest) {
 async function runTemplateAiCompletion(
   body: TemplateAiRequest,
   profileInstruction: string,
+  workspaceContext: AiWorkspaceContext,
   model: string,
   client: Awaited<ReturnType<typeof getOpenAiClientForUser>>["client"],
   privacy?: { anonymized: boolean; findingTypes: string[] }
 ) {
-  const systemPrompt = withUserAiProfileInstruction(buildSystemPrompt(body.mode as TemplateAiMode), profileInstruction);
+  const systemPrompt = withUserAiProfileInstruction(buildSystemPrompt(body.mode as TemplateAiMode, workspaceContext), profileInstruction);
   const response = await client.chat.completions.create({
     model,
     temperature: 0,
@@ -431,9 +438,26 @@ export async function POST(req: Request) {
         },
       }, { status: 400 });
     }
+    const clinicalConfig = await getUserClinicalEvidenceConfig(userId);
+    const workspaceContext: AiWorkspaceContext = {
+      uiLanguage: normalizeTemplateAiLanguage(body.uiLanguage),
+      clinicalCountry: clinicalConfig.clinicalCountry,
+      clinicalOutputLanguage: clinicalConfig.clinicalOutputLanguage,
+    };
     const profile = await getUserAiProfile(userId);
-    const profileInstruction = buildUserAiProfileInstruction(profile, 'styleOnly');
-    const normalized = await runTemplateAiCompletion(body, profileInstruction, model, client, privacy);
+    const profileInstruction = buildUserAiProfileInstruction(profile, 'styleOnly', workspaceContext);
+    const normalized = await runTemplateAiCompletion(
+      {
+        ...body,
+        clinicalCountry: clinicalConfig.clinicalCountry,
+        clinicalOutputLanguage: clinicalConfig.clinicalOutputLanguage,
+      } as TemplateAiRequest,
+      profileInstruction,
+      workspaceContext,
+      model,
+      client,
+      privacy,
+    );
     const sanitizedOutput = sanitizeJsonValue(normalized, {
       defaultMode: 'storage',
       modeForPath(path) {

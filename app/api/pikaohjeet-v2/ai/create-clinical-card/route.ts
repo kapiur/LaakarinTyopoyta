@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "../../../../../lib/auth";
 import { getOpenAiClientForUser } from "../../../../../lib/ai/providers/getOpenAiClientForUser";
+import { buildWorkspaceContextInstruction, getUserAiWorkspaceContext, type AiWorkspaceContext } from "../../../../../lib/ai/workspaceContext";
 import { mergeAnonymizationResults } from "../../../../../lib/privacy/anonymizePatientText";
 import { preparePrivacyPayload } from "../../../../../lib/privacy/gateway";
 import { hasCriticalPrivacyFindingTypes } from "../../../../../lib/privacy/gateway/decision";
@@ -60,16 +61,20 @@ function splitText(text: string, targetChars = CHUNK_TARGET_CHARS, overlapChars 
   return chunks.slice(0, MAX_CHUNKS);
 }
 
-function baseSystemPrompt() {
+function baseSystemPrompt(workspaceContext: AiWorkspaceContext) {
   return `
 Olet dr.kapustin.fi-sivuston kliininen AI-editori.
 
-Tehtävä: muodosta pitkästä materiaalista lyhyt, käytännöllinen Pikaohje perusterveydenhuollon lääkärille (Terveysasema). Tämä EI ole oppimateriaali eikä luento.
+${buildWorkspaceContextInstruction(workspaceContext, {
+  contentLabel: "Pikaohje card content",
+})}
+
+Tehtävä: muodosta pitkästä materiaalista lyhyt, käytännöllinen Pikaohje perusterveydenhuollon lääkärille valitun kliinisen maan kontekstissa. Tämä EI ole oppimateriaali eikä luento.
 
 TAVOITE:
 - lääkäri avaa kortin vastaanotolla, tarkistaa asian nopeasti ja jatkaa työtä
 - jätä vain kliinisesti hyödyllinen, toimintaa ohjaava sisältö
-- clinical content aina suomeksi
+- kirjoita kliininen sisältö oletuksena työtilan kliinisellä vastauskielellä
 - älä lisää pitkiä teoriaosuuksia
 - älä keksi lähteitä
 - jos Käypä hoito -tekstiä tai muuta lähdetekstiä ei ole annettu, merkitse sourceStatus = "NEEDS_REVIEW"
@@ -88,9 +93,9 @@ Kortissa tulisi yleensä olla osiot:
 
 PALAUTA VAIN validi JSON:
 {
-  "title": "otsikko suomeksi",
+  "title": "otsikko kliinisellä vastauskielellä",
   "slugSuggestion": "lyhyt-latin-slug",
-  "description": "1 lyhyt virke suomeksi",
+  "description": "1 lyhyt virke kliinisellä vastauskielellä",
   "type": "CLINICAL",
   "status": "NEEDS_REVIEW",
   "visibility": "PUBLIC",
@@ -153,6 +158,7 @@ function sanitizeClinicalCardValue(value: unknown) {
 
 async function createClinicalDraftDirect(
   params: { topic: string; rawText: string; sourceText: string },
+  workspaceContext: AiWorkspaceContext,
   client: Awaited<ReturnType<typeof getOpenAiClientForUser>>["client"],
   model: string
 ) {
@@ -160,7 +166,7 @@ async function createClinicalDraftDirect(
     model,
     temperature: 0,
     messages: [
-      { role: "system", content: baseSystemPrompt() },
+      { role: "system", content: baseSystemPrompt(workspaceContext) },
       { role: "user", content: JSON.stringify(params) },
     ],
   });
@@ -171,20 +177,25 @@ async function createClinicalDraftDirect(
 
 async function extractChunkSummary(
   params: {
-  topic: string;
-  chunk: string;
-  index: number;
-  total: number;
-  isSource: boolean;
-},
+    topic: string;
+    chunk: string;
+    index: number;
+    total: number;
+    isSource: boolean;
+  },
+  workspaceContext: AiWorkspaceContext,
   client: Awaited<ReturnType<typeof getOpenAiClientForUser>>["client"],
   model: string
 ) {
   const systemPrompt = `
-Olet kliininen tekstin tiivistäjä. Poimi annetusta fragmentista vain asiat, joista on hyötyä Terveysasema-lääkärin nopeassa Pikaohjeessa.
+${buildWorkspaceContextInstruction(workspaceContext, {
+  contentLabel: "Pikaohje chunk summary",
+})}
+
+Olet kliininen tekstin tiivistäjä. Poimi annetusta fragmentista vain asiat, joista on hyötyä perusterveydenhuollon lääkärin nopeassa Pikaohjeessa valitun kliinisen maan kontekstissa.
 
 Älä tee lopullista ohjekorttia. Älä kirjoita teoriaa. Älä keksi mitään.
-Palauta tiivis suomenkielinen JSON:
+Palauta tiivis JSON työtilan kliinisellä vastauskielellä:
 {
   "chunkIndex": number,
   "topic": "aihe",
@@ -223,6 +234,7 @@ async function runInBatches<T, R>(items: T[], batchSize: number, fn: (item: T, i
 
 async function createClinicalDraftChunked(
   params: { topic: string; rawText: string; sourceText: string },
+  workspaceContext: AiWorkspaceContext,
   client: Awaited<ReturnType<typeof getOpenAiClientForUser>>["client"],
   model: string
 ) {
@@ -230,18 +242,18 @@ async function createClinicalDraftChunked(
   const sourceChunks = params.sourceText ? splitText(params.sourceText, CHUNK_TARGET_CHARS, CHUNK_OVERLAP_CHARS) : [];
 
   const materialSummaries = await runInBatches(materialChunks, 3, (chunk, index) =>
-    extractChunkSummary({ topic: params.topic, chunk, index: index + 1, total: materialChunks.length, isSource: false }, client, model)
+    extractChunkSummary({ topic: params.topic, chunk, index: index + 1, total: materialChunks.length, isSource: false }, workspaceContext, client, model)
   );
 
   const sourceSummaries = await runInBatches(sourceChunks, 3, (chunk, index) =>
-    extractChunkSummary({ topic: params.topic, chunk, index: index + 1, total: sourceChunks.length, isSource: true }, client, model)
+    extractChunkSummary({ topic: params.topic, chunk, index: index + 1, total: sourceChunks.length, isSource: true }, workspaceContext, client, model)
   );
 
   const response = await client.chat.completions.create({
     model,
     temperature: 0,
     messages: [
-      { role: "system", content: baseSystemPrompt() },
+      { role: "system", content: baseSystemPrompt(workspaceContext) },
       {
         role: "user",
         content: JSON.stringify({
@@ -276,6 +288,7 @@ export async function POST(req: Request) {
     if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const userId = Number((session?.user as any)?.id);
     if (!Number.isFinite(userId)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const workspaceContext = await getUserAiWorkspaceContext(userId);
     const { client, model } = await getOpenAiClientForUser(userId);
 
     const body = await req.json();
@@ -319,12 +332,12 @@ export async function POST(req: Request) {
           topic: inputPrivacy.sanitized.topic,
           rawText: inputPrivacy.sanitized.rawText,
           sourceText: inputPrivacy.sanitized.sourceText,
-        }, client, model)
+        }, workspaceContext, client, model)
       : await createClinicalDraftChunked({
           topic: inputPrivacy.sanitized.topic,
           rawText: inputPrivacy.sanitized.rawText,
           sourceText: inputPrivacy.sanitized.sourceText,
-        }, client, model)) as Record<string, unknown>;
+        }, workspaceContext, client, model)) as Record<string, unknown>;
     const outputPrivacy = preparePrivacyPayload([
       { key: "card", value: JSON.stringify(parsed), mode: "persistentStorage" },
     ]);

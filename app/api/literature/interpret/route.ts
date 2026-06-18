@@ -259,12 +259,14 @@ export async function POST(req: Request) {
             "Translate only the provided article title and abstract into the requested target language.",
             "Do not add explanations, extra facts, or clinical advice.",
             "Preserve meaning conservatively and keep uncertainty exactly as in the source.",
+            "Write in natural physician-facing medical language appropriate to the requested target language and clinical country, not as a literal word-for-word calque.",
             "Return JSON only with keys translatedTitle and translatedAbstract. Do not use markdown fences.",
           ].join(" ")
         : [
             "You are a source-grounded medical literature summariser for physicians.",
             "Use only the provided article metadata and abstract.",
             "Do not invent study details, treatment advice, outcomes, or guideline conclusions that are not present in the input.",
+            "Write for physicians in the requested target language and selected clinical-country context.",
             "Return JSON only with keys localizedTitle, studyTypeLabel, summaryBullets, limitations, clinicalRelevance, trustNote. Do not use markdown fences.",
             "summaryBullets and limitations must be arrays of short strings.",
           ].join(" ");

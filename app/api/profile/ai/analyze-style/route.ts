@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '../../../../../lib/auth';
 import { getOpenAiClientForUser } from '../../../../../lib/ai/providers/getOpenAiClientForUser';
+import { getUserAiWorkspaceContext } from '../../../../../lib/ai/workspaceContext';
 import { prisma } from '../../../../../lib/prisma';
 import { anonymizePatientText } from '../../../../../lib/privacy/anonymizePatientText';
 import { preparePrivacyPayload } from '../../../../../lib/privacy/gateway';
@@ -152,6 +153,7 @@ function buildMergePromptPayload(profile: ProfileRow, recentSamples: SampleRow[]
 }
 
 async function createMergedStyleSummary(
+  userId: number,
   profile: ProfileRow,
   recentSamples: SampleRow[],
   anonymizedText: string,
@@ -159,14 +161,22 @@ async function createMergedStyleSummary(
   client: Awaited<ReturnType<typeof getOpenAiClientForUser>>["client"],
   model: string
 ) {
+  const workspaceContext = await getUserAiWorkspaceContext(userId);
   const response = await client.chat.completions.create({
     model,
     temperature: 0,
     messages: [
       {
         role: 'system',
-        content: `Olet Suomen terveydenhuollon kliinisten tekstien kirjoitustyylin analysoija.
+        content: `Olet kliinisten tekstien kirjoitustyylin analysoija.
 Tehtäväsi on päivittää käyttäjän AI-kirjoitusprofiilin tyyliyhteenveto uuden anonymisoidun esimerkin perusteella.
+
+Työtilan konteksti:
+- käyttöliittymän kieli on ${workspaceContext.uiLanguage};
+- kliininen maa on ${workspaceContext.clinicalCountry};
+- kliininen vastauskieli on ${workspaceContext.clinicalOutputLanguage};
+- käyttäjän kliininen dokumentointitapa voi heijastaa valitun kliinisen maan käytäntöjä ja terminologiaa;
+- kirjoita lopullinen tyyliyhteenveto käyttöliittymän kielellä (${workspaceContext.uiLanguage}), jotta käyttäjä voi lukea ja muokata sitä helposti.
 
 Tärkeät säännöt:
 - Älä kirjoita tyyliyhteenvetoa joka kerta alusta, jos nykyinen tyyliyhteenveto on annettu.
@@ -178,7 +188,6 @@ Tärkeät säännöt:
 - Älä mainitse anonymisointia, tunnisteita tai placeholder-merkkejä.
 - Älä toista potilastietoja, nimiä, päivämääriä tai yksittäisiä kliinisiä tapahtumia.
 - Keskity vain kirjoitustyyliin, rakenteeseen, yksityiskohtaisuuteen, sanavalintoihin, kronologiaan, lääkitysmuutosten kuvaamiseen ja siihen, miten AI:n kannattaa jäljitellä käyttäjän dokumentointitapaa.
-- Kirjoita suomeksi.
 - Pituus 90-160 sanaa.
 - Lopputulos on yksi käytännöllinen tyyliyhteenveto myöhempää AI-kirjoitusavustajaa varten.`,
       },
@@ -229,6 +238,7 @@ export async function POST(req: Request) {
     const profile = await ensureProfile(userId);
     const recentSamples = await getRecentSamples(profile.id);
     const styleSummary = await createMergedStyleSummary(
+      userId,
       profile,
       recentSamples,
       anonymized.sanitizedText,

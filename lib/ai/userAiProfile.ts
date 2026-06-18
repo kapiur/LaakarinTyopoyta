@@ -16,6 +16,10 @@ export type UserAiProfileRecord = {
 };
 
 export type AiProfileMode = 'none' | 'styleOnly' | 'workContextOnly' | 'full';
+export type UserAiProfileLocaleContext = {
+  clinicalCountry?: string | null;
+  clinicalOutputLanguage?: string | null;
+};
 
 function clean(value: unknown) {
   return typeof value === 'string' ? value.trim() : '';
@@ -43,7 +47,11 @@ export function defaultProfileModeForTool(mode?: string | null): AiProfileMode {
   return 'full';
 }
 
-export function buildUserAiProfileInstruction(profile?: UserAiProfileRecord | null, mode: AiProfileMode = 'full') {
+export function buildUserAiProfileInstruction(
+  profile?: UserAiProfileRecord | null,
+  mode: AiProfileMode = 'full',
+  localeContext?: UserAiProfileLocaleContext,
+) {
   if (!profile || profile.useProfileByDefault === false || mode === 'none') return '';
 
   const workContextRows = [
@@ -76,6 +84,9 @@ export function buildUserAiProfileInstruction(profile?: UserAiProfileRecord | nu
       ? 'Käytä profiilista vain työroolia ja kliinistä toimintaympäristöä. Älä jäljittele henkilökohtaista kirjoitustyyliä.'
       : 'Käytä profiilia sekä työskentelykontekstin että kirjoitustyylin mukauttamiseen.';
 
+  const clinicalLanguage = clean(localeContext?.clinicalOutputLanguage);
+  const clinicalCountry = clean(localeContext?.clinicalCountry);
+
   return `
 Käyttäjän henkilökohtainen AI-profiili:
 ${rows.join('\n')}
@@ -83,7 +94,7 @@ ${rows.join('\n')}
 ${modeInstruction}
 Noudata käyttäjän profiilia silloin, kun se auttaa tekstin muotoilussa, tiiviydessä, rakenteessa tai kliinisessä työskentelykontekstissa.
 Älä lisää kliinisiä tietoja, joita käyttäjä ei ole antanut.
-Kliininen lopputeksti, potilaskertomusteksti, lähetteet ja mallit kirjoitetaan edelleen suomeksi.
+Kliininen lopputeksti, potilaskertomusteksti, lähetteet ja mallit kirjoitetaan oletuksena ${clinicalLanguage || 'valitulla kliinisellä vastauskielellä'}${clinicalCountry ? ` valitun kliinisen maan (${clinicalCountry}) kontekstissa` : ''}, ellei käyttäjä nimenomaisesti pyydä muuta.
 `;
 }
 

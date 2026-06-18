@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "../../../../../lib/auth";
 import { getOpenAiClientForUser } from "../../../../../lib/ai/providers/getOpenAiClientForUser";
+import { buildWorkspaceContextInstruction, getUserAiWorkspaceContext } from "../../../../../lib/ai/workspaceContext";
 import { preparePrivacyPayload } from "../../../../../lib/privacy/gateway";
 import { hasCriticalPrivacyFindingTypes } from "../../../../../lib/privacy/gateway/decision";
 import { sanitizeJsonValue } from "../../../../../lib/privacy/structured/sanitizeJsonValue";
@@ -37,6 +38,7 @@ export async function POST(req: Request) {
     if (!Number.isFinite(userId)) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const workspaceContext = await getUserAiWorkspaceContext(userId);
     const { client, model } = await getOpenAiClientForUser(userId);
 
     const body = await req.json();
@@ -69,28 +71,34 @@ export async function POST(req: Request) {
     const systemPrompt = `
 Olet dr.kapustin.fi-sivuston AI-avustaja. Tehtäväsi on siistiä lääkärin oma muistilappu kliinisesti käyttökelpoiseen muotoon.
 
+${buildWorkspaceContextInstruction(workspaceContext, {
+  preserveExistingLanguage: true,
+  contentLabel: "cleaned note content",
+})}
+
 TÄRKEÄT RAJOITUKSET:
 - Tämä on käyttäjän OMA MUISTILAPPU, ei virallinen hoitosuositus.
 - Älä väitä, että teksti on tarkistettu Käypä hoidosta.
 - Älä lisää uusia lääketieteellisiä väitteitä, annoksia tai raja-arvoja, jos niitä ei ole lähtötekstissä.
 - Korjaa kieli, rakenne ja luettavuus.
-- Säilytä kliininen sisältö suomeksi.
+- Säilytä kliininen merkitys täsmälleen samana.
+- Säilytä muistilapun kieli oletuksena ennallaan, ellei käyttäjä nimenomaisesti pyydä kielen vaihtoa.
 - Poista selvä metateksti ja sekavat toistot, mutta älä muuta merkitystä.
 - Jos huomaat väitteen, joka vaatii lähdetarkistuksen, lisää se warnings-listaan.
 
 PALAUTA VAIN validi JSON tällä rakenteella:
 {
-  "title": "lyhyt otsikko suomeksi",
-  "description": "1 virkkeen kuvaus suomeksi",
+  "title": "lyhyt otsikko muistilapun kielellä",
+  "description": "1 virkkeen kuvaus muistilapun kielellä",
   "type": "PERSONAL",
   "status": "NEEDS_REVIEW",
   "visibility": "PRIVATE",
   "sourceStatus": "NOT_CHECKED",
   "tags": ["tag1", "tag2"],
   "sections": [
-    { "key": "lyhyt_latinalainen_avain", "title": "Osion otsikko", "content": "markdown-teksti suomeksi", "kind": "TEXT", "order": 10 }
+    { "key": "lyhyt_latinalainen_avain", "title": "Osion otsikko muistilapun kielellä", "content": "markdown-teksti muistilapun kielellä", "kind": "TEXT", "order": 10 }
   ],
-  "warnings": ["lyhyt huomautus tarvittaessa"]
+  "warnings": ["lyhyt huomautus muistilapun kielellä tarvittaessa"]
 }
 `;
 

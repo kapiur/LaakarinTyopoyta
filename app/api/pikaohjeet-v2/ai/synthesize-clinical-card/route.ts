@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "../../../../../lib/auth";
 import { getOpenAiClientForUser } from "../../../../../lib/ai/providers/getOpenAiClientForUser";
+import { buildWorkspaceContextInstruction, getUserAiWorkspaceContext } from "../../../../../lib/ai/workspaceContext";
 import { anonymizePatientText, mergeAnonymizationResults } from "../../../../../lib/privacy/anonymizePatientText";
 import { preparePrivacyPayload } from "../../../../../lib/privacy/gateway";
 import { hasCriticalPrivacyFindingTypes } from "../../../../../lib/privacy/gateway/decision";
@@ -47,6 +48,7 @@ export async function POST(req: Request) {
     if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const userId = Number((session?.user as any)?.id);
     if (!Number.isFinite(userId)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const workspaceContext = await getUserAiWorkspaceContext(userId);
     const { client, model } = await getOpenAiClientForUser(userId);
 
     const body = await req.json();
@@ -112,13 +114,17 @@ export async function POST(req: Request) {
     const systemPrompt = `
 Olet dr.kapustin.fi-sivuston kliininen AI-editori.
 
-Muodosta annetuista fragmenttikohtaisista kliinisistä poiminnoista lyhyt, käytännöllinen Pikaohje perusterveydenhuollon lääkärille (Terveysasema).
+${buildWorkspaceContextInstruction(workspaceContext, {
+  contentLabel: "Pikaohje card content",
+})}
+
+Muodosta annetuista fragmenttikohtaisista kliinisistä poiminnoista lyhyt, käytännöllinen Pikaohje perusterveydenhuollon lääkärille valitun kliinisen maan kontekstissa.
 Tämä EI ole oppimateriaali eikä luento.
 
 TAVOITE:
 - lääkäri avaa kortin vastaanotolla, tarkistaa asian nopeasti ja jatkaa työtä
 - jätä vain kliinisesti hyödyllinen, toimintaa ohjaava sisältö
-- clinical content aina suomeksi
+- kirjoita kliininen sisältö oletuksena työtilan kliinisellä vastauskielellä
 - yhdistä duplikaatit
 - älä lisää pitkiä teoriaosuuksia
 - älä keksi lähteitä tai väitteitä
@@ -136,9 +142,9 @@ RAKENNE:
 
 PALAUTA VAIN validi JSON:
 {
-  "title": "otsikko suomeksi",
+  "title": "otsikko kliinisellä vastauskielellä",
   "slugSuggestion": "lyhyt-latin-slug",
-  "description": "1 lyhyt virke suomeksi",
+  "description": "1 lyhyt virke kliinisellä vastauskielellä",
   "type": "CLINICAL",
   "status": "NEEDS_REVIEW",
   "visibility": "PUBLIC",
