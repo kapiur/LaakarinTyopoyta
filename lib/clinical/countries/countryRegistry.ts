@@ -1,8 +1,10 @@
-export type ClinicalCountryCode = 'FI' | 'RU';
+import type { LocalizedText } from "../../i18n/config";
+
+export type ClinicalCountryCode = 'FI' | 'RU' | 'DE';
 
 export type ClinicalCountryConfig = {
   code: ClinicalCountryCode;
-  name: Record<'fi' | 'ru' | 'en', string>;
+  name: LocalizedText;
   defaultClinicalOutputLanguage: string;
   supportedClinicalOutputLanguages: string[];
   defaultEvidenceStrictness: 'strict' | 'balanced' | 'local-aware';
@@ -18,6 +20,7 @@ export const CLINICAL_COUNTRIES: ClinicalCountryConfig[] = [
       fi: 'Suomi',
       ru: 'Финляндия',
       en: 'Finland',
+      de: 'Finnland',
     },
     defaultClinicalOutputLanguage: 'fi',
     supportedClinicalOutputLanguages: ['fi', 'sv'],
@@ -30,16 +33,30 @@ export const CLINICAL_COUNTRIES: ClinicalCountryConfig[] = [
       fi: 'Venäjä',
       ru: 'Россия',
       en: 'Russia',
+      de: 'Russland',
     },
     defaultClinicalOutputLanguage: 'ru',
     supportedClinicalOutputLanguages: ['ru'],
     defaultEvidenceStrictness: 'strict',
     defaultSourceIds: ['ru-minzdrav-clinical-recommendations', 'ru-grls', 'ru-rospotrebnadzor'],
   },
+  {
+    code: 'DE',
+    name: {
+      fi: 'Saksa',
+      ru: 'Германия',
+      en: 'Germany',
+      de: 'Deutschland',
+    },
+    defaultClinicalOutputLanguage: 'de',
+    supportedClinicalOutputLanguages: ['de'],
+    defaultEvidenceStrictness: 'strict',
+    defaultSourceIds: ['de-awmf-guidelines', 'de-bfarm-pharmnet', 'de-rki'],
+  },
 ];
 
 export function normalizeClinicalCountry(value: unknown): ClinicalCountryCode {
-  if (value === 'FI' || value === 'RU') return value;
+  if (value === 'FI' || value === 'RU' || value === 'DE') return value;
   return DEFAULT_CLINICAL_COUNTRY;
 }
 

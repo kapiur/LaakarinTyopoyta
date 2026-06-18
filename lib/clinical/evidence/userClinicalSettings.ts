@@ -1,11 +1,11 @@
 import { prisma } from '../../prisma';
-import { getClinicalCountryConfig, normalizeClinicalCountry, normalizeClinicalOutputLanguage, normalizeEvidenceStrictness } from '../countries/countryRegistry';
+import { getClinicalCountryConfig, normalizeClinicalCountry, normalizeClinicalOutputLanguage, normalizeEvidenceStrictness, type ClinicalCountryCode } from '../countries/countryRegistry';
 import { DEFAULT_PRACTICE_COUNTRY, normalizePracticeCountry, type PracticeCountryCode } from '../practice/practiceCountryRegistry';
 import { CLINICAL_SOURCE_SEEDS, getDefaultClinicalSources } from '../sources/sourceRegistry';
 
 export type UserClinicalEvidenceSource = {
   id: string;
-  country: 'FI' | 'RU';
+  country: ClinicalCountryCode;
   name: string;
   sourceType: string;
   trustLevel: string;
@@ -19,7 +19,7 @@ export type UserClinicalEvidenceSource = {
 export type UserClinicalEvidenceConfig = {
   practiceCountry: PracticeCountryCode;
   usePracticeCountryDefaults: boolean;
-  clinicalCountry: 'FI' | 'RU';
+  clinicalCountry: ClinicalCountryCode;
   clinicalOutputLanguage: string;
   evidenceStrictness: 'strict' | 'balanced' | 'local-aware';
   allowLocalSources: boolean;
@@ -58,7 +58,7 @@ function seedToEvidenceSource(source: (typeof CLINICAL_SOURCE_SEEDS)[number]): U
 export async function getUserClinicalEvidenceConfig(userId: number): Promise<UserClinicalEvidenceConfig> {
   let practiceCountry: PracticeCountryCode = DEFAULT_PRACTICE_COUNTRY;
   let usePracticeCountryDefaults = true;
-  let clinicalCountry: 'FI' | 'RU' = 'FI';
+  let clinicalCountry: ClinicalCountryCode = 'FI';
   let clinicalOutputLanguage = 'fi';
   let evidenceStrictness: 'strict' | 'balanced' | 'local-aware' = 'strict';
   let allowLocalSources = true;

@@ -2,22 +2,19 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Globe2, Loader2, Save, ShieldCheck } from "lucide-react";
+import { getLocalizedText, normalizeUiLanguage } from "../lib/i18n";
+import type { ClinicalCountryCode, ClinicalCountryConfig } from "../lib/clinical/countries/countryRegistry";
+import type { PracticeCountryCode } from "../lib/clinical/practice/practiceCountryRegistry";
 import { useI18n } from "../lib/useI18n";
 
-type ClinicalCountry = {
-  code: "FI" | "RU";
-  name: Record<"fi" | "ru" | "en", string>;
-  defaultClinicalOutputLanguage: string;
-  supportedClinicalOutputLanguages: string[];
-  defaultEvidenceStrictness: "strict" | "balanced" | "local-aware";
-};
+type ClinicalCountry = ClinicalCountryConfig;
 
 type EvidenceStrictness = "strict" | "balanced" | "local-aware";
 
 type ClinicalSettings = {
-  practiceCountry?: "FI" | "RU";
+  practiceCountry?: PracticeCountryCode;
   usePracticeCountryDefaults?: boolean;
-  clinicalCountry: "FI" | "RU";
+  clinicalCountry: ClinicalCountryCode;
   clinicalOutputLanguage: string;
   evidenceStrictness: EvidenceStrictness;
   allowLocalSources: boolean;
@@ -148,13 +145,50 @@ const labels = {
       },
     },
   },
+  de: {
+    title: "Klinische Quellen und Land",
+    description: "Waehle, auf die offiziellen Quellen welches Landes sich der AI-Agent in klinischen Antworten stuetzen soll.",
+    country: "Klinisches Land",
+    clinicalLanguage: "Sprache des klinischen Texts",
+    strictness: "Wie strikt Quellen verwendet werden",
+    fromCountry: "Entspricht dem Standard des Taetigkeitslands",
+    custom: "Manuell ueberschrieben",
+    strictnessHelp: "Empfehlung: fuer klinische Arbeit den sichersten Modus aktiv lassen. Der Agent soll keine Therapieempfehlungen ohne offizielle Quellenbasis geben.",
+    allowLocal: "Lokale Anweisungen erlauben",
+    allowSupplementary: "Ergaenzende Quellen erlauben",
+    save: "Klinische Einstellungen speichern",
+    sources: "Verwendete Quellen",
+    saved: "Gespeichert",
+    failed: "Speichern fehlgeschlagen",
+    sourceHelp: "Nutzer koennen Quellen deaktivieren. Das Vertrauensniveau wird durch die Administration festgelegt.",
+    agent: "Agent",
+    pikaohjeet: "Schnellanleitungen",
+    patientInstructions: "Patientenhinweise",
+    enabled: "Aktiv",
+    warning: "Wenn keine offiziellen Quellen aktiv sind, gibt der Agent keine klinischen Empfehlungen aus.",
+    evidenceModes: {
+      strict: {
+        label: "Nur offizielle Leitlinien",
+        description: "Sicherster Modus. Der Agent verwendet fuer klinische Empfehlungen nur offizielle Quellen des ausgewaehlten Landes.",
+      },
+      balanced: {
+        label: "Offizielle + verlaessliche Referenzen",
+        description: "Erlaubt neben offiziellen Leitlinien auch verlaessliche medizinische Referenzen, aber nicht als deren Ersatz.",
+      },
+      "local-aware": {
+        label: "Offizielle + lokale Anweisungen",
+        description: "Beruecksichtigt bei Aktivierung auch lokale Behandlungspfade und Organisationsanweisungen.",
+      },
+    },
+  },
 } as const;
 
 const evidenceModeOrder: EvidenceStrictness[] = ["strict", "balanced", "local-aware"];
 
 export default function ClinicalEvidenceSettingsCard() {
   const { language } = useI18n();
-  const l = labels[language] || labels.fi;
+  const uiLanguage = normalizeUiLanguage(language);
+  const l = labels[uiLanguage] || labels.fi;
   const [settings, setSettings] = useState<ClinicalSettings | null>(null);
   const [countries, setCountries] = useState<ClinicalCountry[]>([]);
   const [sources, setSources] = useState<ClinicalSource[]>([]);
@@ -268,9 +302,9 @@ export default function ClinicalEvidenceSettingsCard() {
 
   if (loading || !settings) {
     return (
-      <section className="bg-white border border-slate-200 rounded-[2rem] p-6 shadow-sm flex items-center gap-3 text-slate-500">
+        <section className="bg-white border border-slate-200 rounded-[2rem] p-6 shadow-sm flex items-center gap-3 text-slate-500">
         <Loader2 className="animate-spin" size={18} />
-        <span className="text-sm font-semibold">Loading clinical source settings...</span>
+        <span className="text-sm font-semibold">{uiLanguage === "de" ? "Einstellungen klinischer Quellen werden geladen..." : "Loading clinical source settings..."}</span>
       </section>
     );
   }
@@ -307,7 +341,7 @@ export default function ClinicalEvidenceSettingsCard() {
               const country = countries.find((item) => item.code === event.target.value);
               const next = {
                 ...settings,
-                clinicalCountry: event.target.value as "FI" | "RU",
+                clinicalCountry: event.target.value as ClinicalCountryCode,
                 clinicalOutputLanguage: country?.defaultClinicalOutputLanguage || settings.clinicalOutputLanguage,
                 evidenceStrictness: country?.defaultEvidenceStrictness || settings.evidenceStrictness,
               };
@@ -317,7 +351,7 @@ export default function ClinicalEvidenceSettingsCard() {
             className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
           >
             {countries.map((country) => (
-              <option key={country.code} value={country.code}>{country.name[language] || country.name.en}</option>
+              <option key={country.code} value={country.code}>{getLocalizedText(country.name, uiLanguage)}</option>
             ))}
           </select>
         </label>
