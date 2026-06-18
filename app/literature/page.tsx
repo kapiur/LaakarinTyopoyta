@@ -234,6 +234,7 @@ export default function LiteraturePage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             article: selectedArticle,
+            mode,
           }),
         });
         const contextData = await contextResponse.json() as ArticleContextResponse & { error?: string };

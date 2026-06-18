@@ -584,7 +584,14 @@ function collectBodyParagraphs(node: unknown, lines: string[] = [], depth = 0): 
 
 function trimFullText(value: string, maxLength = 20000) {
   if (value.length <= maxLength) return value;
-  return `${value.slice(0, maxLength)}\n\n[Full text truncated for processing]`;
+
+  const sliced = value.slice(0, maxLength);
+  const lastBreak = Math.max(sliced.lastIndexOf("\n\n"), sliced.lastIndexOf(". "));
+  if (lastBreak > Math.floor(maxLength * 0.6)) {
+    return sliced.slice(0, lastBreak).trim();
+  }
+
+  return sliced.trim();
 }
 
 function decodeHtmlEntities(value: string) {
