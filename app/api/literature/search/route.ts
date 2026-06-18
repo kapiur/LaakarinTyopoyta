@@ -118,6 +118,8 @@ export async function GET(req: Request) {
             id: source.id,
             name: source.name,
             trustLevel: source.trustLevel,
+            sourceType: source.sourceType,
+            baseUrl: source.baseUrl,
             language: source.language,
           })),
       },

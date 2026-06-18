@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useI18n } from "../../lib/useI18n";
 import type { AgentConversationTurn } from "../../lib/ai/agent/types";
+import { buildGuidelineWorkspace, type LiteratureGuidelineWorkspaceItem } from "../../lib/literature/guidelineWorkspace";
 import type {
   LiteratureArticle,
   LiteratureRegionFilter,
@@ -36,6 +37,8 @@ type SearchResponse = {
       id: string;
       name: string;
       trustLevel: string;
+      sourceType: string;
+      baseUrl?: string;
       language: string[];
     }>;
   };
@@ -93,6 +96,24 @@ function buildArticleCurrentText(article: LiteratureArticle) {
     `Trust level: ${article.trustLevel}`,
     article.abstract ? `Abstract:\n${article.abstract}` : "Abstract: not available",
   ].filter(Boolean).join("\n\n");
+}
+
+function guidelineRoleLabel(t: ReturnType<typeof useI18n>["t"], roleKey: LiteratureGuidelineWorkspaceItem["roleKey"]) {
+  if (roleKey === "guideline") return t("literature.guidelineRoleGuideline");
+  if (roleKey === "reference") return t("literature.guidelineRoleReference");
+  if (roleKey === "publicHealth") return t("literature.guidelineRolePublicHealth");
+  if (roleKey === "drugReference") return t("literature.guidelineRoleDrugReference");
+  if (roleKey === "localInstruction") return t("literature.guidelineRoleLocalInstruction");
+  return t("literature.guidelineRoleGeneral");
+}
+
+function guidelineCheckLabel(t: ReturnType<typeof useI18n>["t"], checkKey: LiteratureGuidelineWorkspaceItem["checkKey"]) {
+  if (checkKey === "guideline") return t("literature.guidelineCheckGuideline");
+  if (checkKey === "reference") return t("literature.guidelineCheckReference");
+  if (checkKey === "publicHealth") return t("literature.guidelineCheckPublicHealth");
+  if (checkKey === "drugReference") return t("literature.guidelineCheckDrugReference");
+  if (checkKey === "localInstruction") return t("literature.guidelineCheckLocalInstruction");
+  return t("literature.guidelineCheckGeneral");
 }
 
 function splitIntoSentences(value: string) {
@@ -227,6 +248,15 @@ export default function LiteraturePage() {
   const [refiningMode, setRefiningMode] = useState<InterpretationMode | null>(null);
 
   const targetLanguage = language || results?.context?.targetLanguage || "fi";
+  const guidelineWorkspace = useMemo(
+    () =>
+      buildGuidelineWorkspace({
+        article: selectedArticle,
+        searchQuery: results?.query ?? query,
+        officialSources: results?.context?.officialSources ?? [],
+      }),
+    [query, results?.context?.officialSources, results?.query, selectedArticle],
+  );
 
   const trustLabels = useMemo(
     () => ({
@@ -704,7 +734,9 @@ export default function LiteraturePage() {
                 <ShieldCheck size={16} className="text-emerald-600" />
                 {t("literature.guidelineContext")}
               </h2>
-              <p className="text-sm text-slate-500 mt-1">{t("literature.guidelineContextDescription")}</p>
+              <p className="text-sm text-slate-500 mt-1">
+                {selectedArticle ? t("literature.guidelineContextDescriptionActive") : t("literature.guidelineContextDescription")}
+              </p>
             </div>
 
             <div className="grid grid-cols-2 gap-3 text-sm">
@@ -718,15 +750,69 @@ export default function LiteraturePage() {
               </div>
             </div>
 
+            {selectedArticle && (
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${trustClasses(selectedArticle.trustLevel)}`}>
+                    {trustLabels[selectedArticle.trustLevel]}
+                  </span>
+                  <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600">
+                    {selectedArticle.studyType}
+                  </span>
+                  <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600">
+                    {selectedArticle.sourceLanguageLabel}
+                  </span>
+                </div>
+                <div>
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{t("literature.guidelineSelectedArticle")}</div>
+                  <div className="mt-2 text-sm font-semibold leading-6 text-slate-900">{selectedArticle.title}</div>
+                </div>
+              </div>
+            )}
+
             <div className="space-y-2">
               <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{t("literature.officialSources")}</div>
-              <div className="flex flex-wrap gap-2">
-                {results?.context?.officialSources?.length ? results.context.officialSources.map((source) => (
-                  <span key={source.id} className="px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold">
-                    {source.name}
-                  </span>
-                )) : <span className="text-sm text-slate-400">-</span>}
-              </div>
+              {guidelineWorkspace.length > 0 ? (
+                <div className="space-y-3">
+                  {guidelineWorkspace.map((source) => (
+                    <div key={source.id} className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="text-sm font-semibold leading-5 text-slate-900">{source.name}</div>
+                          <div className="mt-1 text-xs text-slate-500">{guidelineRoleLabel(t, source.roleKey)}</div>
+                        </div>
+                        {source.baseUrl ? (
+                          <a
+                            href={source.baseUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex shrink-0 items-center gap-1 rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 hover:border-slate-300 hover:text-slate-900"
+                          >
+                            <ExternalLink size={12} />
+                            {t("literature.guidelineOpenSource")}
+                          </a>
+                        ) : null}
+                      </div>
+                      {selectedArticle ? (
+                        <>
+                          <div className="space-y-1">
+                            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{t("literature.guidelineCheckFocus")}</div>
+                            <div className="text-sm text-slate-700">{guidelineCheckLabel(t, source.checkKey)}</div>
+                          </div>
+                          <div className="space-y-1">
+                            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{t("literature.guidelineSearchHint")}</div>
+                            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 break-words">
+                              {source.searchHint || selectedArticle.title}
+                            </div>
+                          </div>
+                        </>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <span className="text-sm text-slate-400">{results ? t("literature.guidelineNoSources") : "-"}</span>
+              )}
             </div>
           </section>
         </section>
