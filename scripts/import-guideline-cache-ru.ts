@@ -31,7 +31,7 @@ function isValidRecord(record: unknown): record is RuGuidelineCacheRecord {
 }
 
 function readSnapshot(inputPath: string): RuGuidelineCacheSnapshot {
-  const raw = readFileSync(inputPath, "utf8");
+  const raw = readFileSync(inputPath, "utf8").replace(/^\uFEFF/, "");
   const parsed = JSON.parse(raw) as Partial<RuGuidelineCacheSnapshot>;
 
   if (parsed.format !== "ru-guideline-cache-v1" || !Array.isArray(parsed.items)) {

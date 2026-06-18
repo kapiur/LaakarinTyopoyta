@@ -345,15 +345,25 @@ Write-Host "[guideline-cache:ru] start pageSize=$PageSize maxPages=$MaxPages fro
   }
 }
 
-$snapshot = [ordered]@{
+$limitValue = $null
+if (-not $All -and $Limit.HasValue) {
+  $limitValue = [int]$Limit.Value
+}
+
+$snapshotItems = @()
+foreach ($cachedItem in $items) {
+  $snapshotItems += [pscustomobject]$cachedItem
+}
+
+$snapshot = [pscustomobject]@{
   format = "ru-guideline-cache-v1"
   exportedAt = [DateTime]::UtcNow.ToString("o")
   registryTotal = $registryTotal
   pageSize = $PageSize
   maxPages = $MaxPages
   fromPage = $FromPage
-  limit = $(if ($All) { $null } else { $Limit })
-  items = @($items)
+  limit = $limitValue
+  items = $snapshotItems
 }
 
 $outputPath = [System.IO.Path]::GetFullPath((Join-Path (Get-Location) $Output))
@@ -362,7 +372,9 @@ if (-not (Test-Path $outputDirectory)) {
   New-Item -ItemType Directory -Path $outputDirectory -Force | Out-Null
 }
 
-$snapshot | ConvertTo-Json -Depth 8 | Set-Content -Path $outputPath -Encoding UTF8
+$json = $snapshot | ConvertTo-Json -Depth 8
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+[System.IO.File]::WriteAllText($outputPath, $json, $utf8NoBom)
 
 Write-Host "[guideline-cache:ru:fetch] file written"
 Write-Host "[guideline-cache:ru:fetch] output: $outputPath"
