@@ -8,6 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "db:sync": "ts-node scripts/sync-medicines.ts",
+    "guidelines:fetch:ru": "ts-node -P tsconfig.scripts.json scripts/fetch-guideline-cache-ru.ts",
+    "guidelines:import:ru": "ts-node -P tsconfig.scripts.json scripts/import-guideline-cache-ru.ts",
     "guidelines:warm:ru": "ts-node -P tsconfig.scripts.json scripts/warm-guideline-cache-ru.ts",
     "seed:pikaohjeet": "node scripts/seed_pikaohjeet.cjs",
     "test:templates": "ts-node -P tsconfig.scripts.json scripts/test-template-parser.ts",
