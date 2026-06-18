@@ -40,12 +40,60 @@ type SearchResponse = {
 
 type ViewMode = "original" | "translation" | "summary";
 
+type AgentResponse = {
+  reply?: string;
+  draft?: string;
+  error?: string;
+};
+
 function trustClasses(level: LiteratureArticle["trustLevel"]) {
   if (level === "high") return "bg-emerald-50 text-emerald-700 border-emerald-200";
   if (level === "moderate") return "bg-blue-50 text-blue-700 border-blue-200";
   if (level === "low") return "bg-amber-50 text-amber-700 border-amber-200";
   if (level === "preliminary") return "bg-purple-50 text-purple-700 border-purple-200";
   return "bg-slate-50 text-slate-600 border-slate-200";
+}
+
+function buildArticleCurrentText(article: LiteratureArticle) {
+  return [
+    `Title: ${article.title}`,
+    article.journal ? `Journal: ${article.journal}` : "",
+    article.year ? `Year: ${article.year}` : "",
+    `Source language: ${article.sourceLanguageLabel} (${article.sourceLanguage})`,
+    `Study type: ${article.studyType}`,
+    article.publicationTypes.length > 0 ? `Publication types: ${article.publicationTypes.join(", ")}` : "",
+    `Trust level: ${article.trustLevel}`,
+    article.abstract ? `Abstract:\n${article.abstract}` : "Abstract: not available",
+  ].filter(Boolean).join("\n\n");
+}
+
+function splitIntoSentences(value: string) {
+  return value
+    .replace(/\s+/g, " ")
+    .split(/(?<=[.!?])\s+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function buildLocalTranslationFallback(article: LiteratureArticle): LiteratureTranslationResult {
+  return {
+    translatedTitle: article.title,
+    translatedAbstract: article.abstract,
+    translatedText: article.abstract || article.title,
+  };
+}
+
+function buildLocalSummaryFallback(article: LiteratureArticle): LiteratureSummaryResult {
+  const summaryBullets = splitIntoSentences(article.abstract).slice(0, 3);
+  return {
+    localizedTitle: article.title,
+    studyTypeLabel: article.studyType,
+    summaryBullets,
+    limitations: article.abstract ? [] : [article.trustReason],
+    clinicalRelevance: article.abstract ? article.trustReason : "",
+    trustNote: article.trustReason,
+    summaryText: article.abstract || article.trustReason,
+  };
 }
 
 export default function LiteraturePage() {
@@ -123,37 +171,78 @@ export default function LiteraturePage() {
     setLoadingMode(mode);
     setError(null);
     try {
-      const response = await fetch("/api/literature/interpret", {
+      const agentInstruction =
+        mode === "translation"
+          ? `Translate the provided medical article title and abstract into ${targetLanguage}. Return only the translated text for a physician. Do not add commentary, notes, or explanations.`
+          : [
+              `Provide a concise physician-facing summary of the provided medical article in ${targetLanguage}.`,
+              "Use only the provided article metadata and abstract.",
+              "Structure the answer as short paragraphs or bullets covering main point, limitations, and clinical relevance.",
+              "Do not add facts that are not present in the article text.",
+            ].join(" ");
+
+      const response = await fetch("/api/agent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          article: selectedArticle,
-          mode,
-          targetLanguage,
+          contextType: "general",
+          uiLanguage: language,
+          userMessage: agentInstruction,
+          currentText: buildArticleCurrentText(selectedArticle),
         }),
       });
-      const data = await response.json();
+      const data = await response.json() as AgentResponse;
 
       if (!response.ok) {
         throw new Error(data?.error || t("literature.interpretationFailed"));
       }
 
+      const replyText = (data.draft || data.reply || "").trim();
+
       if (mode === "translation") {
         setTranslationCache((current) => ({
           ...current,
-          [selectedArticle.pmid]: data.translation,
+          [selectedArticle.pmid]: replyText
+            ? {
+                translatedTitle: selectedArticle.title,
+                translatedAbstract: replyText,
+                translatedText: replyText,
+              }
+            : buildLocalTranslationFallback(selectedArticle),
         }));
         setViewMode("translation");
       } else {
         setSummaryCache((current) => ({
           ...current,
-          [selectedArticle.pmid]: data.summary,
+          [selectedArticle.pmid]: replyText
+            ? {
+                localizedTitle: selectedArticle.title,
+                studyTypeLabel: selectedArticle.studyType,
+                summaryBullets: [],
+                limitations: [],
+                clinicalRelevance: "",
+                trustNote: selectedArticle.trustReason,
+                summaryText: replyText,
+              }
+            : buildLocalSummaryFallback(selectedArticle),
         }));
         setViewMode("summary");
       }
     } catch (interpretError) {
       console.error("Literature interpretation failed", interpretError);
-      setError(t("literature.interpretationFailed"));
+      if (mode === "translation") {
+        setTranslationCache((current) => ({
+          ...current,
+          [selectedArticle.pmid]: buildLocalTranslationFallback(selectedArticle),
+        }));
+        setViewMode("translation");
+      } else {
+        setSummaryCache((current) => ({
+          ...current,
+          [selectedArticle.pmid]: buildLocalSummaryFallback(selectedArticle),
+        }));
+        setViewMode("summary");
+      }
     } finally {
       setLoadingMode(null);
     }
@@ -458,7 +547,7 @@ export default function LiteraturePage() {
                   {selectedTranslation?.translatedTitle || t("literature.translationEmpty")}
                 </h3>
                 <div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm leading-relaxed text-slate-700 whitespace-pre-line">
-                  {selectedTranslation?.translatedAbstract || t("literature.translationEmpty")}
+                  {selectedTranslation?.translatedText || selectedTranslation?.translatedAbstract || t("literature.translationEmpty")}
                 </div>
               </div>
             )}
@@ -478,39 +567,47 @@ export default function LiteraturePage() {
                   </p>
                 </div>
 
-                <div className="space-y-2">
-                  <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 inline-flex items-center gap-2">
-                    <Microscope size={12} />
-                    {t("literature.summary")}
+                {selectedSummary?.summaryText ? (
+                  <div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm leading-relaxed text-slate-700 whitespace-pre-line">
+                    {selectedSummary.summaryText}
                   </div>
-                  <ul className="space-y-2">
-                    {(selectedSummary?.summaryBullets ?? []).map((item) => (
-                      <li key={item} className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
-                        {item}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+                ) : (
+                  <>
+                    <div className="space-y-2">
+                      <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 inline-flex items-center gap-2">
+                        <Microscope size={12} />
+                        {t("literature.summary")}
+                      </div>
+                      <ul className="space-y-2">
+                        {(selectedSummary?.summaryBullets ?? []).map((item) => (
+                          <li key={item} className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
+                            {item}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
 
-                {selectedSummary?.limitations?.length ? (
-                  <div className="space-y-2">
-                    <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{t("literature.limitationsTitle")}</div>
-                    <ul className="space-y-2">
-                      {selectedSummary.limitations.map((item) => (
-                        <li key={item} className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                          {item}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
+                    {selectedSummary?.limitations?.length ? (
+                      <div className="space-y-2">
+                        <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{t("literature.limitationsTitle")}</div>
+                        <ul className="space-y-2">
+                          {selectedSummary.limitations.map((item) => (
+                            <li key={item} className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                              {item}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
 
-                {selectedSummary?.clinicalRelevance ? (
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                    <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{t("literature.clinicalRelevanceTitle")}</div>
-                    <p className="mt-2 text-sm leading-relaxed text-slate-700">{selectedSummary.clinicalRelevance}</p>
-                  </div>
-                ) : null}
+                    {selectedSummary?.clinicalRelevance ? (
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                        <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{t("literature.clinicalRelevanceTitle")}</div>
+                        <p className="mt-2 text-sm leading-relaxed text-slate-700">{selectedSummary.clinicalRelevance}</p>
+                      </div>
+                    ) : null}
+                  </>
+                )}
 
                 {(selectedSummary?.trustNote || selectedArticle.trustReason) && (
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">

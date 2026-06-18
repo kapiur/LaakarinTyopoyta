@@ -32,6 +32,7 @@ export type LiteratureInterpretationMode = "translate" | "summary";
 export type LiteratureTranslationResult = {
   translatedTitle: string;
   translatedAbstract: string;
+  translatedText?: string;
 };
 
 export type LiteratureSummaryResult = {
@@ -41,4 +42,5 @@ export type LiteratureSummaryResult = {
   limitations: string[];
   clinicalRelevance: string;
   trustNote: string;
+  summaryText?: string;
 };
