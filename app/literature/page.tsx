@@ -16,6 +16,7 @@ import { useI18n } from "../../lib/useI18n";
 import type { AgentConversationTurn } from "../../lib/ai/agent/types";
 import type {
   LiteratureArticle,
+  LiteratureGuidelineComparisonResult,
   LiteratureRegionFilter,
   LiteratureSearchSort,
   LiteratureSummaryResult,
@@ -59,6 +60,11 @@ type ArticleContextResponse = {
   pmcid?: string | null;
 };
 
+type GuidelineCompareResponse = {
+  comparison?: LiteratureGuidelineComparisonResult;
+  error?: string;
+};
+
 type SearchOverrides = Partial<{
   yearsBack: string;
   studyFilter: string;
@@ -80,6 +86,13 @@ function trustClasses(level: LiteratureArticle["trustLevel"]) {
   if (level === "moderate") return "bg-blue-50 text-blue-700 border-blue-200";
   if (level === "low") return "bg-amber-50 text-amber-700 border-amber-200";
   if (level === "preliminary") return "bg-purple-50 text-purple-700 border-purple-200";
+  return "bg-slate-50 text-slate-600 border-slate-200";
+}
+
+function guidelineStatusClasses(status: LiteratureGuidelineComparisonResult["status"]) {
+  if (status === "aligned") return "bg-emerald-50 text-emerald-700 border-emerald-200";
+  if (status === "partially_aligned") return "bg-blue-50 text-blue-700 border-blue-200";
+  if (status === "unclear") return "bg-amber-50 text-amber-700 border-amber-200";
   return "bg-slate-50 text-slate-600 border-slate-200";
 }
 
@@ -222,10 +235,12 @@ export default function LiteraturePage() {
   const [error, setError] = useState<string | null>(null);
   const [translationCache, setTranslationCache] = useState<Record<string, LiteratureTranslationResult>>({});
   const [summaryCache, setSummaryCache] = useState<Record<string, LiteratureSummaryResult>>({});
+  const [guidelineCache, setGuidelineCache] = useState<Record<string, LiteratureGuidelineComparisonResult>>({});
   const [articleContextCache, setArticleContextCache] = useState<Record<string, ArticleContextResponse>>({});
   const [followUpDrafts, setFollowUpDrafts] = useState<Record<string, string>>({});
   const [followUpHistory, setFollowUpHistory] = useState<Record<string, AgentConversationTurn[]>>({});
   const [refiningMode, setRefiningMode] = useState<InterpretationMode | null>(null);
+  const [loadingGuidelineCompare, setLoadingGuidelineCompare] = useState(false);
 
   const targetLanguage = language || results?.context?.targetLanguage || "fi";
 
@@ -236,6 +251,16 @@ export default function LiteraturePage() {
       low: t("literature.trustLow"),
       preliminary: t("literature.trustPreliminary"),
       unknown: t("literature.trustUnknown"),
+    }),
+    [t],
+  );
+
+  const guidelineStatusLabels = useMemo(
+    () => ({
+      aligned: t("literature.guidelineStatusAligned"),
+      partially_aligned: t("literature.guidelineStatusPartial"),
+      unclear: t("literature.guidelineStatusUnclear"),
+      not_found: t("literature.guidelineStatusNotFound"),
     }),
     [t],
   );
@@ -451,8 +476,44 @@ export default function LiteraturePage() {
     }
   }
 
+  async function loadGuidelineComparison(forceRefresh = false) {
+    if (!selectedArticle) return;
+    if (!forceRefresh && guidelineCache[selectedArticle.pmid]) return;
+
+    setLoadingGuidelineCompare(true);
+    setError(null);
+
+    try {
+      const response = await fetch("/api/literature/guideline-compare", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          article: selectedArticle,
+          query: results?.query || selectedArticle.title,
+          displayLanguage: language || targetLanguage,
+        }),
+      });
+
+      const data = await response.json() as GuidelineCompareResponse;
+      if (!response.ok || !data.comparison) {
+        throw new Error(data?.error || t("literature.guidelineCompareFailed"));
+      }
+
+      setGuidelineCache((current) => ({
+        ...current,
+        [selectedArticle.pmid]: data.comparison as LiteratureGuidelineComparisonResult,
+      }));
+    } catch (compareError) {
+      console.error("Literature guideline comparison failed", compareError);
+      setError(t("literature.guidelineCompareFailed"));
+    } finally {
+      setLoadingGuidelineCompare(false);
+    }
+  }
+
   const selectedTranslation = selectedArticle ? translationCache[selectedArticle.pmid] : null;
   const selectedSummary = selectedArticle ? summaryCache[selectedArticle.pmid] : null;
+  const selectedGuidelineComparison = selectedArticle ? guidelineCache[selectedArticle.pmid] : null;
   const currentInterpretationKey =
     selectedArticle && viewMode !== "original" ? buildInterpretationKey(selectedArticle.pmid, viewMode) : null;
   const currentInterpretationText =
@@ -719,40 +780,183 @@ export default function LiteraturePage() {
               </div>
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-              {t("literature.guidelineManualCheckNotice")}
-            </div>
+            {selectedArticle ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => void loadGuidelineComparison(Boolean(selectedGuidelineComparison))}
+                  disabled={loadingGuidelineCompare}
+                  className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 disabled:opacity-50"
+                >
+                  {loadingGuidelineCompare ? <Loader2 size={15} className="animate-spin" /> : <ShieldCheck size={15} />}
+                  {loadingGuidelineCompare
+                    ? t("literature.guidelineCompareLoading")
+                    : selectedGuidelineComparison
+                      ? t("literature.guidelineCompareRefresh")
+                      : t("literature.guidelineCompareButton")}
+                </button>
 
-            <div className="space-y-2">
-              <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{t("literature.officialSources")}</div>
-              {results?.context?.officialSources?.length ? (
-                <div className="flex flex-wrap gap-2">
-                  {results.context.officialSources.map((source) => (
-                    source.baseUrl ? (
-                      <a
-                        key={source.id}
-                        href={source.baseUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 hover:border-emerald-300 hover:text-emerald-800"
-                      >
-                        <ExternalLink size={12} />
-                        {source.name}
-                      </a>
-                    ) : (
-                      <span
-                        key={source.id}
-                        className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700"
-                      >
-                        {source.name}
-                      </span>
-                    )
-                  ))}
+                {selectedGuidelineComparison ? (
+                  <div className="space-y-4">
+                    <div className={`rounded-2xl border px-4 py-3 ${guidelineStatusClasses(selectedGuidelineComparison.status)}`}>
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="text-sm font-bold">{selectedGuidelineComparison.verdict}</div>
+                        <span className="shrink-0 rounded-full border border-white/70 bg-white/70 px-2.5 py-1 text-[11px] font-semibold">
+                          {guidelineStatusLabels[selectedGuidelineComparison.status]}
+                        </span>
+                      </div>
+                      <p className="mt-2 text-sm leading-relaxed text-slate-700">
+                        {selectedGuidelineComparison.comparisonSummary}
+                      </p>
+                    </div>
+
+                    {selectedGuidelineComparison.agreementPoints.length > 0 && (
+                      <div className="space-y-2">
+                        <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                          {t("literature.guidelineAgreementTitle")}
+                        </div>
+                        <ul className="space-y-2">
+                          {selectedGuidelineComparison.agreementPoints.map((item) => (
+                            <li key={item} className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+                              {item}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {selectedGuidelineComparison.cautionPoints.length > 0 && (
+                      <div className="space-y-2">
+                        <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                          {t("literature.guidelineCautionTitle")}
+                        </div>
+                        <ul className="space-y-2">
+                          {selectedGuidelineComparison.cautionPoints.map((item) => (
+                            <li key={item} className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                              {item}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {selectedGuidelineComparison.suggestedChecks.length > 0 && (
+                      <div className="space-y-2">
+                        <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                          {t("literature.guidelineSuggestedChecksTitle")}
+                        </div>
+                        <ul className="space-y-2">
+                          {selectedGuidelineComparison.suggestedChecks.map((item) => (
+                            <li key={item} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                              {item}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    <div className="space-y-2">
+                      <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{t("literature.officialSources")}</div>
+                      {selectedGuidelineComparison.sources.length > 0 ? (
+                        <div className="space-y-3">
+                          {selectedGuidelineComparison.sources.map((source) => (
+                            <div key={`${source.sourceId}:${source.sourceUrl}`} className="rounded-2xl border border-slate-200 bg-white p-4">
+                              <div className="flex items-start justify-between gap-3">
+                                <div>
+                                  <div className="text-sm font-bold text-slate-900">{source.sourceTitle}</div>
+                                  <div className="mt-1 text-xs text-slate-500">{source.sourceName}</div>
+                                </div>
+                                <a
+                                  href={source.sourceUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                                >
+                                  <ExternalLink size={12} />
+                                  {t("literature.articleLink")}
+                                </a>
+                              </div>
+                              {source.excerpt ? (
+                                <p className="mt-3 text-sm leading-relaxed text-slate-600 line-clamp-6 whitespace-pre-line">
+                                  {source.excerpt}
+                                </p>
+                              ) : null}
+                            </div>
+                          ))}
+                        </div>
+                      ) : results?.context?.officialSources?.length ? (
+                        <div className="flex flex-wrap gap-2">
+                          {results.context.officialSources.map((source) => (
+                            source.baseUrl ? (
+                              <a
+                                key={source.id}
+                                href={source.baseUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 hover:border-emerald-300 hover:text-emerald-800"
+                              >
+                                <ExternalLink size={12} />
+                                {source.name}
+                              </a>
+                            ) : (
+                              <span
+                                key={source.id}
+                                className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700"
+                              >
+                                {source.name}
+                              </span>
+                            )
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-sm text-slate-400">{results ? t("literature.guidelineNoSources") : "-"}</span>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                    {t("literature.guidelineManualCheckNotice")}
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                  {t("literature.guidelineNoArticleSelected")}
                 </div>
-              ) : (
-                <span className="text-sm text-slate-400">{results ? t("literature.guidelineNoSources") : "-"}</span>
-              )}
-            </div>
+
+                <div className="space-y-2">
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{t("literature.officialSources")}</div>
+                  {results?.context?.officialSources?.length ? (
+                    <div className="flex flex-wrap gap-2">
+                      {results.context.officialSources.map((source) => (
+                        source.baseUrl ? (
+                          <a
+                            key={source.id}
+                            href={source.baseUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 hover:border-emerald-300 hover:text-emerald-800"
+                          >
+                            <ExternalLink size={12} />
+                            {source.name}
+                          </a>
+                        ) : (
+                          <span
+                            key={source.id}
+                            className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700"
+                          >
+                            {source.name}
+                          </span>
+                        )
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-sm text-slate-400">{results ? t("literature.guidelineNoSources") : "-"}</span>
+                  )}
+                </div>
+              </>
+            )}
           </section>
         </section>
 

@@ -49,3 +49,33 @@ export type LiteratureSummaryResult = {
   trustNote: string;
   summaryText?: string;
 };
+
+export type LiteratureGuidelineComparisonStatus =
+  | "aligned"
+  | "partially_aligned"
+  | "unclear"
+  | "not_found";
+
+export type LiteratureGuidelineComparisonSource = {
+  sourceId: string;
+  sourceName: string;
+  sourceUrl: string;
+  sourceTitle: string;
+  excerpt?: string;
+  matchReason: string;
+  publishedAt?: string;
+  retrievedText: boolean;
+};
+
+export type LiteratureGuidelineComparisonResult = {
+  status: LiteratureGuidelineComparisonStatus;
+  verdict: string;
+  comparisonSummary: string;
+  agreementPoints: string[];
+  cautionPoints: string[];
+  suggestedChecks: string[];
+  searchQuery: string;
+  clinicalCountry: "FI" | "RU";
+  displayLanguage: string;
+  sources: LiteratureGuidelineComparisonSource[];
+};
