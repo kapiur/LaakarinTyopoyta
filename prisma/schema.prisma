@@ -378,6 +378,30 @@ model UserClinicalSourcePreference {
   @@index([sourceId])
 }
 
+model GuidelineDocument {
+  id             String   @id
+  sourceId       String
+  country        String
+  externalId     String?
+  sourceUrl      String
+  title          String
+  searchQuery    String?
+  publishedAt    String?
+  rawText        String?  @db.Text
+  normalizedText String?  @db.Text
+  contentHash    String?
+  retrievedAt    DateTime @default(now())
+  lastSyncedAt   DateTime @default(now())
+  syncStatus     String   @default("ready")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([sourceId, sourceUrl])
+  @@index([country, lastSyncedAt])
+  @@index([sourceId, country])
+  @@index([externalId])
+}
+
 // ==========================================
 // 4. СПРАВОЧНИК ЛЕКАРСТВ (FIMEA + WIKI)
 // ==========================================

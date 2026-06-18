@@ -1,6 +1,12 @@
 import axios from "axios";
 import { runRoutedAiCompletion } from "../ai/runRoutedAiCompletion";
 import type { UserClinicalEvidenceConfig } from "../clinical/evidence/userClinicalSettings";
+import {
+  type CachedGuidelineDocument,
+  findCachedGuidelineDocuments,
+  scoreCachedGuidelineDocuments,
+  upsertGuidelineDocuments,
+} from "./guidelineCache";
 import type {
   LiteratureArticle,
   LiteratureGuidelineComparisonResult,
@@ -12,6 +18,8 @@ type CompareLanguage = "fi" | "ru" | "en";
 
 type ComparisonSourceCandidate = {
   sourceId: string;
+  country: "FI" | "RU";
+  externalId?: string;
   sourceName: string;
   sourceUrl: string;
   sourceTitle: string;
@@ -19,6 +27,8 @@ type ComparisonSourceCandidate = {
   matchReason: string;
   publishedAt?: string;
   retrievedText: boolean;
+  fromCache?: boolean;
+  lastSyncedAt?: Date;
 };
 
 type LocalizedComparisonStrings = {
@@ -290,6 +300,7 @@ async function searchKaypaHoito(query: string) {
 
     result.push({
       sourceId: "fi-kaypa-hoito",
+      country: "FI",
       sourceName: "Käypä hoito",
       sourceUrl: candidate.href,
       sourceTitle: candidate.text,
@@ -443,6 +454,8 @@ async function searchMinzdrav(query: string) {
 
     result.push({
       sourceId: "ru-minzdrav-clinical-recommendations",
+      country: "RU",
+      externalId: codeVersion,
       sourceName: "Минздрав РФ — рубрикатор клинических рекомендаций",
       sourceUrl: previewUrl,
       sourceTitle: title,
@@ -454,6 +467,125 @@ async function searchMinzdrav(query: string) {
   }
 
   return result;
+}
+
+function buildNormalizedText(value?: string) {
+  return value
+    ? truncateAtBoundary(
+        value
+          .replace(/\r/g, "")
+          .replace(/[ \t]+\n/g, "\n")
+          .replace(/\n{3,}/g, "\n\n")
+          .replace(/[ \t]{2,}/g, " ")
+          .trim(),
+        12000,
+      )
+    : undefined;
+}
+
+function mapCachedDocumentToCandidate(document: CachedGuidelineDocument): ComparisonSourceCandidate {
+  return {
+    sourceId: document.sourceId,
+    country: document.country,
+    externalId: document.externalId,
+    sourceName:
+      document.sourceId === "fi-kaypa-hoito"
+        ? "Käypä hoito"
+        : document.sourceId === "ru-minzdrav-clinical-recommendations"
+          ? "Минздрав РФ — рубрикатор клинических рекомендаций"
+          : document.sourceId,
+    sourceUrl: document.sourceUrl,
+    sourceTitle: document.title,
+    excerpt: document.rawText,
+    matchReason: "Cached local copy of the official source",
+    publishedAt: document.publishedAt,
+    retrievedText: Boolean(document.rawText),
+    fromCache: true,
+    lastSyncedAt: document.lastSyncedAt,
+  };
+}
+
+async function fetchGuidelineTextBySource(candidate: Pick<ComparisonSourceCandidate, "sourceId" | "externalId" | "sourceUrl">) {
+  if (candidate.sourceId === "fi-kaypa-hoito") {
+    const pageHtml = await fetchHtml(candidate.sourceUrl);
+    return truncateAtBoundary(extractReadableHtmlText(pageHtml), 6000);
+  }
+
+  if (candidate.sourceId === "ru-minzdrav-clinical-recommendations") {
+    if (candidate.externalId) {
+      return fetchMinzdravGuidelineDetail(candidate.externalId);
+    }
+
+    const previewHtml = await fetchHtml(candidate.sourceUrl);
+    return truncateAtBoundary(extractReadableHtmlText(previewHtml), 6000);
+  }
+
+  return "";
+}
+
+async function enrichCandidateText(candidate: ComparisonSourceCandidate) {
+  if (candidate.retrievedText && candidate.excerpt) return candidate;
+
+  try {
+    const fetchedText = await fetchGuidelineTextBySource(candidate);
+    if (!fetchedText) return candidate;
+
+    return {
+      ...candidate,
+      excerpt: fetchedText,
+      retrievedText: true,
+    };
+  } catch (error) {
+    console.error("Guideline text enrichment failed:", {
+      sourceId: candidate.sourceId,
+      sourceUrl: candidate.sourceUrl,
+      error,
+    });
+    return candidate;
+  }
+}
+
+async function persistGuidelineCandidates(candidates: ComparisonSourceCandidate[], searchQuery: string) {
+  await upsertGuidelineDocuments(
+    candidates.map((candidate) => ({
+      sourceId: candidate.sourceId,
+      country: candidate.country,
+      externalId: candidate.externalId,
+      sourceUrl: candidate.sourceUrl,
+      title: candidate.sourceTitle,
+      searchQuery,
+      publishedAt: candidate.publishedAt,
+      rawText: candidate.excerpt,
+      normalizedText: buildNormalizedText(candidate.excerpt),
+      syncStatus: candidate.retrievedText ? "ready" : "partial",
+    })),
+  );
+}
+
+function mergeCandidates(...candidateGroups: ComparisonSourceCandidate[][]) {
+  const merged = new Map<string, ComparisonSourceCandidate>();
+
+  for (const group of candidateGroups) {
+    for (const candidate of group) {
+      const key = `${candidate.sourceId}|${candidate.sourceUrl}`;
+      const existing = merged.get(key);
+      if (!existing) {
+        merged.set(key, candidate);
+        continue;
+      }
+
+      merged.set(key, {
+        ...existing,
+        ...candidate,
+        excerpt: candidate.excerpt || existing.excerpt,
+        retrievedText: candidate.retrievedText || existing.retrievedText,
+        matchReason: candidate.matchReason || existing.matchReason,
+        lastSyncedAt: candidate.lastSyncedAt ?? existing.lastSyncedAt,
+      });
+    }
+  }
+
+  return Array.from(merged.values());
 }
 
 function mapSourcesToResult(sources: ComparisonSourceCandidate[]): LiteratureGuidelineComparisonSource[] {
@@ -559,11 +691,36 @@ async function retrieveGuidelineCandidates(
   clinicalConfig: UserClinicalEvidenceConfig,
   searchQuery: string,
 ) {
-  if (clinicalConfig.clinicalCountry === "FI") {
-    return searchKaypaHoito(searchQuery);
+  const sourceIds = clinicalConfig.allowedSources
+    .filter((source) => source.isOfficial)
+    .map((source) => source.id);
+
+  const queryTerms = extractQueryTerms(searchQuery);
+  const cachedDocuments = await findCachedGuidelineDocuments({
+    country: clinicalConfig.clinicalCountry,
+    sourceIds,
+    limit: 40,
+  });
+  const cachedCandidates = scoreCachedGuidelineDocuments(cachedDocuments, queryTerms)
+    .slice(0, 6)
+    .map(mapCachedDocumentToCandidate);
+
+  const cachedReady = cachedCandidates.filter((candidate) => candidate.retrievedText);
+  if (cachedReady.length >= 2) {
+    return cachedReady.slice(0, 3);
   }
 
-  return searchMinzdrav(searchQuery);
+  try {
+    const liveCandidates = clinicalConfig.clinicalCountry === "FI"
+      ? await searchKaypaHoito(searchQuery)
+      : await searchMinzdrav(searchQuery);
+
+    await persistGuidelineCandidates(liveCandidates, searchQuery);
+    return mergeCandidates(cachedCandidates, liveCandidates).slice(0, 6);
+  } catch (error) {
+    console.error("Live guideline retrieval failed, using cached data if available:", error);
+    return cachedCandidates;
+  }
 }
 
 export async function compareArticleWithGuidelines(input: {
@@ -584,13 +741,27 @@ export async function compareArticleWithGuidelines(input: {
     console.error("Guideline retrieval failed:", error);
   }
 
-  const retrievedCandidates = candidates.filter((candidate) => candidate.retrievedText);
+  const prioritizedCandidates = candidates.slice(0, 4);
+  const enrichedCandidates = await Promise.all(
+    prioritizedCandidates.map((candidate) => enrichCandidateText(candidate)),
+  );
+  const mergedCandidates = mergeCandidates(candidates, enrichedCandidates);
+
+  try {
+    if (mergedCandidates.length > 0) {
+      await persistGuidelineCandidates(mergedCandidates.slice(0, 4), searchQuery);
+    }
+  } catch (error) {
+    console.error("Guideline cache persist after enrichment failed:", error);
+  }
+
+  const retrievedCandidates = mergedCandidates.filter((candidate) => candidate.retrievedText);
   if (retrievedCandidates.length === 0) {
     return buildNoSourceFallback(
       displayLanguage,
       input.clinicalConfig.clinicalCountry,
       searchQuery,
-      candidates,
+      mergedCandidates,
     );
   }
 
@@ -672,7 +843,7 @@ export async function compareArticleWithGuidelines(input: {
       displayLanguage,
       input.clinicalConfig.clinicalCountry,
       searchQuery,
-      candidates,
+      mergedCandidates,
     );
   }
 }
