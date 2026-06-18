@@ -3,7 +3,12 @@ import { requireAuthenticatedUser } from "../../../../lib/admin-auth";
 import { getUserClinicalEvidenceConfig } from "../../../../lib/clinical/evidence/userClinicalSettings";
 import { searchPubMedArticles } from "../../../../lib/literature/pubmed";
 import { rewriteLiteratureSearchQuery } from "../../../../lib/literature/queryRewrite";
-import type { LiteratureRegionFilter, LiteratureStudyFilter } from "../../../../lib/literature/types";
+import type {
+  LiteratureRegionFilter,
+  LiteratureSearchSort,
+  LiteratureStudyFilter,
+  LiteratureTrustFilter,
+} from "../../../../lib/literature/types";
 
 function normalizeStudyFilter(value: unknown): LiteratureStudyFilter {
   if (
@@ -32,6 +37,24 @@ function normalizeRegionFilter(value: unknown): LiteratureRegionFilter {
   return "all";
 }
 
+function normalizeSortBy(value: unknown): LiteratureSearchSort {
+  if (value === "newest" || value === "highest_evidence") {
+    return value;
+  }
+  return "relevance";
+}
+
+function normalizeTrustFilter(value: unknown): LiteratureTrustFilter {
+  if (value === "high" || value === "moderate") {
+    return value;
+  }
+  return "all";
+}
+
+function normalizeBoolean(value: string | null) {
+  return value === "true";
+}
+
 export async function GET(req: Request) {
   const { session, error } = await requireAuthenticatedUser();
   if (error) return error;
@@ -47,7 +70,10 @@ export async function GET(req: Request) {
     const yearsBack = normalizeYearsBack(url.searchParams.get("yearsBack"));
     const studyFilter = normalizeStudyFilter(url.searchParams.get("studyFilter"));
     const regionFilter = normalizeRegionFilter(url.searchParams.get("regionFilter"));
-    const maxResults = Math.max(1, Math.min(20, Number(url.searchParams.get("maxResults") ?? "12")));
+    const sortBy = normalizeSortBy(url.searchParams.get("sortBy"));
+    const trustFilter = normalizeTrustFilter(url.searchParams.get("trustFilter"));
+    const fullTextOnly = normalizeBoolean(url.searchParams.get("fullTextOnly"));
+    const maxResults = Math.max(1, Math.min(60, Number(url.searchParams.get("maxResults") ?? "12")));
 
     if (!query) {
       return NextResponse.json({
@@ -66,7 +92,16 @@ export async function GET(req: Request) {
 
     const [clinicalConfig, searchResult] = await Promise.all([
       getUserClinicalEvidenceConfig(userId),
-      searchPubMedArticles({ query: rewrittenQuery, yearsBack, maxResults, studyFilter, regionFilter }),
+      searchPubMedArticles({
+        query: rewrittenQuery,
+        yearsBack,
+        maxResults,
+        studyFilter,
+        regionFilter,
+        sortBy,
+        trustFilter,
+        fullTextOnly,
+      }),
     ]);
 
     return NextResponse.json({

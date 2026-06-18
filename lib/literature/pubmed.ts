@@ -1,6 +1,14 @@
 import axios from "axios";
 import { XMLParser } from "fast-xml-parser";
-import type { LiteratureArticle, LiteratureRegionFilter, LiteratureSearchResult, LiteratureStudyFilter, LiteratureTrustLevel } from "./types";
+import type {
+  LiteratureArticle,
+  LiteratureRegionFilter,
+  LiteratureSearchResult,
+  LiteratureSearchSort,
+  LiteratureStudyFilter,
+  LiteratureTrustFilter,
+  LiteratureTrustLevel,
+} from "./types";
 
 const PUBMED_ESEARCH_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi";
 const PUBMED_EFETCH_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi";
@@ -386,6 +394,9 @@ type SearchPubMedInput = {
   maxResults: number;
   studyFilter: LiteratureStudyFilter;
   regionFilter: LiteratureRegionFilter;
+  sortBy: LiteratureSearchSort;
+  trustFilter: LiteratureTrustFilter;
+  fullTextOnly: boolean;
 };
 
 type FullTextResult = {
@@ -394,6 +405,19 @@ type FullTextResult = {
   fullTextUrl?: string;
   source: "pmc" | "publisher_html" | "abstract_only";
 };
+
+function normalizeYearNumber(value?: string) {
+  const match = value?.match(/\b(19|20)\d{2}\b/);
+  if (!match) return 0;
+  const parsed = Number(match[0]);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function matchesTrustFilter(level: LiteratureTrustLevel, trustFilter: LiteratureTrustFilter) {
+  if (trustFilter === "high") return level === "high";
+  if (trustFilter === "moderate") return level === "high" || level === "moderate";
+  return true;
+}
 
 export async function searchPubMedArticles(input: SearchPubMedInput): Promise<LiteratureSearchResult> {
   const query = input.query.trim();
@@ -408,12 +432,12 @@ export async function searchPubMedArticles(input: SearchPubMedInput): Promise<Li
   ].filter(Boolean);
   const term = searchClauses.length > 1 ? searchClauses.map((clause) => `(${clause})`).join(" AND ") : searchClauses[0];
   const currentYear = new Date().getUTCFullYear();
-  const fetchLimit = Math.max(input.maxResults, Math.min(input.maxResults * 4, 48));
+  const fetchLimit = Math.max(input.maxResults, Math.min(input.maxResults * 4, 120));
   const params: Record<string, string | number> = {
     db: "pubmed",
     retmode: "json",
     retmax: fetchLimit,
-    sort: "relevance",
+    sort: input.sortBy === "newest" ? "pub+date" : "relevance",
     term,
   };
 
@@ -489,8 +513,10 @@ export async function searchPubMedArticles(input: SearchPubMedInput): Promise<Li
       const usefulAbstract = hasUsefulAbstract(article.abstract);
       const lowValuePublicationType = isLowValuePublicationType(article.publicationTypes);
       const likelyVeterinary = isLikelyVeterinaryArticle(article);
+      const trustValue = trustScore(article.trustLevel);
+      const yearNumber = normalizeYearNumber(article.year);
 
-      let score = trustScore(article.trustLevel);
+      let score = trustValue;
       score += usefulAbstract ? 4 : -2;
       score += article.doi ? 1 : 0;
       score += relevanceHits * 3;
@@ -507,16 +533,32 @@ export async function searchPubMedArticles(input: SearchPubMedInput): Promise<Li
       return {
         article,
         score,
+        trustValue,
+        yearNumber,
         hardExcluded,
         softExcluded,
       };
     })
     .filter((item) => !item.hardExcluded)
-    .sort((left, right) => right.score - left.score);
+    .filter((item) => matchesTrustFilter(item.article.trustLevel, input.trustFilter))
+    .filter((item) => !input.fullTextOnly || Boolean(item.article.fullTextAvailable))
+    .sort((left, right) => {
+      if (left.softExcluded !== right.softExcluded) {
+        return Number(left.softExcluded) - Number(right.softExcluded);
+      }
 
-  const preferredArticles = rankedArticles.filter((item) => !item.softExcluded);
-  const fallbackArticles = rankedArticles.filter((item) => item.softExcluded);
-  const orderedArticles = [...preferredArticles, ...fallbackArticles]
+      if (input.sortBy === "newest") {
+        return right.yearNumber - left.yearNumber || right.score - left.score;
+      }
+
+      if (input.sortBy === "highest_evidence") {
+        return right.trustValue - left.trustValue || right.yearNumber - left.yearNumber || right.score - left.score;
+      }
+
+      return right.score - left.score || right.yearNumber - left.yearNumber;
+    });
+
+  const orderedArticles = rankedArticles
     .map((item) => item.article)
     .slice(0, input.maxResults);
 

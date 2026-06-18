@@ -17,8 +17,10 @@ import type { AgentConversationTurn } from "../../lib/ai/agent/types";
 import type {
   LiteratureArticle,
   LiteratureRegionFilter,
+  LiteratureSearchSort,
   LiteratureSummaryResult,
   LiteratureTranslationResult,
+  LiteratureTrustFilter,
 } from "../../lib/literature/types";
 
 type SearchResponse = {
@@ -55,6 +57,18 @@ type ArticleContextResponse = {
   fullTextUrl?: string | null;
   pmcid?: string | null;
 };
+
+type SearchOverrides = Partial<{
+  yearsBack: string;
+  studyFilter: string;
+  regionFilter: LiteratureRegionFilter;
+  sortBy: LiteratureSearchSort;
+  trustFilter: LiteratureTrustFilter;
+  fullTextOnly: boolean;
+  maxResults: number;
+}>;
+
+const DEFAULT_VISIBLE_LIMIT = 12;
 
 function buildInterpretationKey(pmid: string, mode: InterpretationMode) {
   return `${pmid}:${mode}`;
@@ -195,6 +209,10 @@ export default function LiteraturePage() {
   const [yearsBack, setYearsBack] = useState("5");
   const [studyFilter, setStudyFilter] = useState("all");
   const [regionFilter, setRegionFilter] = useState<LiteratureRegionFilter>("all");
+  const [sortBy, setSortBy] = useState<LiteratureSearchSort>("relevance");
+  const [trustFilter, setTrustFilter] = useState<LiteratureTrustFilter>("all");
+  const [fullTextOnly, setFullTextOnly] = useState(false);
+  const [visibleLimit, setVisibleLimit] = useState(DEFAULT_VISIBLE_LIMIT);
   const [results, setResults] = useState<SearchResponse | null>(null);
   const [selectedArticle, setSelectedArticle] = useState<LiteratureArticle | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("original");
@@ -221,20 +239,31 @@ export default function LiteraturePage() {
     [t],
   );
 
-  async function runSearch(event: React.FormEvent) {
-    event.preventDefault();
-    if (!query.trim()) return;
+  async function performSearch(overrides: SearchOverrides = {}) {
+    const nextYearsBack = overrides.yearsBack ?? yearsBack;
+    const nextStudyFilter = overrides.studyFilter ?? studyFilter;
+    const nextRegionFilter = overrides.regionFilter ?? regionFilter;
+    const nextSortBy = overrides.sortBy ?? sortBy;
+    const nextTrustFilter = overrides.trustFilter ?? trustFilter;
+    const nextFullTextOnly = overrides.fullTextOnly ?? fullTextOnly;
+    const nextVisibleLimit = overrides.maxResults ?? visibleLimit;
+    const trimmedQuery = query.trim();
+
+    if (!trimmedQuery) return;
 
     setLoadingSearch(true);
     setError(null);
 
     try {
       const params = new URLSearchParams({
-        q: query.trim(),
-        yearsBack,
-        studyFilter,
-        regionFilter,
-        maxResults: "12",
+        q: trimmedQuery,
+        yearsBack: nextYearsBack,
+        studyFilter: nextStudyFilter,
+        regionFilter: nextRegionFilter,
+        sortBy: nextSortBy,
+        trustFilter: nextTrustFilter,
+        fullTextOnly: String(nextFullTextOnly),
+        maxResults: String(nextVisibleLimit),
       });
       const response = await fetch(`/api/literature/search?${params.toString()}`, { cache: "no-store" });
       const data = await response.json();
@@ -244,7 +273,17 @@ export default function LiteraturePage() {
       }
 
       setResults(data);
-      setSelectedArticle(data.articles?.[0] ?? null);
+      setYearsBack(nextYearsBack);
+      setStudyFilter(nextStudyFilter);
+      setRegionFilter(nextRegionFilter);
+      setSortBy(nextSortBy);
+      setTrustFilter(nextTrustFilter);
+      setFullTextOnly(nextFullTextOnly);
+      setVisibleLimit(nextVisibleLimit);
+      setSelectedArticle((current) => {
+        if (!current) return data.articles?.[0] ?? null;
+        return data.articles?.find((article: LiteratureArticle) => article.pmid === current.pmid) ?? data.articles?.[0] ?? null;
+      });
       setViewMode("original");
     } catch (searchError) {
       console.error("Literature search failed", searchError);
@@ -252,6 +291,23 @@ export default function LiteraturePage() {
     } finally {
       setLoadingSearch(false);
     }
+  }
+
+  async function runSearch(event: React.FormEvent) {
+    event.preventDefault();
+    setVisibleLimit(DEFAULT_VISIBLE_LIMIT);
+    await performSearch({ maxResults: DEFAULT_VISIBLE_LIMIT });
+  }
+
+  async function loadMoreResults() {
+    await performSearch({ maxResults: visibleLimit + DEFAULT_VISIBLE_LIMIT });
+  }
+
+  async function applyQuickNarrow(overrides: SearchOverrides) {
+    await performSearch({
+      ...overrides,
+      maxResults: DEFAULT_VISIBLE_LIMIT,
+    });
   }
 
   async function ensureArticleContext(article: LiteratureArticle, mode: InterpretationMode) {
@@ -591,7 +647,43 @@ export default function LiteraturePage() {
                   <option value="europe">{t("literature.regionEurope")}</option>
                 </select>
               </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-500">{t("literature.sortLabel")}</label>
+                <select
+                  value={sortBy}
+                  onChange={(event) => setSortBy(event.target.value as LiteratureSearchSort)}
+                  className="w-full px-4 py-3 rounded-2xl border border-slate-200 bg-white text-sm outline-none focus:ring-2 focus:ring-blue-100"
+                >
+                  <option value="relevance">{t("literature.sortRelevance")}</option>
+                  <option value="newest">{t("literature.sortNewest")}</option>
+                  <option value="highest_evidence">{t("literature.sortHighestEvidence")}</option>
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-500">{t("literature.trustFilterLabel")}</label>
+                <select
+                  value={trustFilter}
+                  onChange={(event) => setTrustFilter(event.target.value as LiteratureTrustFilter)}
+                  className="w-full px-4 py-3 rounded-2xl border border-slate-200 bg-white text-sm outline-none focus:ring-2 focus:ring-blue-100"
+                >
+                  <option value="all">{t("literature.trustFilterAll")}</option>
+                  <option value="high">{t("literature.trustFilterHigh")}</option>
+                  <option value="moderate">{t("literature.trustFilterModerate")}</option>
+                </select>
+              </div>
             </div>
+
+            <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                checked={fullTextOnly}
+                onChange={(event) => setFullTextOnly(event.target.checked)}
+                className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-100"
+              />
+              <span className="font-medium">{t("literature.fullTextOnly")}</span>
+            </label>
 
             <button
               type="submit"
@@ -642,10 +734,50 @@ export default function LiteraturePage() {
             <p className="text-sm text-slate-500 mt-1">
               {results ? results.query : t("literature.emptyDescription")}
             </p>
+            {results && (
+              <p className="text-xs text-slate-400 mt-2">
+                {t("literature.showingCount")} {results.articles.length}
+              </p>
+            )}
             {results?.executedQuery && results.executedQuery !== results.query && (
               <p className="text-xs text-slate-400 mt-2">
                 {t("literature.searchExecutedAs")} {results.executedQuery}
               </p>
+            )}
+            {results && (
+              <div className="mt-4 space-y-2">
+                <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{t("literature.quickNarrowTitle")}</div>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void applyQuickNarrow({ trustFilter: "high" })}
+                    className="px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-600 hover:bg-slate-50"
+                  >
+                    {t("literature.narrowHighEvidence")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void applyQuickNarrow({ studyFilter: "review", yearsBack: "5", sortBy: "highest_evidence" })}
+                    className="px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-600 hover:bg-slate-50"
+                  >
+                    {t("literature.narrowLatestReviews")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void applyQuickNarrow({ fullTextOnly: true })}
+                    className="px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-600 hover:bg-slate-50"
+                  >
+                    {t("literature.narrowFullText")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void applyQuickNarrow({ sortBy: "newest" })}
+                    className="px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-600 hover:bg-slate-50"
+                  >
+                    {t("literature.narrowNewest")}
+                  </button>
+                </div>
+              </div>
             )}
           </div>
 
@@ -681,6 +813,11 @@ export default function LiteraturePage() {
                     <Globe size={12} />
                     {article.sourceLanguageLabel}
                   </span>
+                  {article.fullTextAvailable && (
+                    <span className="px-2.5 py-1 rounded-full border border-blue-200 bg-blue-50 text-[11px] font-semibold text-blue-700">
+                      {t("literature.fullTextBadge")}
+                    </span>
+                  )}
                 </div>
 
                 <h3 className="text-sm font-bold text-slate-900 leading-snug">{article.title}</h3>
@@ -692,6 +829,20 @@ export default function LiteraturePage() {
                 </p>
               </button>
             ))}
+
+            {results && results.total > results.articles.length && (
+              <div className="p-4 border-t border-slate-100 bg-white">
+                <button
+                  type="button"
+                  onClick={() => void loadMoreResults()}
+                  disabled={loadingSearch}
+                  className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-sm font-bold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+                >
+                  {loadingSearch && <Loader2 size={15} className="animate-spin" />}
+                  {t("literature.loadMore")}
+                </button>
+              </div>
+            )}
           </div>
         </section>
 

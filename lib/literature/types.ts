@@ -1,5 +1,7 @@
 export type LiteratureStudyFilter = "all" | "guideline" | "review" | "trial" | "observational";
 export type LiteratureRegionFilter = "all" | "us" | "europe";
+export type LiteratureSearchSort = "relevance" | "newest" | "highest_evidence";
+export type LiteratureTrustFilter = "all" | "high" | "moderate";
 
 export type LiteratureTrustLevel = "high" | "moderate" | "low" | "preliminary" | "unknown";
 
