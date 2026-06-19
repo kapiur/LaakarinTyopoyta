@@ -13,7 +13,6 @@ import {
   ListChecks,
   Loader2,
   MessageSquareShare,
-  Paperclip,
   PanelRightClose,
   PanelRightOpen,
   RotateCcw,
@@ -472,7 +471,7 @@ export default function Dashboard() {
                 disabled={!toolText.trim()}
                 className="ml-auto flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 hover:border-blue-300 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
               >
-                <Paperclip size={15} /> {t("dashboard.attachSourceToAgent")}
+                <MessageSquareShare size={15} /> {t("dashboard.attachSourceToAgent")}
               </button>
             </div>
           </div>
@@ -571,7 +570,7 @@ export default function Dashboard() {
 
             {agentAttachment && (
               <div className="flex items-center gap-2 border-b border-blue-100 bg-blue-50 px-3 py-2.5">
-                <Paperclip size={14} className="shrink-0 text-blue-600" />
+                <Bot size={14} className="shrink-0 text-blue-600" />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-[11px] font-bold text-blue-800">
                     {agentAttachment.type === "sourceText" ? t("dashboard.attachedSource") : t("dashboard.attachedResult")}
