@@ -695,8 +695,8 @@ export default function LiteraturePage({
       )}
 
       <div className={embedded ? "grid grid-cols-1 gap-4 lg:grid-cols-2" : "grid grid-cols-1 xl:grid-cols-12 gap-6"}>
-        <section className={embedded ? "grid grid-cols-1 gap-4 lg:col-span-2 lg:grid-cols-2" : "xl:col-span-3 space-y-6"}>
-          <form onSubmit={runSearch} className="bg-white border border-slate-200 rounded-[2rem] p-6 shadow-sm space-y-5">
+        <section className={embedded ? "contents" : "xl:col-span-3 space-y-6"}>
+          <form onSubmit={runSearch} className={embedded ? "order-1 space-y-5 rounded-lg border border-slate-200 bg-white p-6 shadow-sm lg:col-span-2" : "bg-white border border-slate-200 rounded-[2rem] p-6 shadow-sm space-y-5"}>
             <div>
               <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
                 <FileSearch size={20} className="text-blue-600" />
@@ -805,7 +805,7 @@ export default function LiteraturePage({
             </button>
           </form>
 
-          <section className="bg-white border border-slate-200 rounded-[2rem] p-6 shadow-sm space-y-4">
+          <section className={embedded ? "order-4 space-y-4 rounded-lg border border-slate-200 bg-white p-6 shadow-sm lg:col-span-2" : "bg-white border border-slate-200 rounded-[2rem] p-6 shadow-sm space-y-4"}>
             <div>
               <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                 <ShieldCheck size={16} className="text-emerald-600" />
@@ -1005,7 +1005,7 @@ export default function LiteraturePage({
           </section>
         </section>
 
-        <section className={embedded ? "overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm" : "xl:col-span-4 bg-white border border-slate-200 rounded-[2rem] shadow-sm overflow-hidden"}>
+        <section className={embedded ? "order-2 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm" : "xl:col-span-4 bg-white border border-slate-200 rounded-[2rem] shadow-sm overflow-hidden"}>
           <div className="px-6 py-5 border-b border-slate-100">
             <h2 className="text-lg font-bold text-slate-900">{results ? `${results.total} ${t("literature.resultCount")}` : t("literature.emptyTitle")}</h2>
             <p className="text-sm text-slate-500 mt-1">
@@ -1123,7 +1123,7 @@ export default function LiteraturePage({
           </div>
         </section>
 
-        <section className={embedded ? "overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm" : "xl:col-span-5 bg-white border border-slate-200 rounded-[2rem] shadow-sm overflow-hidden"}>
+        <section className={embedded ? "order-3 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm" : "xl:col-span-5 bg-white border border-slate-200 rounded-[2rem] shadow-sm overflow-hidden"}>
           <div className="px-6 py-5 border-b border-slate-100 space-y-4">
             <div>
               <div className="text-xs font-bold uppercase tracking-wider text-slate-500">{t("literature.selectedArticle")}</div>
