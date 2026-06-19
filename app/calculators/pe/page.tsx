@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Check, Copy, Wind } from "lucide-react";
+import { Check, Copy, MessageSquareShare, Wind } from "lucide-react";
 import { useI18n } from "../../../lib/useI18n";
 import { assessPeRisk, calculatePeScore, type PeCriterionKey, type PeCriterionState } from "../../../lib/calculators/modules/pe/formulas";
 
@@ -30,6 +30,7 @@ const texts = {
     recommendation: "Suositus",
     copy: "Kopioi",
     copied: "Kopioitu",
+    discuss: "Keskustele tuloksesta AI:n kanssa",
     disclaimer: "Tulos ei korvaa kliinistä harkintaa tai paikallisia kuvantamis- ja laboratorioprotokollia.",
     risks: {
       low: "Pieni",
@@ -57,6 +58,7 @@ const texts = {
     recommendation: "Рекомендация",
     copy: "Копировать",
     copied: "Скопировано",
+    discuss: "Обсудить результат с AI",
     disclaimer: "Результат не заменяет клиническое суждение и локальные протоколы лабораторной и лучевой диагностики.",
     risks: {
       low: "Низкий",
@@ -84,6 +86,7 @@ const texts = {
     recommendation: "Recommendation",
     copy: "Copy",
     copied: "Copied",
+    discuss: "Discuss result with AI",
     disclaimer: "The result does not replace clinical judgement or local imaging and laboratory protocols.",
     risks: {
       low: "Low",
@@ -112,7 +115,7 @@ function riskClass(risk: "low" | "moderate" | "high") {
   return "bg-emerald-500";
 }
 
-export default function PeCalculatorPage() {
+export default function PeCalculatorPage({ embedded = false, onDiscussResult }: { embedded?: boolean; onDiscussResult?: (content: string) => void }) {
   const { language } = useI18n();
   const lang: UiLang = ["fi", "ru", "en"].includes(language as UiLang) ? (language as UiLang) : "fi";
   const i18n = texts[lang];
@@ -130,24 +133,24 @@ export default function PeCalculatorPage() {
     }));
   };
 
-  const copyText = async () => {
-    const lines = [
+  const resultText = [
       "PE",
       `${i18n.age}: ${age}`,
       `Score: ${fmt(assessment.score)}`,
       `${i18n.result}: ${i18n.risks[assessment.risk]}`,
       `${i18n.probability}: ${assessment.probabilityLabel}`,
       `${i18n.recommendation}: ${assessment.recommendationFi}`,
-    ];
+    ].join("\n");
 
-    await navigator.clipboard.writeText(lines.join("\n"));
+  const copyText = async () => {
+    await navigator.clipboard.writeText(resultText);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1800);
   };
 
   return (
-    <div className="max-w-[1000px] mx-auto space-y-5 pb-10 text-slate-900 p-2 sm:p-4">
-      <div>
+    <div className={embedded ? "p-4 text-slate-900" : "max-w-[1000px] mx-auto space-y-5 pb-10 text-slate-900 p-2 sm:p-4"}>
+      {!embedded && <div>
         <Link href="/calculators" className="text-xs font-bold text-blue-600 hover:text-blue-700">
           {i18n.back}
         </Link>
@@ -155,7 +158,7 @@ export default function PeCalculatorPage() {
           <Wind className="text-blue-600" size={26} /> {i18n.title}
         </h1>
         <p className="text-sm text-slate-500 mt-1 max-w-3xl">{i18n.description}</p>
-      </div>
+      </div>}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <section className="bg-white rounded-[2.5rem] p-6 sm:p-8 border border-slate-200 shadow-sm space-y-5">
@@ -194,17 +197,17 @@ export default function PeCalculatorPage() {
         </section>
 
         <section className="bg-white rounded-[2.5rem] p-6 sm:p-10 border border-slate-200 shadow-sm min-h-[420px] flex flex-col">
-          <div className="flex justify-between items-center mb-8">
+          <div className="mb-8 flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <div className="w-2.5 h-2.5 bg-blue-600 rounded-full animate-pulse" />
               <span className="text-[12px] font-black text-blue-600 uppercase tracking-[0.2em]">{i18n.result}</span>
             </div>
-            <button
-              onClick={copyText}
-              className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest hover:text-blue-600 transition-all"
-            >
-              <Copy size={14} /> {copied ? i18n.copied : i18n.copy}
-            </button>
+            <div className="flex items-center gap-2">
+              {onDiscussResult && <button type="button" onClick={() => onDiscussResult(resultText)} className="flex items-center gap-2 rounded-md border border-blue-200 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-50"><MessageSquareShare size={15} />{i18n.discuss}</button>}
+              <button onClick={copyText} className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest hover:text-blue-600 transition-all">
+                <Copy size={14} /> {copied ? i18n.copied : i18n.copy}
+              </button>
+            </div>
           </div>
 
           <div className="flex-1 space-y-5">

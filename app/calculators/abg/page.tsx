@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Activity, Copy, Droplets, RotateCcw, Sparkles, Wind } from "lucide-react";
+import { Activity, Copy, Droplets, MessageSquareShare, RotateCcw, Sparkles, Wind } from "lucide-react";
 import { useI18n } from "../../../lib/useI18n";
 import {
   analyzeAbg,
@@ -98,6 +98,7 @@ const texts = {
     reset: "Tyhjennä",
     copy: "Kopioi yhteenveto",
     copied: "Kopioitu",
+    discuss: "Keskustele tuloksesta AI:n kanssa",
     inputsTitle: "Syötettävät arvot",
     resultsTitle: "Tulkinta",
     empty: "Täytä ainakin pH sekä pCO2 tai HCO3, niin tulkinta alkaa elää.",
@@ -355,6 +356,7 @@ const texts = {
     reset: "Очистить",
     copy: "Копировать вывод",
     copied: "Скопировано",
+    discuss: "Обсудить результат с AI",
     inputsTitle: "Входные данные",
     resultsTitle: "Интерпретация",
     empty: "Введите хотя бы pH и pCO2 или HCO3, и интерпретация появится автоматически.",
@@ -612,6 +614,7 @@ const texts = {
     reset: "Clear",
     copy: "Copy summary",
     copied: "Copied",
+    discuss: "Discuss result with AI",
     inputsTitle: "Input values",
     resultsTitle: "Interpretation",
     empty: "Enter at least pH and either pCO2 or HCO3 to begin the interpretation.",
@@ -1046,7 +1049,7 @@ function ResultCard({
   );
 }
 
-export default function AbgCalculatorPage() {
+export default function AbgCalculatorPage({ embedded = false, onDiscussResult }: { embedded?: boolean; onDiscussResult?: (content: string) => void }) {
   const { language } = useI18n();
   const lang: UiLang = ["fi", "ru", "en"].includes(language as UiLang) ? (language as UiLang) : "fi";
   const t = texts[lang];
@@ -1061,8 +1064,7 @@ export default function AbgCalculatorPage() {
     setState((current) => ({ ...current, [key]: value }));
   };
 
-  const copySummary = async () => {
-    const lines = [
+  const resultText = [
       t.title,
       `${t.cards.ph}: ${t.phLabels[analysis.ph.labelKey]}`,
       `${t.cards.primary}: ${t.primaryLabels[analysis.primary.labelKey]}`,
@@ -1070,9 +1072,10 @@ export default function AbgCalculatorPage() {
       `${t.cards.ag}: ${t.agLabels[analysis.anionGap.labelKey]}`,
       `${t.cards.oxygenation}: ${t.oxygenLabels[analysis.oxygenation.labelKey]}`,
       `${t.cards.dka}: ${t.dkaLabels[analysis.dka.labelKey]}`,
-    ];
+  ].join("\n");
 
-    await navigator.clipboard.writeText(lines.join("\n"));
+  const copySummary = async () => {
+    await navigator.clipboard.writeText(resultText);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1800);
   };
@@ -1082,8 +1085,8 @@ export default function AbgCalculatorPage() {
   const actions = t.actions[primaryKey];
 
   return (
-    <div className="max-w-[1320px] mx-auto space-y-5 pb-10 text-slate-900 p-2 sm:p-4">
-      <div>
+    <div className={embedded ? "p-4 text-slate-900" : "max-w-[1320px] mx-auto space-y-5 pb-10 text-slate-900 p-2 sm:p-4"}>
+      {!embedded && <div>
         <Link href="/calculators" className="text-xs font-bold text-blue-600 hover:text-blue-700">
           {t.back}
         </Link>
@@ -1091,7 +1094,7 @@ export default function AbgCalculatorPage() {
           <Wind className="text-blue-600" size={26} /> {t.title}
         </h1>
         <p className="text-sm text-slate-500 mt-1 max-w-4xl">{t.description}</p>
-      </div>
+      </div>}
 
       <div className="grid grid-cols-1 xl:grid-cols-[460px_minmax(0,1fr)] gap-6">
         <section className="bg-white rounded-[2.5rem] p-6 sm:p-8 border border-slate-200 shadow-sm space-y-5">
@@ -1194,19 +1197,17 @@ export default function AbgCalculatorPage() {
 
         <section className="space-y-5">
           <div className="bg-white rounded-[2.5rem] p-6 sm:p-8 border border-slate-200 shadow-sm min-h-[280px]">
-            <div className="flex items-center justify-between gap-3 mb-6">
+            <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
               <div>
                 <div className="text-[11px] font-black uppercase tracking-[0.16em] text-blue-600">{t.resultsTitle}</div>
               </div>
-              <button
-                type="button"
-                onClick={copySummary}
-                disabled={!showResults}
-                className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-600 hover:bg-slate-50 disabled:opacity-40"
-              >
-                <Copy size={14} />
-                {copied ? t.copied : t.copy}
-              </button>
+              <div className="flex items-center gap-2">
+                {onDiscussResult && <button type="button" onClick={() => onDiscussResult(resultText)} disabled={!showResults} className="flex items-center gap-2 rounded-md border border-blue-200 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-50 disabled:opacity-40"><MessageSquareShare size={15} />{t.discuss}</button>}
+                <button type="button" onClick={copySummary} disabled={!showResults} className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-600 hover:bg-slate-50 disabled:opacity-40">
+                  <Copy size={14} />
+                  {copied ? t.copied : t.copy}
+                </button>
+              </div>
             </div>
 
             {!showResults ? (
