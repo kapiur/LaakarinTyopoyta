@@ -13,6 +13,7 @@ import {
   ListChecks,
   Loader2,
   MessageSquareShare,
+  Paperclip,
   PanelRightClose,
   PanelRightOpen,
   RotateCcw,
@@ -20,6 +21,7 @@ import {
   Send,
   Settings,
   ShieldCheck,
+  X,
 } from "lucide-react";
 import PrivacyNotice from "../components/PrivacyNotice";
 import QuickActionsBar from "../components/dashboard/QuickActionsBar";
@@ -28,6 +30,12 @@ import type { TranslationKey } from "../lib/i18n";
 import { useI18n } from "../lib/useI18n";
 
 type PrivacyInfo = { anonymized?: boolean; findingTypes?: string[] } | null;
+
+type AgentAttachment = {
+  type: "sourceText" | "toolResult";
+  content: string;
+  toolKey: string;
+};
 
 type WorkspaceContext = {
   practiceCountry: string;
@@ -101,7 +109,9 @@ export default function Dashboard() {
   ]);
   const [isChatLoading, setIsChatLoading] = useState(false);
   const [chatPrivacy, setChatPrivacy] = useState<PrivacyInfo>(null);
+  const [agentAttachment, setAgentAttachment] = useState<AgentAttachment | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const chatInputRef = useRef<HTMLTextAreaElement>(null);
   const toolTextAreaRef = useRef<HTMLTextAreaElement>(null);
 
   const [toolText, setToolText] = useState("");
@@ -186,6 +196,19 @@ export default function Dashboard() {
       ? t(defaultToolDescriptionKeys[activeTool.key])
       : activeTool.description
     : t("dashboard.textToolDescription");
+  const activeToolLabel = activeTool
+    ? defaultToolLabelKeys[activeTool.key]
+      ? t(defaultToolLabelKeys[activeTool.key])
+      : activeTool.label
+    : t("dashboard.textToolTitle");
+  const attachmentTool = agentAttachment
+    ? aiTools.find((tool) => tool.key === agentAttachment.toolKey)
+    : null;
+  const attachmentToolLabel = attachmentTool
+    ? defaultToolLabelKeys[attachmentTool.key]
+      ? t(defaultToolLabelKeys[attachmentTool.key])
+      : attachmentTool.label
+    : activeToolLabel;
 
   function setAssistantVisibility(nextValue: boolean) {
     setAssistantOpen(nextValue);
@@ -202,11 +225,38 @@ export default function Dashboard() {
     setPreviousToolResult("");
     setRefinementInstruction("");
     setToolPrivacy(null);
+    if (agentAttachment) clearAttachedContext();
   }
 
   function selectQuickAiTool(key: string) {
     setToolMode(key);
+    if (agentAttachment) clearAttachedContext();
     window.requestAnimationFrame(() => toolTextAreaRef.current?.focus());
+  }
+
+  function clearAttachedContext() {
+    setAgentAttachment(null);
+    setMessages([{ role: "assistant", content: t("dashboard.assistantGreeting") }]);
+    setChatInput("");
+    setChatPrivacy(null);
+  }
+
+  function attachToAgent(type: AgentAttachment["type"]) {
+    const content = type === "sourceText" ? toolText : toolResult;
+    if (!content.trim()) return;
+    setAgentAttachment({ type, content, toolKey: toolMode });
+    setMessages([]);
+    setChatInput("");
+    setChatPrivacy(null);
+    setAssistantVisibility(true);
+    window.requestAnimationFrame(() => chatInputRef.current?.focus());
+  }
+
+  function applyAgentAnswer(content: string) {
+    if (!content.trim()) return;
+    if (toolResult) setPreviousToolResult(toolResult);
+    setToolResult(content);
+    window.requestAnimationFrame(() => document.getElementById("text-tool-result")?.scrollIntoView({ behavior: "smooth", block: "start" }));
   }
 
   async function sendMessage(overrideMessage?: string) {
@@ -224,12 +274,23 @@ export default function Dashboard() {
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: nextMessages }),
+        body: JSON.stringify({
+          messages: nextMessages,
+          workspaceAttachment: agentAttachment
+            ? {
+                type: agentAttachment.type,
+                content: agentAttachment.content,
+                toolKey: agentAttachment.toolKey,
+              }
+            : undefined,
+        }),
       });
       const data = await response.json();
       if (data.privacy) setChatPrivacy(data.privacy);
       if (data.content) {
         setMessages((current) => [...current, { role: "assistant", content: data.content }]);
+      } else if (!response.ok) {
+        setMessages((current) => [...current, { role: "assistant", content: t("dashboard.contextChatError") }]);
       }
     } catch (error) {
       console.error("AI connection failed", error);
@@ -242,6 +303,7 @@ export default function Dashboard() {
   async function processToolText(selectedMode: string) {
     if (!toolText.trim() || isToolLoading || isRefiningToolResult) return;
     setToolMode(selectedMode);
+    if (agentAttachment) clearAttachedContext();
     setIsToolLoading(true);
     setToolPrivacy(null);
     setPreviousToolResult("");
@@ -304,9 +366,7 @@ export default function Dashboard() {
   }
 
   function moveResultToChat() {
-    if (!toolResult) return;
-    setAssistantVisibility(true);
-    sendMessage(`${t("dashboard.processedTextIntro")}\n\n${toolResult}`);
+    attachToAgent("toolResult");
   }
 
   return (
@@ -406,11 +466,19 @@ export default function Dashboard() {
               ) : (
                 <div className="text-xs text-slate-500">{t("dashboard.noVisibleAiTools")}</div>
               )}
+              <button
+                type="button"
+                onClick={() => attachToAgent("sourceText")}
+                disabled={!toolText.trim()}
+                className="ml-auto flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 hover:border-blue-300 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <Paperclip size={15} /> {t("dashboard.attachSourceToAgent")}
+              </button>
             </div>
           </div>
 
           {toolResult && (
-            <div className="border-t border-blue-100 bg-blue-50/40 px-4 py-5 animate-in fade-in duration-200">
+            <div id="text-tool-result" className="scroll-mt-4 border-t border-blue-100 bg-blue-50/40 px-4 py-5 animate-in fade-in duration-200">
               <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
                 <h2 className="text-xs font-black uppercase text-slate-500">{t("dashboard.resultTitle")}</h2>
                 <div className="flex items-center gap-2">
@@ -419,7 +487,7 @@ export default function Dashboard() {
                     onClick={moveResultToChat}
                     className="flex items-center gap-2 rounded-md border border-blue-200 bg-white px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-600 hover:text-white"
                   >
-                    <MessageSquareShare size={15} /> {t("dashboard.moveToChat")}
+                    <MessageSquareShare size={15} /> {t("dashboard.attachResultToAgent")}
                   </button>
                   <button
                     type="button"
@@ -501,6 +569,27 @@ export default function Dashboard() {
               </div>
             </header>
 
+            {agentAttachment && (
+              <div className="flex items-center gap-2 border-b border-blue-100 bg-blue-50 px-3 py-2.5">
+                <Paperclip size={14} className="shrink-0 text-blue-600" />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[11px] font-bold text-blue-800">
+                    {agentAttachment.type === "sourceText" ? t("dashboard.attachedSource") : t("dashboard.attachedResult")}
+                  </div>
+                  <div className="truncate text-[10px] text-blue-600">{attachmentToolLabel}</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={clearAttachedContext}
+                  title={t("dashboard.clearAttachedContext")}
+                  aria-label={t("dashboard.clearAttachedContext")}
+                  className="rounded-md p-1.5 text-blue-500 hover:bg-blue-100 hover:text-blue-800"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            )}
+
             <div className="custom-scrollbar flex-1 space-y-3 overflow-auto bg-slate-50/40 p-4">
               {messages.map((message, index) => (
                 <div key={`${message.role}-${index}`} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}>
@@ -514,6 +603,15 @@ export default function Dashboard() {
                     <ReactMarkdown className={message.role === "user" ? markdownUserContentClassName : markdownContentClassName}>
                       {message.content}
                     </ReactMarkdown>
+                    {message.role === "assistant" && index === messages.length - 1 && index > 0 && agentAttachment && (
+                      <button
+                        type="button"
+                        onClick={() => applyAgentAnswer(message.content)}
+                        className="mt-3 flex items-center gap-2 border-t border-slate-100 pt-2 text-[11px] font-bold text-blue-700 hover:text-blue-900"
+                      >
+                        <FileText size={13} /> {t("dashboard.useAgentAnswerAsResult")}
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -532,6 +630,7 @@ export default function Dashboard() {
             <div className="border-t border-slate-100 bg-white p-3">
               <div className="flex items-end gap-2 rounded-lg border border-slate-200 bg-slate-50 p-1.5 focus-within:border-blue-400">
                 <textarea
+                  ref={chatInputRef}
                   value={chatInput}
                   onChange={(event) => setChatInput(event.target.value)}
                   onKeyDown={(event) => {
@@ -541,7 +640,7 @@ export default function Dashboard() {
                     }
                   }}
                   rows={1}
-                  placeholder={t("dashboard.chatPlaceholder")}
+                  placeholder={agentAttachment ? t("dashboard.chatWithContextPlaceholder") : t("dashboard.chatPlaceholder")}
                   className="max-h-32 min-h-10 flex-1 resize-none bg-transparent px-2 py-2 text-sm font-medium outline-none"
                 />
                 <button
