@@ -223,8 +223,11 @@ export default function TemplatesRedesignPage() {
       const nextCategories: TemplateCategory[] = Array.isArray(data) ? data : [];
       setCategories(nextCategories);
 
+      const preferredCategory = preferredTemplateId
+        ? nextCategories.find((category) => category.templates?.some((template) => template.id === preferredTemplateId))
+        : null;
       const currentCategory = nextCategories.find((category) => category.id === activeCategoryId);
-      const firstCategory = currentCategory || nextCategories[0] || null;
+      const firstCategory = preferredCategory || currentCategory || nextCategories[0] || null;
 
       if (!firstCategory) {
         setActiveCategoryId(null);
@@ -244,7 +247,8 @@ export default function TemplatesRedesignPage() {
   };
 
   useEffect(() => {
-    loadTemplates();
+    const requestedTemplateId = Number(new URLSearchParams(window.location.search).get('templateId'));
+    loadTemplates(Number.isFinite(requestedTemplateId) && requestedTemplateId > 0 ? requestedTemplateId : null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

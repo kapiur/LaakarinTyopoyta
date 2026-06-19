@@ -5,30 +5,24 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import {
   Bot,
-  BookText,
-  Calculator,
   Copy,
   FileText,
   FlaskConical,
   Globe2,
   Languages,
-  Link as LinkIcon,
   ListChecks,
   Loader2,
   MessageSquareShare,
   PanelRightClose,
   PanelRightOpen,
-  Pill,
   RotateCcw,
   Scissors,
   Send,
   Settings,
   ShieldCheck,
-  SlidersHorizontal,
-  Sparkles,
-  Zap,
 } from "lucide-react";
 import PrivacyNotice from "../components/PrivacyNotice";
+import QuickActionsBar from "../components/dashboard/QuickActionsBar";
 import { DEFAULT_AI_TOOL_METADATA, type DefaultAiToolMetadata } from "../lib/ai/toolMetadata";
 import type { TranslationKey } from "../lib/i18n";
 import { useI18n } from "../lib/useI18n";
@@ -47,14 +41,6 @@ type CountryOption = {
   name: Partial<Record<"fi" | "ru" | "en" | "de", string>>;
 };
 
-type QuickAction = {
-  key: string;
-  href: string;
-  labelKey: TranslationKey;
-  icon: keyof typeof quickActionIcons;
-  isVisible: boolean;
-};
-
 const ASSISTANT_STATE_KEY = "laakarin-tyopoyta:home-assistant-open";
 
 const aiToolIcons = {
@@ -63,17 +49,6 @@ const aiToolIcons = {
   Scissors: <Scissors size={15} />,
   FlaskConical: <FlaskConical size={15} />,
   FileText: <FileText size={15} />,
-};
-
-const quickActionIcons = {
-  FileText,
-  Bot,
-  Zap,
-  LinkIcon,
-  Pill,
-  Calculator,
-  FlaskConical,
-  BookText,
 };
 
 const defaultToolLabelKeys: Record<string, TranslationKey> = {
@@ -89,14 +64,6 @@ const defaultToolDescriptionKeys: Record<string, TranslationKey> = {
   summarize: "dashboard.toolSummarizeDescription",
   labrat: "dashboard.toolLabsDescription",
 };
-
-const fallbackQuickActions: QuickAction[] = [
-  { key: "templates", href: "/malli", labelKey: "sidebar.templates", icon: "FileText", isVisible: true },
-  { key: "ai-tools", href: "/ai-tools", labelKey: "sidebar.aiTools", icon: "Bot", isVisible: true },
-  { key: "quick-guides", href: "/pikaohjeet-v2", labelKey: "sidebar.quickGuides", icon: "Zap", isVisible: true },
-  { key: "literature", href: "/literature", labelKey: "sidebar.literature", icon: "BookText", isVisible: true },
-  { key: "calculators", href: "/calculators", labelKey: "sidebar.calculators", icon: "Calculator", isVisible: true },
-];
 
 const markdownContentClassName =
   "prose prose-sm max-w-none break-words text-slate-800 prose-p:my-2 prose-p:leading-relaxed prose-p:break-words prose-li:break-words prose-code:break-words prose-code:whitespace-pre-wrap prose-pre:max-w-full prose-pre:overflow-x-auto prose-pre:whitespace-pre-wrap prose-pre:break-words";
@@ -135,6 +102,7 @@ export default function Dashboard() {
   const [isChatLoading, setIsChatLoading] = useState(false);
   const [chatPrivacy, setChatPrivacy] = useState<PrivacyInfo>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const toolTextAreaRef = useRef<HTMLTextAreaElement>(null);
 
   const [toolText, setToolText] = useState("");
   const [toolResult, setToolResult] = useState("");
@@ -147,7 +115,6 @@ export default function Dashboard() {
   const [aiTools, setAiTools] = useState<DefaultAiToolMetadata[]>(DEFAULT_AI_TOOL_METADATA);
 
   const [assistantOpen, setAssistantOpen] = useState(true);
-  const [quickActions, setQuickActions] = useState<QuickAction[]>(fallbackQuickActions);
   const [workspaceContext, setWorkspaceContext] = useState<WorkspaceContext | null>(null);
   const [countries, setCountries] = useState<CountryOption[]>([]);
 
@@ -175,9 +142,8 @@ export default function Dashboard() {
     let mounted = true;
 
     async function loadWorkspace() {
-      const [toolsResponse, navigationResponse, contextResponse] = await Promise.allSettled([
+      const [toolsResponse, contextResponse] = await Promise.allSettled([
         fetch("/api/ai-tools", { cache: "no-store" }),
-        fetch("/api/sidebar/visibility", { cache: "no-store" }),
         fetch("/api/profile/workspace-context", { cache: "no-store" }),
       ]);
 
@@ -190,17 +156,6 @@ export default function Dashboard() {
         }
       } catch (error) {
         console.error(t("dashboard.aiToolsLoadingFailed"), error);
-      }
-
-      try {
-        if (navigationResponse.status === "fulfilled" && navigationResponse.value.ok) {
-          const data = await navigationResponse.value.json();
-          if (Array.isArray(data.items)) {
-            setQuickActions(data.items.filter((item: QuickAction) => item.key !== "home" && item.isVisible));
-          }
-        }
-      } catch (error) {
-        console.error("Quick actions loading failed", error);
       }
 
       try {
@@ -247,6 +202,11 @@ export default function Dashboard() {
     setPreviousToolResult("");
     setRefinementInstruction("");
     setToolPrivacy(null);
+  }
+
+  function selectQuickAiTool(key: string) {
+    setToolMode(key);
+    window.requestAnimationFrame(() => toolTextAreaRef.current?.focus());
   }
 
   async function sendMessage(overrideMessage?: string) {
@@ -379,33 +339,7 @@ export default function Dashboard() {
         )}
       </section>
 
-      <section className="mb-4 flex items-center gap-3 overflow-hidden rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm">
-        <div className="hidden shrink-0 items-center gap-2 border-r border-slate-200 pr-3 text-xs font-bold text-slate-500 md:flex">
-          <Sparkles size={15} className="text-blue-600" /> {t("dashboard.quickAccess")}
-        </div>
-        <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto py-0.5 custom-scrollbar">
-          {quickActions.map((item) => {
-            const Icon = quickActionIcons[item.icon] ?? FileText;
-            return (
-              <Link
-                key={item.key}
-                href={item.href}
-                className="flex shrink-0 items-center gap-2 rounded-md px-3 py-2 text-xs font-bold text-slate-600 transition-colors hover:bg-blue-50 hover:text-blue-700"
-              >
-                <Icon size={15} /> {t(item.labelKey)}
-              </Link>
-            );
-          })}
-        </div>
-        <Link
-          href="/settings?section=navigation"
-          title={t("dashboard.customizeQuickAccess")}
-          aria-label={t("dashboard.customizeQuickAccess")}
-          className="shrink-0 rounded-md p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
-        >
-          <SlidersHorizontal size={17} />
-        </Link>
-      </section>
+      <QuickActionsBar activeAiToolKey={toolMode} onSelectAiTool={selectQuickAiTool} />
 
       <div className={`grid min-w-0 gap-4 ${assistantOpen ? "xl:grid-cols-[minmax(0,1fr)_360px]" : "grid-cols-1"}`}>
         <section className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
@@ -443,6 +377,7 @@ export default function Dashboard() {
 
           <div className="p-4">
             <textarea
+              ref={toolTextAreaRef}
               value={toolText}
               onChange={(event) => setToolText(event.target.value)}
               placeholder={t("dashboard.textAreaPlaceholder")}
