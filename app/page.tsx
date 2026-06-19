@@ -1,114 +1,318 @@
 "use client";
-import { useState, useEffect, useRef } from 'react';
+
+import Link from "next/link";
+import { useEffect, useMemo, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
 import {
-  Send, Bot, FileText, Calculator, Scissors, Languages,
-  ListChecks, Copy, MessageSquareShare, Zap, ShieldCheck, Loader2,
-  RotateCcw, FlaskConical, Settings
-} from 'lucide-react';
-import Link from 'next/link';
-import ReactMarkdown from 'react-markdown';
-import PrivacyNotice from '../components/PrivacyNotice';
-import { DEFAULT_AI_TOOL_METADATA, type DefaultAiToolMetadata } from '../lib/ai/toolMetadata';
-import { useI18n } from '../lib/useI18n';
+  Bot,
+  BookText,
+  Calculator,
+  Copy,
+  FileText,
+  FlaskConical,
+  Globe2,
+  Languages,
+  Link as LinkIcon,
+  ListChecks,
+  Loader2,
+  MessageSquareShare,
+  PanelRightClose,
+  PanelRightOpen,
+  Pill,
+  RotateCcw,
+  Scissors,
+  Send,
+  Settings,
+  ShieldCheck,
+  SlidersHorizontal,
+  Sparkles,
+  Zap,
+} from "lucide-react";
+import PrivacyNotice from "../components/PrivacyNotice";
+import { DEFAULT_AI_TOOL_METADATA, type DefaultAiToolMetadata } from "../lib/ai/toolMetadata";
+import type { TranslationKey } from "../lib/i18n";
+import { useI18n } from "../lib/useI18n";
 
 type PrivacyInfo = { anonymized?: boolean; findingTypes?: string[] } | null;
 
-const aiToolIcons = {
-  ListChecks: <ListChecks size={14} />,
-  Languages: <Languages size={14} />,
-  Scissors: <Scissors size={14} />,
-  FlaskConical: <FlaskConical size={14} />,
-  FileText: <FileText size={14} />,
+type WorkspaceContext = {
+  practiceCountry: string;
+  clinicalCountry: string;
+  clinicalOutputLanguage: string;
+  evidenceStrictness: string;
 };
 
-const markdownContentClassName = "prose prose-sm max-w-none break-words text-slate-800 prose-p:my-2 prose-p:leading-relaxed prose-p:break-words prose-li:break-words prose-code:break-words prose-code:whitespace-pre-wrap prose-pre:max-w-full prose-pre:overflow-x-auto prose-pre:whitespace-pre-wrap prose-pre:break-words";
+type CountryOption = {
+  code: string;
+  name: Partial<Record<"fi" | "ru" | "en" | "de", string>>;
+};
+
+type QuickAction = {
+  key: string;
+  href: string;
+  labelKey: TranslationKey;
+  icon: keyof typeof quickActionIcons;
+  isVisible: boolean;
+};
+
+const ASSISTANT_STATE_KEY = "laakarin-tyopoyta:home-assistant-open";
+
+const aiToolIcons = {
+  ListChecks: <ListChecks size={15} />,
+  Languages: <Languages size={15} />,
+  Scissors: <Scissors size={15} />,
+  FlaskConical: <FlaskConical size={15} />,
+  FileText: <FileText size={15} />,
+};
+
+const quickActionIcons = {
+  FileText,
+  Bot,
+  Zap,
+  LinkIcon,
+  Pill,
+  Calculator,
+  FlaskConical,
+  BookText,
+};
+
+const defaultToolLabelKeys: Record<string, TranslationKey> = {
+  fix: "dashboard.toolFix",
+  translate: "dashboard.toolTranslate",
+  summarize: "dashboard.toolSummarize",
+  labrat: "dashboard.toolLabs",
+};
+
+const defaultToolDescriptionKeys: Record<string, TranslationKey> = {
+  fix: "dashboard.toolFixDescription",
+  translate: "dashboard.toolTranslateDescription",
+  summarize: "dashboard.toolSummarizeDescription",
+  labrat: "dashboard.toolLabsDescription",
+};
+
+const fallbackQuickActions: QuickAction[] = [
+  { key: "templates", href: "/malli", labelKey: "sidebar.templates", icon: "FileText", isVisible: true },
+  { key: "ai-tools", href: "/ai-tools", labelKey: "sidebar.aiTools", icon: "Bot", isVisible: true },
+  { key: "quick-guides", href: "/pikaohjeet-v2", labelKey: "sidebar.quickGuides", icon: "Zap", isVisible: true },
+  { key: "literature", href: "/literature", labelKey: "sidebar.literature", icon: "BookText", isVisible: true },
+  { key: "calculators", href: "/calculators", labelKey: "sidebar.calculators", icon: "Calculator", isVisible: true },
+];
+
+const markdownContentClassName =
+  "prose prose-sm max-w-none break-words text-slate-800 prose-p:my-2 prose-p:leading-relaxed prose-p:break-words prose-li:break-words prose-code:break-words prose-code:whitespace-pre-wrap prose-pre:max-w-full prose-pre:overflow-x-auto prose-pre:whitespace-pre-wrap prose-pre:break-words";
+
+const markdownUserContentClassName =
+  "prose prose-sm max-w-none break-words text-white prose-p:my-2 prose-p:leading-relaxed prose-p:text-white prose-strong:text-white prose-li:text-white";
+
+function PrivacyStatus({ privacy, label }: { privacy: PrivacyInfo; label: string }) {
+  const hasFindings = Boolean(privacy?.anonymized && privacy.findingTypes?.length);
+
+  return (
+    <details className="group relative">
+      <summary
+        className={`flex cursor-pointer list-none items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[11px] font-bold transition-colors [&::-webkit-details-marker]:hidden ${
+          hasFindings
+            ? "border-amber-200 bg-amber-50 text-amber-800"
+            : "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+        }`}
+      >
+        <ShieldCheck size={13} />
+        <span>{label}</span>
+      </summary>
+      <div className="absolute right-0 top-full z-30 mt-2 w-[min(24rem,calc(100vw-2rem))] shadow-xl">
+        <PrivacyNotice privacy={privacy} compact />
+      </div>
+    </details>
+  );
+}
 
 export default function Dashboard() {
-  const { t } = useI18n();
-  const [chatInput, setChatInput] = useState('');
-  const [messages, setMessages] = useState([
-    { role: 'assistant', content: t('dashboard.assistantGreeting') }
+  const { t, language } = useI18n();
+  const [chatInput, setChatInput] = useState("");
+  const [messages, setMessages] = useState<Array<{ role: "assistant" | "user"; content: string }>>([
+    { role: "assistant", content: t("dashboard.assistantGreeting") },
   ]);
   const [isChatLoading, setIsChatLoading] = useState(false);
   const [chatPrivacy, setChatPrivacy] = useState<PrivacyInfo>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
-  const [toolText, setToolText] = useState('');
-  const [toolResult, setToolResult] = useState('');
-  const [previousToolResult, setPreviousToolResult] = useState('');
-  const [refinementInstruction, setRefinementInstruction] = useState('');
+
+  const [toolText, setToolText] = useState("");
+  const [toolResult, setToolResult] = useState("");
+  const [previousToolResult, setPreviousToolResult] = useState("");
+  const [refinementInstruction, setRefinementInstruction] = useState("");
   const [toolPrivacy, setToolPrivacy] = useState<PrivacyInfo>(null);
-  const [toolMode, setToolMode] = useState('fix');
+  const [toolMode, setToolMode] = useState("fix");
   const [isToolLoading, setIsToolLoading] = useState(false);
   const [isRefiningToolResult, setIsRefiningToolResult] = useState(false);
   const [aiTools, setAiTools] = useState<DefaultAiToolMetadata[]>(DEFAULT_AI_TOOL_METADATA);
 
-  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
+  const [assistantOpen, setAssistantOpen] = useState(true);
+  const [quickActions, setQuickActions] = useState<QuickAction[]>(fallbackQuickActions);
+  const [workspaceContext, setWorkspaceContext] = useState<WorkspaceContext | null>(null);
+  const [countries, setCountries] = useState<CountryOption[]>([]);
 
   useEffect(() => {
-    const loadAiTools = async () => {
-      try {
-        const response = await fetch('/api/ai-tools');
-        if (!response.ok) return;
-        const data = await response.json();
-        if (Array.isArray(data.tools)) setAiTools(data.tools);
-      } catch (error) {
-        console.error(t('dashboard.aiToolsLoadingFailed'), error);
-      }
-    };
-    loadAiTools();
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  useEffect(() => {
+    setMessages((current) =>
+      current.length === 1 && current[0].role === "assistant"
+        ? [{ role: "assistant", content: t("dashboard.assistantGreeting") }]
+        : current,
+    );
   }, [t]);
 
-  const clearTool = () => {
-    setToolText('');
-    setToolResult('');
-    setPreviousToolResult('');
-    setRefinementInstruction('');
-    setToolPrivacy(null);
-  };
+  useEffect(() => {
+    try {
+      setAssistantOpen(window.localStorage.getItem(ASSISTANT_STATE_KEY) !== "false");
+    } catch (error) {
+      console.error("Assistant panel state loading failed", error);
+    }
+  }, []);
 
-  const sendMessage = async (overrideMessage?: string) => {
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadWorkspace() {
+      const [toolsResponse, navigationResponse, contextResponse] = await Promise.allSettled([
+        fetch("/api/ai-tools", { cache: "no-store" }),
+        fetch("/api/sidebar/visibility", { cache: "no-store" }),
+        fetch("/api/profile/workspace-context", { cache: "no-store" }),
+      ]);
+
+      if (!mounted) return;
+
+      try {
+        if (toolsResponse.status === "fulfilled" && toolsResponse.value.ok) {
+          const data = await toolsResponse.value.json();
+          if (Array.isArray(data.tools)) setAiTools(data.tools);
+        }
+      } catch (error) {
+        console.error(t("dashboard.aiToolsLoadingFailed"), error);
+      }
+
+      try {
+        if (navigationResponse.status === "fulfilled" && navigationResponse.value.ok) {
+          const data = await navigationResponse.value.json();
+          if (Array.isArray(data.items)) {
+            setQuickActions(data.items.filter((item: QuickAction) => item.key !== "home" && item.isVisible));
+          }
+        }
+      } catch (error) {
+        console.error("Quick actions loading failed", error);
+      }
+
+      try {
+        if (contextResponse.status === "fulfilled" && contextResponse.value.ok) {
+          const data = await contextResponse.value.json();
+          if (data.settings) setWorkspaceContext(data.settings);
+          if (Array.isArray(data.countries)) setCountries(data.countries);
+        }
+      } catch (error) {
+        console.error("Workspace context loading failed", error);
+      }
+    }
+
+    loadWorkspace();
+    return () => {
+      mounted = false;
+    };
+  }, [t]);
+
+  const practiceCountryName = useMemo(() => {
+    const country = countries.find((item) => item.code === workspaceContext?.practiceCountry);
+    return country?.name?.[language] ?? country?.name?.en ?? workspaceContext?.practiceCountry ?? "...";
+  }, [countries, language, workspaceContext?.practiceCountry]);
+
+  const activeTool = aiTools.find((tool) => tool.key === toolMode) ?? aiTools[0];
+  const activeToolDescription = activeTool
+    ? defaultToolDescriptionKeys[activeTool.key]
+      ? t(defaultToolDescriptionKeys[activeTool.key])
+      : activeTool.description
+    : t("dashboard.textToolDescription");
+
+  function setAssistantVisibility(nextValue: boolean) {
+    setAssistantOpen(nextValue);
+    try {
+      window.localStorage.setItem(ASSISTANT_STATE_KEY, String(nextValue));
+    } catch (error) {
+      console.error("Assistant panel state saving failed", error);
+    }
+  }
+
+  function clearTool() {
+    setToolText("");
+    setToolResult("");
+    setPreviousToolResult("");
+    setRefinementInstruction("");
+    setToolPrivacy(null);
+  }
+
+  async function sendMessage(overrideMessage?: string) {
     const messageToSend = overrideMessage || chatInput;
     if (!messageToSend.trim() || isChatLoading) return;
-    const userMessage = { role: 'user', content: messageToSend };
-    setMessages(prev => [...prev, userMessage]);
-    setChatInput('');
+
+    const userMessage = { role: "user" as const, content: messageToSend };
+    const nextMessages = [...messages, userMessage];
+    setMessages(nextMessages);
+    setChatInput("");
     setIsChatLoading(true);
     setChatPrivacy(null);
+
     try {
-      const response = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: [...messages, userMessage] }) });
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: nextMessages }),
+      });
       const data = await response.json();
       if (data.privacy) setChatPrivacy(data.privacy);
-      if (data.content) setMessages(prev => [...prev, { role: 'assistant', content: data.content }]);
+      if (data.content) {
+        setMessages((current) => [...current, { role: "assistant", content: data.content }]);
+      }
     } catch (error) {
-      console.error("AI-virhe:", error);
-      setMessages(prev => [...prev, { role: 'assistant', content: t('dashboard.aiConnectionError') }]);
-    } finally { setIsChatLoading(false); }
-  };
+      console.error("AI connection failed", error);
+      setMessages((current) => [...current, { role: "assistant", content: t("dashboard.aiConnectionError") }]);
+    } finally {
+      setIsChatLoading(false);
+    }
+  }
 
-  const processToolText = async (selectedMode: string) => {
+  async function processToolText(selectedMode: string) {
     if (!toolText.trim() || isToolLoading || isRefiningToolResult) return;
     setToolMode(selectedMode);
     setIsToolLoading(true);
     setToolPrivacy(null);
-    setPreviousToolResult('');
-    setRefinementInstruction('');
+    setPreviousToolResult("");
+    setRefinementInstruction("");
+
     try {
-      const response = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: toolText, mode: selectedMode }) });
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: toolText, mode: selectedMode }),
+      });
       const data = await response.json();
       if (data.privacy) setToolPrivacy(data.privacy);
       if (data.content) setToolResult(data.content);
-    } catch (error) { setToolResult(t('dashboard.textProcessingError')); }
-    finally { setIsToolLoading(false); }
-  };
+    } catch (error) {
+      console.error("Text processing failed", error);
+      setToolResult(t("dashboard.textProcessingError"));
+    } finally {
+      setIsToolLoading(false);
+    }
+  }
 
-  const refineToolResult = async () => {
+  async function refineToolResult() {
     if (!toolText.trim() || !toolResult.trim() || !refinementInstruction.trim() || isToolLoading || isRefiningToolResult) return;
     setIsRefiningToolResult(true);
     setToolPrivacy(null);
+
     try {
-      const response = await fetch('/api/ai-tools/refine', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetch("/api/ai-tools/refine", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           mode: toolMode,
           originalText: toolText,
@@ -121,47 +325,311 @@ export default function Dashboard() {
       if (data.content) {
         setPreviousToolResult(toolResult);
         setToolResult(data.content);
-        setRefinementInstruction('');
+        setRefinementInstruction("");
       } else if (!response.ok) {
-        setToolResult(t('dashboard.textProcessingError'));
+        setToolResult(t("dashboard.textProcessingError"));
       }
     } catch (error) {
-      setToolResult(t('dashboard.textProcessingError'));
+      console.error("Text refinement failed", error);
+      setToolResult(t("dashboard.textProcessingError"));
     } finally {
       setIsRefiningToolResult(false);
     }
-  };
+  }
 
-  const restorePreviousToolResult = () => {
+  function restorePreviousToolResult() {
     if (!previousToolResult) return;
     setToolResult(previousToolResult);
-    setPreviousToolResult('');
-  };
+    setPreviousToolResult("");
+  }
 
-  const moveResultToChat = () => { if (toolResult) sendMessage(`${t('dashboard.processedTextIntro')}\n\n${toolResult}`); };
+  function moveResultToChat() {
+    if (!toolResult) return;
+    setAssistantVisibility(true);
+    sendMessage(`${t("dashboard.processedTextIntro")}\n\n${toolResult}`);
+  }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 h-full animate-in fade-in duration-700">
-      <div className="lg:col-span-2 space-y-6">
-        <h2 className="text-2xl font-bold text-slate-800 tracking-tight">{t('dashboard.title')}</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Link href="/malli" className="block p-5 bg-white rounded-2xl shadow-sm border border-slate-100 hover:border-blue-500 hover:shadow-md transition-all group"><h3 className="font-bold text-blue-700 group-hover:text-blue-600 flex items-center gap-2 mb-1">{t('dashboard.templatesTitle')} <FileText size={18} /></h3><p className="text-[11px] leading-relaxed text-slate-500">{t('dashboard.templatesDescription')}</p></Link>
-          <Link href="/calculators" className="block p-5 bg-white rounded-2xl shadow-sm border border-slate-100 hover:border-blue-500 hover:shadow-md transition-all group"><h3 className="font-bold text-blue-700 group-hover:text-blue-600 flex items-center gap-2 mb-1">{t('dashboard.calculatorsTitle')} <Calculator size={18} /></h3><p className="text-[11px] leading-relaxed text-slate-500">{t('dashboard.calculatorsDescription')}</p></Link>
-          <Link href="/pikaohjeet-v2" className="block p-5 bg-blue-600 rounded-2xl shadow-lg shadow-blue-100 hover:bg-blue-700 transition-all group"><h3 className="font-bold text-white flex items-center gap-2 mb-1">{t('dashboard.quickGuidesTitle')} <Zap size={18} className="text-amber-300" /></h3><p className="text-[11px] leading-relaxed text-blue-100">{t('dashboard.quickGuidesDescription')}</p></Link>
-        </div>
+    <div className="min-h-full animate-in fade-in duration-300">
+      <section className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4">
+        <Link
+          href="/settings?section=workspace"
+          className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 text-sm text-slate-600 transition-colors hover:text-blue-700"
+          title={t("dashboard.workspaceContextSettings")}
+        >
+          <span className="flex items-center gap-2 font-bold text-slate-800">
+            <Globe2 size={17} className="text-blue-600" />
+            {practiceCountryName}
+          </span>
+          <span className="h-4 w-px bg-slate-200" />
+          <span>{t("dashboard.clinicalCountryShort")}: <strong className="text-slate-800">{workspaceContext?.clinicalCountry ?? "..."}</strong></span>
+          <span>{t("dashboard.clinicalLanguageShort")}: <strong className="text-slate-800">{workspaceContext?.clinicalOutputLanguage ?? "..."}</strong></span>
+          <span className="rounded-md bg-slate-100 px-2 py-1 text-[11px] font-bold text-slate-600">
+            {workspaceContext?.evidenceStrictness ? t(`dashboard.evidenceMode${workspaceContext.evidenceStrictness === "strict" ? "Strict" : workspaceContext.evidenceStrictness === "balanced" ? "Balanced" : "Local"}` as TranslationKey) : "..."}
+          </span>
+        </Link>
+        {!assistantOpen && (
+          <button
+            type="button"
+            onClick={() => setAssistantVisibility(true)}
+            className="flex items-center gap-2 rounded-md border border-blue-200 bg-white px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-50"
+          >
+            <PanelRightOpen size={16} /> {t("dashboard.openAssistant")}
+          </button>
+        )}
+      </section>
 
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-5">
-          <div className="flex items-center justify-between gap-3"><div className="flex items-center gap-4"><h3 className="text-lg font-bold text-slate-800 flex items-center gap-2"><Bot size={22} className="text-blue-600" /> {t('dashboard.textToolTitle')}</h3><button onClick={clearTool} className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-bold text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all border border-transparent hover:border-red-100 uppercase" title={t('dashboard.clearToolTitle')}><RotateCcw size={14} /> {t('common.clear')}</button></div><div className="flex items-center gap-2"><Link href="/ai-tools" className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-full border border-blue-100 uppercase transition-all" title={t('dashboard.manageAiTools')}><Settings size={12} /> {t('dashboard.manageAiTools')}</Link><div className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-100"><ShieldCheck size={12} /> SERVER-SIDE PRIVACY</div></div></div>
-          <PrivacyNotice privacy={toolPrivacy} />
-          <div className="space-y-4"><textarea value={toolText} onChange={(e) => setToolText(e.target.value)} placeholder={t('dashboard.textAreaPlaceholder')} className="w-full h-40 p-4 text-sm border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500/20 outline-none bg-slate-50/30 transition-all resize-none font-medium" />
-            {aiTools.length > 0 ? <div className="flex flex-wrap gap-2 p-1 bg-slate-100 rounded-xl w-fit">{aiTools.map((btn) => <button key={btn.key} onClick={() => processToolText(btn.key)} disabled={isToolLoading || isRefiningToolResult || !toolText.trim()} title={btn.description} className={`flex items-center gap-2 px-5 py-2 rounded-lg text-xs font-bold transition-all disabled:cursor-not-allowed disabled:opacity-50 ${toolMode === btn.key ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>{isToolLoading && toolMode === btn.key ? <Loader2 size={14} className="animate-spin" /> : aiToolIcons[btn.icon]}{btn.label.toUpperCase()}</button>)}</div> : <div className="text-xs text-slate-500 bg-slate-50 border border-dashed border-slate-200 rounded-xl p-4">Ei näkyviä AI-työkaluja. Voit palauttaa järjestelmätyökalut AI-työkalut-sivulla.</div>}
-            {toolResult && <div className="mt-4 overflow-hidden p-6 bg-blue-50/50 border border-blue-100 rounded-2xl relative animate-in zoom-in-95 duration-300"><div className="flex justify-end gap-2 mb-4"><button onClick={moveResultToChat} className="px-3 py-1.5 bg-white border border-blue-200 rounded-lg text-blue-600 hover:bg-blue-600 hover:text-white flex items-center gap-2 text-[10px] font-bold uppercase transition-all shadow-sm"><MessageSquareShare size={14} /> {t('dashboard.moveToChat')}</button><button onClick={() => {navigator.clipboard.writeText(toolResult); alert(t('dashboard.copiedAlert'));}} className="p-1.5 bg-white border border-blue-200 rounded-lg text-blue-600 hover:bg-blue-600 hover:text-white transition-all shadow-sm"><Copy size={16} /></button></div><div className="min-w-0 overflow-hidden text-sm font-medium leading-relaxed text-slate-800"><ReactMarkdown className={markdownContentClassName}>{toolResult}</ReactMarkdown></div><div className="mt-5 pt-5 border-t border-blue-100/80 space-y-3"><div><h4 className="text-xs font-black uppercase tracking-wide text-slate-600">{t('dashboard.refineResultTitle')}</h4><p className="mt-1 text-[11px] leading-relaxed text-slate-500">{t('dashboard.refineResultDescription')}</p></div><textarea value={refinementInstruction} onChange={(e) => setRefinementInstruction(e.target.value)} placeholder={t('dashboard.refineResultPlaceholder')} className="w-full h-20 p-3 text-xs border border-blue-100 rounded-xl focus:ring-2 focus:ring-blue-500/20 outline-none bg-white/80 transition-all resize-none font-medium" /><div className="flex items-center justify-between gap-2"><button onClick={restorePreviousToolResult} disabled={!previousToolResult || isToolLoading || isRefiningToolResult} className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-slate-500 hover:text-blue-600 hover:border-blue-200 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2 text-[10px] font-bold uppercase transition-all shadow-sm"><RotateCcw size={13} /> {t('dashboard.restorePreviousResult')}</button><button onClick={refineToolResult} disabled={!refinementInstruction.trim() || isToolLoading || isRefiningToolResult} className="px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:bg-slate-200 disabled:cursor-not-allowed flex items-center gap-2 text-[10px] font-bold uppercase transition-all shadow-sm">{isRefiningToolResult && <Loader2 size={13} className="animate-spin" />} {t('dashboard.refineResultButton')}</button></div></div></div>}
-          </div>
+      <section className="mb-4 flex items-center gap-3 overflow-hidden rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm">
+        <div className="hidden shrink-0 items-center gap-2 border-r border-slate-200 pr-3 text-xs font-bold text-slate-500 md:flex">
+          <Sparkles size={15} className="text-blue-600" /> {t("dashboard.quickAccess")}
         </div>
+        <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto py-0.5 custom-scrollbar">
+          {quickActions.map((item) => {
+            const Icon = quickActionIcons[item.icon] ?? FileText;
+            return (
+              <Link
+                key={item.key}
+                href={item.href}
+                className="flex shrink-0 items-center gap-2 rounded-md px-3 py-2 text-xs font-bold text-slate-600 transition-colors hover:bg-blue-50 hover:text-blue-700"
+              >
+                <Icon size={15} /> {t(item.labelKey)}
+              </Link>
+            );
+          })}
+        </div>
+        <Link
+          href="/settings?section=navigation"
+          title={t("dashboard.customizeQuickAccess")}
+          aria-label={t("dashboard.customizeQuickAccess")}
+          className="shrink-0 rounded-md p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+        >
+          <SlidersHorizontal size={17} />
+        </Link>
+      </section>
+
+      <div className={`grid min-w-0 gap-4 ${assistantOpen ? "xl:grid-cols-[minmax(0,1fr)_360px]" : "grid-cols-1"}`}>
+        <section className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+          <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-blue-50 text-blue-600">
+                <FileText size={19} />
+              </div>
+              <div className="min-w-0">
+                <h1 className="truncate text-base font-bold text-slate-900">{t("dashboard.textToolTitle")}</h1>
+                <p className="truncate text-xs text-slate-500">{activeToolDescription}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <PrivacyStatus privacy={toolPrivacy} label={t("dashboard.privacyEnabled")} />
+              <Link
+                href="/ai-tools"
+                title={t("dashboard.manageAiTools")}
+                aria-label={t("dashboard.manageAiTools")}
+                className="rounded-md border border-slate-200 p-2 text-slate-500 hover:bg-slate-50 hover:text-blue-700"
+              >
+                <Settings size={15} />
+              </Link>
+              <button
+                type="button"
+                onClick={clearTool}
+                title={t("dashboard.clearToolTitle")}
+                aria-label={t("dashboard.clearToolTitle")}
+                className="rounded-md border border-slate-200 p-2 text-slate-500 hover:bg-red-50 hover:text-red-600"
+              >
+                <RotateCcw size={15} />
+              </button>
+            </div>
+          </header>
+
+          <div className="p-4">
+            <textarea
+              value={toolText}
+              onChange={(event) => setToolText(event.target.value)}
+              placeholder={t("dashboard.textAreaPlaceholder")}
+              className="min-h-[270px] w-full resize-y rounded-lg border border-slate-200 bg-slate-50/40 p-4 text-sm font-medium outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-500/10"
+            />
+
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              {aiTools.length > 0 ? (
+                aiTools.map((tool) => (
+                  <button
+                    key={tool.key}
+                    type="button"
+                    onClick={() => processToolText(tool.key)}
+                    disabled={isToolLoading || isRefiningToolResult || !toolText.trim()}
+                    title={defaultToolDescriptionKeys[tool.key] ? t(defaultToolDescriptionKeys[tool.key]) : tool.description}
+                    className={`flex h-9 items-center gap-2 rounded-md border px-3 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-45 ${
+                      toolMode === tool.key
+                        ? "border-blue-600 bg-blue-600 text-white"
+                        : "border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:text-blue-700"
+                    }`}
+                  >
+                    {isToolLoading && toolMode === tool.key ? <Loader2 size={15} className="animate-spin" /> : aiToolIcons[tool.icon]}
+                    {defaultToolLabelKeys[tool.key] ? t(defaultToolLabelKeys[tool.key]) : tool.label}
+                  </button>
+                ))
+              ) : (
+                <div className="text-xs text-slate-500">{t("dashboard.noVisibleAiTools")}</div>
+              )}
+            </div>
+          </div>
+
+          {toolResult && (
+            <div className="border-t border-blue-100 bg-blue-50/40 px-4 py-5 animate-in fade-in duration-200">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                <h2 className="text-xs font-black uppercase text-slate-500">{t("dashboard.resultTitle")}</h2>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={moveResultToChat}
+                    className="flex items-center gap-2 rounded-md border border-blue-200 bg-white px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-600 hover:text-white"
+                  >
+                    <MessageSquareShare size={15} /> {t("dashboard.moveToChat")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => navigator.clipboard.writeText(toolResult)}
+                    title={t("common.copy")}
+                    aria-label={t("common.copy")}
+                    className="rounded-md border border-blue-200 bg-white p-2 text-blue-700 hover:bg-blue-600 hover:text-white"
+                  >
+                    <Copy size={16} />
+                  </button>
+                </div>
+              </div>
+              <ReactMarkdown className={markdownContentClassName}>{toolResult}</ReactMarkdown>
+
+              <div className="mt-5 border-t border-blue-100 pt-4">
+                <label className="text-xs font-bold text-slate-600" htmlFor="refinement-instruction">
+                  {t("dashboard.refineResultTitle")}
+                </label>
+                <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                  <textarea
+                    id="refinement-instruction"
+                    value={refinementInstruction}
+                    onChange={(event) => setRefinementInstruction(event.target.value)}
+                    placeholder={t("dashboard.refineResultPlaceholder")}
+                    className="min-h-20 flex-1 resize-y rounded-lg border border-blue-100 bg-white p-3 text-xs outline-none focus:border-blue-400"
+                  />
+                  <div className="flex items-end gap-2">
+                    <button
+                      type="button"
+                      onClick={restorePreviousToolResult}
+                      disabled={!previousToolResult || isToolLoading || isRefiningToolResult}
+                      title={t("dashboard.restorePreviousResult")}
+                      aria-label={t("dashboard.restorePreviousResult")}
+                      className="rounded-md border border-slate-200 bg-white p-2.5 text-slate-500 disabled:opacity-40"
+                    >
+                      <RotateCcw size={15} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={refineToolResult}
+                      disabled={!refinementInstruction.trim() || isToolLoading || isRefiningToolResult}
+                      className="flex h-10 items-center gap-2 rounded-md bg-blue-600 px-4 text-xs font-bold text-white hover:bg-blue-700 disabled:bg-slate-300"
+                    >
+                      {isRefiningToolResult && <Loader2 size={14} className="animate-spin" />}
+                      {t("dashboard.refineResultButton")}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </section>
+
+        {assistantOpen && (
+          <aside className="flex min-h-[560px] flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm xl:sticky xl:top-0 xl:h-[calc(100vh-12rem)]">
+            <header className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-blue-600 text-white">
+                  <Bot size={18} />
+                </div>
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-bold text-slate-900">{t("dashboard.assistantTitle")}</div>
+                  <div className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-600">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> {t("dashboard.assistantReady")}
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <PrivacyStatus privacy={chatPrivacy} label={t("dashboard.privacyShort")} />
+                <button
+                  type="button"
+                  onClick={() => setAssistantVisibility(false)}
+                  title={t("dashboard.closeAssistant")}
+                  aria-label={t("dashboard.closeAssistant")}
+                  className="rounded-md p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                >
+                  <PanelRightClose size={17} />
+                </button>
+              </div>
+            </header>
+
+            <div className="custom-scrollbar flex-1 space-y-3 overflow-auto bg-slate-50/40 p-4">
+              {messages.map((message, index) => (
+                <div key={`${message.role}-${index}`} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}>
+                  <div
+                    className={`min-w-0 max-w-[92%] overflow-hidden rounded-lg px-3.5 py-3 text-[13px] leading-relaxed ${
+                      message.role === "user"
+                        ? "bg-blue-600 text-white"
+                        : "border border-slate-200 bg-white text-slate-800"
+                    }`}
+                  >
+                    <ReactMarkdown className={message.role === "user" ? markdownUserContentClassName : markdownContentClassName}>
+                      {message.content}
+                    </ReactMarkdown>
+                  </div>
+                </div>
+              ))}
+              {isChatLoading && (
+                <div className="flex justify-start">
+                  <div className="flex gap-1.5 rounded-lg border border-slate-200 bg-white p-3">
+                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-blue-400" />
+                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-blue-400 [animation-delay:0.2s]" />
+                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-blue-400 [animation-delay:0.4s]" />
+                  </div>
+                </div>
+              )}
+              <div ref={chatEndRef} />
+            </div>
+
+            <div className="border-t border-slate-100 bg-white p-3">
+              <div className="flex items-end gap-2 rounded-lg border border-slate-200 bg-slate-50 p-1.5 focus-within:border-blue-400">
+                <textarea
+                  value={chatInput}
+                  onChange={(event) => setChatInput(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && !event.shiftKey) {
+                      event.preventDefault();
+                      sendMessage();
+                    }
+                  }}
+                  rows={1}
+                  placeholder={t("dashboard.chatPlaceholder")}
+                  className="max-h-32 min-h-10 flex-1 resize-none bg-transparent px-2 py-2 text-sm font-medium outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => sendMessage()}
+                  disabled={isChatLoading || !chatInput.trim()}
+                  title={t("dashboard.sendMessage")}
+                  aria-label={t("dashboard.sendMessage")}
+                  className="rounded-md bg-blue-600 p-2.5 text-white hover:bg-blue-700 disabled:bg-slate-200"
+                >
+                  <Send size={17} />
+                </button>
+              </div>
+            </div>
+          </aside>
+        )}
       </div>
 
-      <div className="bg-white rounded-[2rem] shadow-sm border border-slate-200 flex flex-col h-[calc(100vh-10rem)] overflow-hidden"><div className="p-5 border-b border-slate-100 flex items-center justify-between bg-white"><div className="flex items-center gap-3"><div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-600"><Bot size={18} /></div><div><span className="font-bold text-slate-800 text-sm block">{t('dashboard.assistantTitle')}</span><span className="text-[9px] font-bold text-emerald-500 uppercase tracking-tighter flex items-center gap-1"><div className="w-1 h-1 bg-emerald-500 rounded-full animate-pulse" /> Online</span></div></div></div><div className="px-5 pt-4"><PrivacyNotice privacy={chatPrivacy} compact /></div><div className="flex-1 p-5 overflow-auto space-y-4 bg-slate-50/30 custom-scrollbar">{messages.map((m, i) => <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'} animate-in slide-in-from-bottom-2`}><div className={`min-w-0 max-w-[90%] overflow-hidden p-4 rounded-2xl text-[13px] leading-relaxed shadow-sm ${m.role === 'user' ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white border border-slate-100 text-slate-800 rounded-tl-none'}`}><ReactMarkdown className={markdownContentClassName}>{m.content}</ReactMarkdown></div></div>)}{isChatLoading && <div className="flex justify-start"><div className="bg-white border border-slate-100 p-4 rounded-2xl rounded-tl-none flex gap-2"><div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce" /><div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce [animation-delay:0.2s]" /><div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce [animation-delay:0.4s]" /></div></div>}<div ref={chatEndRef} /></div><div className="p-5 bg-white border-t border-slate-100"><div className="flex gap-2 bg-slate-50 p-1.5 rounded-2xl border border-slate-100 focus-within:border-blue-300 transition-all"><input value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && sendMessage()} type="text" placeholder={t('dashboard.chatPlaceholder')} className="flex-1 px-3 py-2 bg-transparent outline-none text-sm font-medium" /><button onClick={() => sendMessage()} disabled={isChatLoading || !chatInput.trim()} className="p-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:bg-slate-200 transition-all shadow-md active:scale-95"><Send size={18} /></button></div></div></div>
-      <style jsx global>{`.custom-scrollbar::-webkit-scrollbar { width: 4px; }.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }.custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }`}</style>
+      <style jsx global>{`
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 8px; }
+      `}</style>
     </div>
   );
 }
