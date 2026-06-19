@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Baby, CheckCircle2, FlaskConical, Plus, RefreshCw, Trash2 } from 'lucide-react';
+import { getLocalizedVariant } from '../../../lib/i18n';
 import { useI18n } from '../../../lib/useI18n';
 
 type PcaDrug = { id: number; name: string; strength: number };
@@ -221,11 +222,69 @@ const copy = {
     timesLabel: 'Doses',
     daysLabel: 'Duration',
   },
+  de: {
+    back: '← Zurück zu den Rechnern',
+    title: 'Arzneibibliotheken',
+    subtitle: 'Eigene Arzneibibliotheken für PCA- und PEDS-Rechner verwalten. Die Rechenlogik der Rechner wird auf dieser Seite nicht verändert.',
+    refresh: 'Aktualisieren',
+    allIndications: 'Alle Indikationen',
+    selectedIndication: 'Ausgewählte Indikation',
+    loadFailed: 'Daten konnten nicht geladen werden',
+    pcaLoadFailed: 'PCA-Arzneimittel konnten nicht geladen werden',
+    indicationsLoadFailed: 'Indikationen konnten nicht geladen werden',
+    drugsLoadFailed: 'Arzneimittel konnten nicht geladen werden',
+    pcaTitle: 'PCA-Arzneibibliothek',
+    pcaSubtitle: 'Diese Arzneimittel werden im Arzneimittelmenü des PCA-Rechners angezeigt.',
+    pcaNamePlaceholder: 'Arzneimittelname, z. B. Morfiini',
+    addPcaTitle: 'PCA-Arzneimittel hinzufügen',
+    pcaRequired: 'Bitte Name und Stärke des PCA-Arzneimittels in mg/ml eingeben',
+    pcaSaveFailed: 'PCA-Arzneimittel konnte nicht gespeichert werden',
+    pcaSaved: 'PCA-Arzneimittel gespeichert',
+    pcaDeleteFailed: 'PCA-Arzneimittel konnte nicht gelöscht werden',
+    pcaDeleted: 'PCA-Arzneimittel gelöscht',
+    noPcaDrugs: 'Noch keine PCA-Arzneimittel.',
+    pedsIndicationsTitle: 'PEDS-Indikationen / Krankheiten',
+    pedsIndicationsSubtitle: 'Eine eigene Gruppe anlegen, zum Beispiel Korvatulehdus, Tonsilliitti oder Ihoinfektio.',
+    newIndication: 'Neue Indikation',
+    addIndicationTitle: 'Indikation hinzufügen',
+    indicationCreateFailed: 'Indikation konnte nicht erstellt werden',
+    indicationSaved: 'Indikation gespeichert',
+    indicationDeleteFailed: 'Indikation konnte nicht gelöscht werden',
+    indicationDeleted: 'Indikation gelöscht',
+    noIndications: 'Noch keine Indikationen.',
+    drugCount: 'Arzneimittel',
+    addDrugTitle: 'PEDS-Arzneimittel hinzufügen',
+    addDrugSubtitle: 'Standarddosis speichern. Alle Werte können später im Rechner geändert werden.',
+    drugName: 'Arzneimittelname',
+    strength: 'Stärke mg/IU/ml oder Tablette',
+    dose: 'Dosis mg/IU/kg/Tag',
+    times: 'Gaben / Tag',
+    days: 'Dauer Tage',
+    packageSize: 'Packung ml/Stk.',
+    note: 'Hinweis / Anleitung',
+    indications: 'Indikationen',
+    createIndicationFirst: 'Bitte zuerst eine Indikation anlegen.',
+    savePedsDrug: 'PEDS-Arzneimittel speichern',
+    drugRequired: 'Bitte mindestens Name, Stärke, Dosis und Häufigkeit eingeben',
+    drugSaveFailed: 'Arzneimittel konnte nicht gespeichert werden',
+    drugSaved: 'Arzneimittel gespeichert',
+    drugDeleteFailed: 'Arzneimittel konnte nicht gelöscht werden',
+    drugDeleted: 'Arzneimittel gelöscht',
+    savedDrugsTitle: 'Gespeicherte PEDS-Arzneimittel',
+    showing: 'Angezeigt',
+    noSavedDrugs: 'Für diesen Filter sind keine Arzneimittel gespeichert.',
+    edit: 'Bearbeiten',
+    deleteDrugTitle: 'Arzneimittel löschen',
+    strengthLabel: 'Stärke',
+    doseLabel: 'Dosis',
+    timesLabel: 'Gaben',
+    daysLabel: 'Dauer',
+  },
 } as const;
 
 export default function PedsLibraryPage() {
   const { language } = useI18n();
-  const c = copy[language] ?? copy.fi;
+  const c = getLocalizedVariant(copy, language) ?? copy.en;
   const [pcaDrugs, setPcaDrugs] = useState<PcaDrug[]>([]);
   const [newPcaDrug, setNewPcaDrug] = useState({ name: '', strength: '' });
   const [indications, setIndications] = useState<PedsIndication[]>([]);

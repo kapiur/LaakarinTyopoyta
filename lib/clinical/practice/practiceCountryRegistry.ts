@@ -1,11 +1,11 @@
-import type { UiLanguage } from '../../i18n/config';
+import { DEFAULT_UI_LANGUAGE, isSupportedUiLanguage, type LocalizedText, type UiLanguage } from '../../i18n/config';
 import { getClinicalCountryConfig, normalizeClinicalCountry, type ClinicalCountryCode } from '../countries/countryRegistry';
 
 export type PracticeCountryCode = ClinicalCountryCode;
 
 export type PracticeCountryDefaults = {
   code: PracticeCountryCode;
-  name: Record<'fi' | 'ru' | 'en', string>;
+  name: LocalizedText;
   defaultUiLanguage: UiLanguage;
   defaultClinicalCountry: ClinicalCountryCode;
   defaultClinicalOutputLanguage: string;
@@ -21,6 +21,7 @@ export const PRACTICE_COUNTRIES: PracticeCountryDefaults[] = [
       fi: 'Suomi',
       ru: 'Финляндия',
       en: 'Finland',
+      de: 'Finnland',
     },
     defaultUiLanguage: 'fi',
     defaultClinicalCountry: 'FI',
@@ -33,10 +34,24 @@ export const PRACTICE_COUNTRIES: PracticeCountryDefaults[] = [
       fi: 'Venäjä',
       ru: 'Россия',
       en: 'Russia',
+      de: 'Russland',
     },
     defaultUiLanguage: 'ru',
     defaultClinicalCountry: 'RU',
     defaultClinicalOutputLanguage: 'ru',
+    defaultEvidenceStrictness: 'strict',
+  },
+  {
+    code: 'DE',
+    name: {
+      fi: 'Saksa',
+      ru: 'Германия',
+      en: 'Germany',
+      de: 'Deutschland',
+    },
+    defaultUiLanguage: 'de',
+    defaultClinicalCountry: 'DE',
+    defaultClinicalOutputLanguage: 'de',
     defaultEvidenceStrictness: 'strict',
   },
 ];
@@ -54,7 +69,9 @@ export function getPracticeCountryDefaults(value: unknown): PracticeCountryDefau
   return {
     code: clinical.code,
     name: clinical.name,
-    defaultUiLanguage: clinical.defaultClinicalOutputLanguage === 'ru' ? 'ru' : 'fi',
+    defaultUiLanguage: isSupportedUiLanguage(clinical.defaultClinicalOutputLanguage)
+      ? clinical.defaultClinicalOutputLanguage
+      : DEFAULT_UI_LANGUAGE,
     defaultClinicalCountry: clinical.code,
     defaultClinicalOutputLanguage: clinical.defaultClinicalOutputLanguage,
     defaultEvidenceStrictness: clinical.defaultEvidenceStrictness,

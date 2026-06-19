@@ -3,17 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { Languages, Loader2 } from "lucide-react";
 import { SUPPORTED_UI_LANGUAGES, type UiLanguage } from "../lib/i18n/config";
+import { getPracticeCountryDefaults, type PracticeCountryCode } from "../lib/clinical/practice/practiceCountryRegistry";
 import { useI18n } from "../lib/useI18n";
 
 type WorkspaceContextSnapshot = {
   usePracticeCountryDefaults: boolean;
   uiLanguage: UiLanguage;
-  practiceCountry: "FI" | "RU";
-};
-
-const practiceCountryDefaultUiLanguage: Record<WorkspaceContextSnapshot["practiceCountry"], UiLanguage> = {
-  FI: "fi",
-  RU: "ru",
+  practiceCountry: PracticeCountryCode;
 };
 
 export default function LanguageSettingsCard() {
@@ -25,14 +21,28 @@ export default function LanguageSettingsCard() {
 
   const overrideStatus = useMemo(() => {
     if (!workspaceContext) return null;
-    const matchesCountryDefault = language === practiceCountryDefaultUiLanguage[workspaceContext.practiceCountry];
+    const matchesCountryDefault = language === getPracticeCountryDefaults(workspaceContext.practiceCountry).defaultUiLanguage;
     return matchesCountryDefault
       ? {
-          text: language === "ru" ? "Соответствует дефолту страны работы" : language === "en" ? "Matches practice-country default" : "Vastaa työskentelymaan oletusta",
+          text:
+            language === "ru"
+              ? "Соответствует дефолту страны работы"
+              : language === "en"
+                ? "Matches practice-country default"
+                : language === "de"
+                  ? "Entspricht dem Landesstandard"
+                  : "Vastaa työskentelymaan oletusta",
           className: "border border-emerald-200 bg-emerald-50 text-emerald-700",
         }
       : {
-          text: language === "ru" ? "Переопределено вручную" : language === "en" ? "Manually overridden" : "Yliajettu käsin",
+          text:
+            language === "ru"
+              ? "Переопределено вручную"
+              : language === "en"
+                ? "Manually overridden"
+                : language === "de"
+                  ? "Manuell ueberschrieben"
+                  : "Yliajettu käsin",
           className: "border border-amber-200 bg-amber-50 text-amber-800",
         };
   }, [language, workspaceContext]);

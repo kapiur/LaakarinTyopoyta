@@ -3,9 +3,8 @@
 import { useState } from "react";
 import { Check, Loader2, Sparkles, X } from "lucide-react";
 import PrivacyNotice from "../PrivacyNotice";
+import { getLocalizedVariant, type UiLanguage } from "../../lib/i18n";
 import type { TemplateItem } from "../../lib/templates";
-
-type UiLanguage = "fi" | "ru" | "en";
 
 type Props = {
   template: TemplateItem;
@@ -54,11 +53,23 @@ const copy = {
     noInstruction: "Write an instruction first.",
     failed: "AI polish failed.",
   },
+  de: {
+    title: "KI-Feinschliff",
+    subtitle: "Beschreibe, was in der aktuellen Vorlage geändert werden soll. Die KI behält die Struktur bei und ändert nur den gewünschten Teil.",
+    instruction: "Anweisung für die KI",
+    placeholder: "Zum Beispiel: Füge die Schmerzstärke als Auswahlfeld hinzu und zeige die genauere Beschreibung nur, wenn Schmerzen vorhanden sind.",
+    run: "Änderung vorschlagen",
+    apply: "Vorschlag übernehmen",
+    close: "Schließen",
+    preview: "Vorgeschlagene Vorlage",
+    summary: "Zusammenfassung",
+    noInstruction: "Bitte zuerst eine Anweisung eingeben.",
+    failed: "KI-Feinschliff fehlgeschlagen.",
+  },
 };
 
 export default function TemplateAiPolishModal({ template, uiLanguage, onClose, onApply }: Props) {
-  const lang = copy[uiLanguage] ? uiLanguage : "fi";
-  const c = copy[lang];
+  const c = getLocalizedVariant(copy, uiLanguage) ?? copy.en;
   const [instruction, setInstruction] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");

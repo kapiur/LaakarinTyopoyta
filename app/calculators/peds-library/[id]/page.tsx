@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { CheckCircle2, RefreshCw, Save } from 'lucide-react';
+import { getLocalizedVariant } from '../../../../lib/i18n';
 import { useI18n } from '../../../../lib/useI18n';
 
 type PedsIndication = { id: number; name: string };
@@ -121,11 +122,36 @@ const copy = {
     selected: 'Selected',
     saveChanges: 'Save changes',
   },
+  de: {
+    back: '← Zurück zu den Arzneibibliotheken',
+    title: 'PEDS-Arzneimittel bearbeiten',
+    subtitle: 'Standarddosis, Stärke, Darreichungsform und Indikationen aktualisieren.',
+    refresh: 'Aktualisieren',
+    invalidId: 'Ungültige Arzneimittel-ID',
+    indicationsLoadFailed: 'Indikationen konnten nicht geladen werden',
+    drugsLoadFailed: 'Arzneimittel konnten nicht geladen werden',
+    notFound: 'Arzneimittel nicht gefunden',
+    loadFailed: 'Daten konnten nicht geladen werden',
+    requiredFields: 'Bitte mindestens Name, Stärke, Dosis und Häufigkeit eingeben',
+    saveFailed: 'Speichern fehlgeschlagen',
+    saved: 'Arzneimittel aktualisiert',
+    drugName: 'Arzneimittelname',
+    strength: 'Stärke mg/IU/ml oder Tablette',
+    dose: 'Dosis mg/IU/kg/Tag',
+    times: 'Gaben / Tag',
+    days: 'Dauer Tage',
+    packageSize: 'Packung ml/Stk.',
+    note: 'Hinweis / Anleitung',
+    indications: 'Indikationen',
+    noIndications: 'Keine Indikationen.',
+    selected: 'Ausgewählt',
+    saveChanges: 'Änderungen speichern',
+  },
 } as const;
 
 export default function EditPedsDrugPage({ params }: { params: { id: string } }) {
   const { language } = useI18n();
-  const c = copy[language] ?? copy.fi;
+  const c = getLocalizedVariant(copy, language) ?? copy.en;
   const drugId = Number(params.id);
   const [indications, setIndications] = useState<PedsIndication[]>([]);
   const [form, setForm] = useState<DrugFormState>(emptyForm);

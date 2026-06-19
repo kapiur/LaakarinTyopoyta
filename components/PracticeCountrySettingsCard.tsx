@@ -2,26 +2,16 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Globe, Loader2, Save } from "lucide-react";
+import { getLocalizedText, normalizeUiLanguage, type UiLanguage } from "../lib/i18n";
+import type { ClinicalCountryCode } from "../lib/clinical/countries/countryRegistry";
+import type { PracticeCountryCode, PracticeCountryDefaults as PracticeCountry } from "../lib/clinical/practice/practiceCountryRegistry";
 import { useI18n } from "../lib/useI18n";
-
-type UiLang = "fi" | "ru" | "en";
-
-type PracticeCountryCode = "FI" | "RU";
-
-type PracticeCountry = {
-  code: PracticeCountryCode;
-  name: Record<UiLang, string>;
-  defaultUiLanguage: "fi" | "ru" | "en";
-  defaultClinicalCountry: "FI" | "RU";
-  defaultClinicalOutputLanguage: string;
-  defaultEvidenceStrictness: "strict" | "balanced" | "local-aware";
-};
 
 type WorkspaceContextSettings = {
   practiceCountry: PracticeCountryCode;
   usePracticeCountryDefaults: boolean;
-  uiLanguage: "fi" | "ru" | "en";
-  clinicalCountry: "FI" | "RU";
+  uiLanguage: UiLanguage;
+  clinicalCountry: ClinicalCountryCode;
   clinicalOutputLanguage: string;
   evidenceStrictness: "strict" | "balanced" | "local-aware";
 };
@@ -84,11 +74,30 @@ const labels = {
     failed: "Could not save workspace context.",
     overrideNotice: "Manual overrides are currently active. The country remains your starting context, but language and clinical settings may differ from it.",
   },
+  de: {
+    title: "Taetigkeitsland",
+    description: "Legt den klinischen Grundkontext fest. Das Land kann Standards fuer Sprache der Oberflaeche, klinisches Land und Sprache der klinischen Antworten vorbelegen.",
+    country: "Taetigkeitsland",
+    useDefaults: "Landesstandards fuer Oberflaeche und klinische Einstellungen verwenden",
+    useDefaultsHelp: "Wenn aktiviert, uebernimmt das ausgewaehlte Land standardmaessig Sprache der Oberflaeche, klinisches Land und Sprache der klinischen Antworten. Diese Werte koennen weiter unten trotzdem manuell angepasst werden.",
+    recommended: "Empfohlene Standardwerte",
+    uiLanguage: "Oberflaeche",
+    clinicalCountry: "Klinisches Land",
+    clinicalLanguage: "Sprache des klinischen Texts",
+    mode: "Quellenmodus",
+    current: "Aktueller Zustand",
+    fromCountry: "Entspricht dem Landesstandard",
+    custom: "Manuell ueberschrieben",
+    save: "Arbeitskontext speichern",
+    saved: "Arbeitskontext gespeichert.",
+    failed: "Arbeitskontext konnte nicht gespeichert werden.",
+    overrideNotice: "Derzeit sind manuelle Ueberschreibungen aktiv. Das Land bleibt der Ausgangspunkt, Sprach- und klinische Einstellungen koennen aber davon abweichen.",
+  },
 } as const;
 
 export default function PracticeCountrySettingsCard() {
   const { language, setLanguage } = useI18n();
-  const lang: UiLang = ["fi", "ru", "en"].includes(language as UiLang) ? (language as UiLang) : "fi";
+  const lang = normalizeUiLanguage(language);
   const l = labels[lang];
   const [settings, setSettings] = useState<WorkspaceContextSettings | null>(null);
   const [countries, setCountries] = useState<PracticeCountry[]>([]);
@@ -174,7 +183,7 @@ export default function PracticeCountrySettingsCard() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || l.failed);
       setSettings(data.settings);
-      setLanguage(data.settings.uiLanguage);
+      setLanguage(data.settings.uiLanguage as UiLanguage);
       window.dispatchEvent(new CustomEvent("workspace-context-updated", { detail: data.settings }));
       setMessage(l.saved);
       window.setTimeout(() => {
@@ -190,9 +199,9 @@ export default function PracticeCountrySettingsCard() {
 
   if (loading || !settings) {
     return (
-      <section className="bg-white border border-slate-200 rounded-[2rem] p-6 shadow-sm flex items-center gap-3 text-slate-500">
+        <section className="bg-white border border-slate-200 rounded-[2rem] p-6 shadow-sm flex items-center gap-3 text-slate-500">
         <Loader2 className="animate-spin" size={18} />
-        <span className="text-sm font-semibold">Loading workspace context...</span>
+        <span className="text-sm font-semibold">{lang === "de" ? "Arbeitskontext wird geladen..." : "Loading workspace context..."}</span>
       </section>
     );
   }
@@ -218,7 +227,7 @@ export default function PracticeCountrySettingsCard() {
             className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
           >
             {countries.map((country) => (
-              <option key={country.code} value={country.code}>{country.name[lang] || country.name.en}</option>
+              <option key={country.code} value={country.code}>{getLocalizedText(country.name, lang)}</option>
             ))}
           </select>
         </label>

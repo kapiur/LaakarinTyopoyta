@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { Bot, Copy, Loader2, Sparkles, X } from 'lucide-react';
+import { getLocalizedVariant } from '../lib/i18n';
 import { useI18n } from '../lib/useI18n';
 
 type AiMode = 'transform_instruction' | 'create_from_sample' | 'improve_template' | 'create_base_template_from_topic';
@@ -132,6 +133,39 @@ const copy = {
     failed: 'AI request failed.',
     validationError: 'AI suggestion has errors. Review before use.',
   },
+  de: {
+    open: 'KI-Assistent',
+    title: 'KI-Assistent für Vorlagen',
+    close: 'Schließen',
+    mode: 'Modus',
+    transform: 'Nach Anweisung ändern',
+    sample: 'Aus Beispieltext erstellen',
+    improve: 'Aktuelle Vorlage verbessern',
+    base: 'Grundvorlage nach Thema erstellen',
+    instruction: 'Anweisung',
+    instructionPlaceholder: 'Eine Anweisung in beliebiger Sprache schreiben...',
+    sampleText: 'Beispieltext',
+    samplePlaceholder: 'Ein Beispiel für einen ärztlichen Text einfügen...',
+    topic: 'Thema',
+    topicPlaceholder: 'Zum Beispiel: Vorlage für Knieuntersuchung',
+    sourceSearchInfo: 'Die KI verwendet vertrauenswürdige finnische und europäische medizinische Quellen als klinische Grundlage für die Vorlage.',
+    allowSkeleton: 'Technisches Grundgerüst erlauben, wenn keine vertrauenswürdige Quelle gefunden wird',
+    run: 'Vorschlag erstellen',
+    apply: 'Übernehmen',
+    replace: 'Ganze Vorlage ersetzen',
+    insert: 'An Cursorposition einfügen',
+    append: 'Am Ende anhängen',
+    replaceConfirm: 'Den gesamten Vorlageninhalt durch den KI-Vorschlag ersetzen? Er wird erst gespeichert, wenn du auf Speichern klickst.',
+    copyResult: 'Vorschlag kopieren',
+    copied: 'Kopiert',
+    applied: 'In den Editor eingefügt. Bitte die Vorlage separat speichern.',
+    result: 'KI-Vorschlag',
+    noEditor: 'Zuerst den Vorlageneditor öffnen.',
+    noResult: 'Noch kein Vorschlag.',
+    needsSources: 'Es wurde nicht automatisch eine vertrauenswürdige Quelle gefunden.',
+    failed: 'KI-Anfrage fehlgeschlagen.',
+    validationError: 'Der KI-Vorschlag enthält Fehler. Vor der Nutzung prüfen.',
+  },
 } as const;
 
 function isMalliPath(pathname: string | null) {
@@ -182,7 +216,7 @@ function getDetailedError(data: any, fallback: string) {
 export default function MalliTemplateAiAssistantEnhancer() {
   const pathname = usePathname();
   const { language } = useI18n();
-  const c = copy[language] ?? copy.fi;
+  const c = getLocalizedVariant(copy, language) ?? copy.en;
   const enabled = isMalliPath(pathname);
   const [editorOpen, setEditorOpen] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);

@@ -3,9 +3,89 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, ChevronRight, Loader2, MoveRight, RefreshCcw } from 'lucide-react';
-import type { TemplateCategory, TemplateItem } from '../../../lib/templates';
+import { normalizeUiLanguage, type UiLanguage } from '../../../lib/i18n';
+import type { TemplateCategory } from '../../../lib/templates';
+import { useI18n } from '../../../lib/useI18n';
+
+const copy = {
+  fi: {
+    title: 'Siirrä tekstimalli',
+    subtitle: 'Siirrä malleja osiosta toiseen',
+    refresh: 'Päivitä',
+    loadFailed: 'Mallien lataus epäonnistui',
+    moveFailed: 'Mallin siirto epäonnistui',
+    movedTo: 'Malli siirretty osioon',
+    newSection: 'uuteen osioon',
+    sourceSection: '1. Lähtöosio',
+    templateToMove: '2. Siirrettävä malli',
+    targetSection: '3. Kohdeosio',
+    templatesInSection: 'mallia tässä osiossa',
+    noTemplates: 'Ei malleja',
+    noOtherSections: 'Ei muita osioita',
+    targetPlaceholder: 'kohdeosio',
+    chooseTemplate: 'Valitse siirrettävä malli.',
+    moveTemplate: 'Siirrä malli',
+  },
+  ru: {
+    title: 'Переместить шаблон',
+    subtitle: 'Перенос шаблонов между разделами',
+    refresh: 'Обновить',
+    loadFailed: 'Не удалось загрузить шаблоны',
+    moveFailed: 'Не удалось переместить шаблон',
+    movedTo: 'Шаблон перемещён в раздел',
+    newSection: 'новый раздел',
+    sourceSection: '1. Исходный раздел',
+    templateToMove: '2. Перемещаемый шаблон',
+    targetSection: '3. Целевой раздел',
+    templatesInSection: 'шаблонов в этом разделе',
+    noTemplates: 'Шаблонов нет',
+    noOtherSections: 'Других разделов нет',
+    targetPlaceholder: 'целевой раздел',
+    chooseTemplate: 'Выбери шаблон для переноса.',
+    moveTemplate: 'Переместить шаблон',
+  },
+  en: {
+    title: 'Move template',
+    subtitle: 'Move templates between sections',
+    refresh: 'Refresh',
+    loadFailed: 'Could not load templates',
+    moveFailed: 'Could not move template',
+    movedTo: 'Template moved to section',
+    newSection: 'new section',
+    sourceSection: '1. Source section',
+    templateToMove: '2. Template to move',
+    targetSection: '3. Target section',
+    templatesInSection: 'templates in this section',
+    noTemplates: 'No templates',
+    noOtherSections: 'No other sections',
+    targetPlaceholder: 'target section',
+    chooseTemplate: 'Select a template to move.',
+    moveTemplate: 'Move template',
+  },
+  de: {
+    title: 'Vorlage verschieben',
+    subtitle: 'Vorlagen zwischen Bereichen verschieben',
+    refresh: 'Aktualisieren',
+    loadFailed: 'Vorlagen konnten nicht geladen werden',
+    moveFailed: 'Vorlage konnte nicht verschoben werden',
+    movedTo: 'Vorlage verschoben nach Bereich',
+    newSection: 'neuer Bereich',
+    sourceSection: '1. Ausgangsbereich',
+    templateToMove: '2. Zu verschiebende Vorlage',
+    targetSection: '3. Zielbereich',
+    templatesInSection: 'Vorlagen in diesem Bereich',
+    noTemplates: 'Keine Vorlagen',
+    noOtherSections: 'Keine anderen Bereiche',
+    targetPlaceholder: 'Zielbereich',
+    chooseTemplate: 'Vorlage zum Verschieben auswählen.',
+    moveTemplate: 'Vorlage verschieben',
+  },
+} as const;
 
 export default function MoveTemplatesPage() {
+  const { language } = useI18n();
+  const lang = normalizeUiLanguage(language);
+  const c = copy[lang] ?? copy.en;
   const [categories, setCategories] = useState<TemplateCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [moving, setMoving] = useState(false);
@@ -30,7 +110,7 @@ export default function MoveTemplatesPage() {
         setSourceCategoryId(nextSourceId ?? null);
       }
     } catch (err: any) {
-      setErrorMsg(err.message || 'Mallien lataus epäonnistui');
+      setErrorMsg(err.message || c.loadFailed);
     } finally {
       setLoading(false);
     }
@@ -51,7 +131,7 @@ export default function MoveTemplatesPage() {
   useEffect(() => {
     const firstTemplate = availableTemplates[0];
     setTemplateId(firstTemplate?.id || null);
-  }, [sourceCategoryId]);
+  }, [sourceCategoryId, availableTemplates.length]);
 
   useEffect(() => {
     const firstTarget = targetCategories[0];
@@ -72,14 +152,14 @@ export default function MoveTemplatesPage() {
         body: JSON.stringify({ templateId, categoryId: targetCategoryId }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Mallin siirto epäonnistui');
+      if (!res.ok) throw new Error(data.error || c.moveFailed);
 
-      const targetName = categories.find((category) => category.id === targetCategoryId)?.name || 'uuteen osioon';
-      setSuccessMsg(`Malli siirretty osioon: ${targetName}`);
+      const targetName = categories.find((category) => category.id === targetCategoryId)?.name || c.newSection;
+      setSuccessMsg(`${c.movedTo}: ${targetName}`);
       setTemplateId(null);
       await fetchTemplates();
     } catch (err: any) {
-      setErrorMsg(err.message || 'Mallin siirto epäonnistui');
+      setErrorMsg(err.message || c.moveFailed);
     } finally {
       setMoving(false);
     }
@@ -93,8 +173,8 @@ export default function MoveTemplatesPage() {
             <ArrowLeft size={18} />
           </Link>
           <div>
-            <h1 className="text-2xl font-black tracking-tight">Siirrä tekstimalli</h1>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Mallien siirto osiosta toiseen</p>
+            <h1 className="text-2xl font-black tracking-tight">{c.title}</h1>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{c.subtitle}</p>
           </div>
         </div>
         <button
@@ -103,7 +183,7 @@ export default function MoveTemplatesPage() {
           className="px-5 py-3 rounded-xl border border-slate-100 text-slate-500 font-black text-[10px] uppercase tracking-widest hover:bg-slate-50 disabled:opacity-50 flex items-center gap-2"
         >
           {loading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCcw size={14} />}
-          Päivitä
+          {c.refresh}
         </button>
       </div>
 
@@ -121,7 +201,7 @@ export default function MoveTemplatesPage() {
 
       <div className="grid md:grid-cols-3 gap-5">
         <div className="bg-white border shadow-sm rounded-[2rem] p-6 space-y-4">
-          <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">1. Lähtöosio</div>
+          <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{c.sourceSection}</div>
           <select
             className="w-full p-4 bg-slate-50 border-none rounded-2xl outline-none focus:ring-4 focus:ring-blue-500/5 font-bold"
             value={sourceCategoryId || ''}
@@ -133,12 +213,12 @@ export default function MoveTemplatesPage() {
             ))}
           </select>
           <div className="text-xs text-slate-400 font-bold">
-            {availableTemplates.length} mallia tässä osiossa
+            {availableTemplates.length} {c.templatesInSection}
           </div>
         </div>
 
         <div className="bg-white border shadow-sm rounded-[2rem] p-6 space-y-4">
-          <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">2. Siirrettävä malli</div>
+          <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{c.templateToMove}</div>
           <select
             className="w-full p-4 bg-slate-50 border-none rounded-2xl outline-none focus:ring-4 focus:ring-blue-500/5 font-bold"
             value={templateId || ''}
@@ -146,7 +226,7 @@ export default function MoveTemplatesPage() {
             disabled={loading || moving || availableTemplates.length === 0}
           >
             {availableTemplates.length === 0 ? (
-              <option value="">Ei malleja</option>
+              <option value="">{c.noTemplates}</option>
             ) : availableTemplates.map((template) => (
               <option key={template.id} value={template.id}>{template.title}</option>
             ))}
@@ -159,7 +239,7 @@ export default function MoveTemplatesPage() {
         </div>
 
         <div className="bg-white border shadow-sm rounded-[2rem] p-6 space-y-4">
-          <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">3. Kohdeosio</div>
+          <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{c.targetSection}</div>
           <select
             className="w-full p-4 bg-slate-50 border-none rounded-2xl outline-none focus:ring-4 focus:ring-blue-500/5 font-bold"
             value={targetCategoryId || ''}
@@ -167,7 +247,7 @@ export default function MoveTemplatesPage() {
             disabled={loading || moving || targetCategories.length === 0}
           >
             {targetCategories.length === 0 ? (
-              <option value="">Ei muita osioita</option>
+              <option value="">{c.noOtherSections}</option>
             ) : targetCategories.map((category) => (
               <option key={category.id} value={category.id}>{category.name}</option>
             ))}
@@ -179,11 +259,11 @@ export default function MoveTemplatesPage() {
         <div className="text-sm text-slate-500 font-bold">
           {selectedTemplate ? (
             <span>
-              Siirretään <span className="text-slate-900">{selectedTemplate.title}</span>
+              <span className="text-slate-900">{selectedTemplate.title}</span>
               <ChevronRight size={14} className="inline mx-2" />
-              <span className="text-slate-900">{categories.find((category) => category.id === targetCategoryId)?.name || 'kohdeosio'}</span>
+              <span className="text-slate-900">{categories.find((category) => category.id === targetCategoryId)?.name || c.targetPlaceholder}</span>
             </span>
-          ) : 'Valitse siirrettävä malli.'}
+          ) : c.chooseTemplate}
         </div>
         <button
           onClick={handleMove}
@@ -191,7 +271,7 @@ export default function MoveTemplatesPage() {
           className="px-8 py-4 bg-blue-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2 shadow-lg shadow-blue-100"
         >
           {moving ? <Loader2 size={14} className="animate-spin" /> : <MoveRight size={14} />}
-          Siirrä malli
+          {c.moveTemplate}
         </button>
       </div>
     </div>

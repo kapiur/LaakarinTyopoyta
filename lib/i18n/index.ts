@@ -9,10 +9,18 @@ export function translate(language: unknown, key: TranslationKey): string {
   const normalizedLanguage = normalizeUiLanguage(language);
   return (
     getNestedValue(dictionaries[normalizedLanguage], key) ??
+    getNestedValue(dictionaries.en, key) ??
     getNestedValue(dictionaries[DEFAULT_UI_LANGUAGE], key) ??
     key
   );
 }
 
 export type { TranslationKey, UiLanguage };
-export { DEFAULT_UI_LANGUAGE, SUPPORTED_UI_LANGUAGES, isSupportedUiLanguage, normalizeUiLanguage } from "./config";
+export {
+  DEFAULT_UI_LANGUAGE,
+  SUPPORTED_UI_LANGUAGES,
+  getLocalizedVariant,
+  getLocalizedText,
+  isSupportedUiLanguage,
+  normalizeUiLanguage,
+} from "./config";

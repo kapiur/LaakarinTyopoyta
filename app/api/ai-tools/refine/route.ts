@@ -6,6 +6,7 @@ import { getOpenAiClientForUser } from '../../../../lib/ai/providers/getOpenAiCl
 import { prisma } from '../../../../lib/prisma';
 import { preparePrivacyPayload } from '../../../../lib/privacy/gateway';
 import { hasCriticalPrivacyFindingTypes } from '../../../../lib/privacy/gateway/decision';
+import { buildWorkspaceContextInstruction, getUserAiWorkspaceContext, type AiWorkspaceContext } from '../../../../lib/ai/workspaceContext';
 import {
   buildUserAiProfileInstruction,
   defaultProfileModeForTool,
@@ -36,7 +37,7 @@ Säännöt:
 - Älä lisää kliinisiä tietoja, joita ei ole alkuperäisessä tekstissä, aiemmassa tuloksessa tai käyttäjän tarkennusohjeessa.
 - Älä kommentoi muutoksia erikseen.
 - Älä lisää otsikkoa, selityksiä tai markdown-kommentteja, ellei aiemmassa tuloksessa ollut sellaista rakennetta ja se on tarpeen säilyttää.
-- Lopullinen kliininen teksti kirjoitetaan suomeksi.
+- Säilytä aiemman tuloksen kieli, ellei käyttäjä nimenomaisesti pyydä toista kieltä. Jos joudut valitsemaan oletuskielen uudelle kliiniselle tekstille, käytä työtilan kliinistä vastauskieltä.
 - Palauta vain päivitetty valmis teksti.
 `;
 
@@ -44,8 +45,13 @@ function withPrivacyInstruction(systemPrompt: string) {
   return `${PRIVACY_PLACEHOLDER_SYSTEM_PROMPT}\n\n${systemPrompt}`;
 }
 
-function applyProfile(systemPrompt: string, profile: UserAiProfileRecord | null, profileMode: AiProfileMode) {
-  const profileInstruction = buildUserAiProfileInstruction(profile, profileMode);
+function applyProfile(
+  systemPrompt: string,
+  profile: UserAiProfileRecord | null,
+  profileMode: AiProfileMode,
+  workspaceContext?: AiWorkspaceContext,
+) {
+  const profileInstruction = buildUserAiProfileInstruction(profile, profileMode, workspaceContext);
   return withUserAiProfileInstruction(systemPrompt, profileInstruction);
 }
 
@@ -128,6 +134,7 @@ export async function POST(req: Request) {
     }
 
     const tool = await getToolPromptAndProfileMode(mode, userId);
+    const workspaceContext = await getUserAiWorkspaceContext(userId);
     if (!tool) {
       return NextResponse.json({ error: 'AI-työkalua ei löytynyt' }, { status: 404 });
     }
@@ -151,9 +158,13 @@ export async function POST(req: Request) {
     }
 
     const systemPrompt = withPrivacyInstruction(applyProfile(
-      `${REFINE_RESULT_SYSTEM_PROMPT}\n\nAlkuperäisen AI-työkalun system prompt kontekstina. Älä suorita tätä työkalua alusta asti, vaan käytä sitä vain ymmärtääksesi aiemman tuloksen tarkoituksen:\n${inputPrivacy.sanitized.toolPrompt}`,
+      `${buildWorkspaceContextInstruction(workspaceContext, {
+        preserveExistingLanguage: true,
+        contentLabel: 'refined clinical output',
+      })}\n\n${REFINE_RESULT_SYSTEM_PROMPT}\n\nAlkuperäisen AI-työkalun system prompt kontekstina. Älä suorita tätä työkalua alusta asti, vaan käytä sitä vain ymmärtääksesi aiemman tuloksen tarkoituksen:\n${inputPrivacy.sanitized.toolPrompt}`,
       userAiProfile,
       tool.profileMode,
+      workspaceContext,
     ));
 
     const userContent = `

@@ -1,3 +1,5 @@
+import type { ClinicalCountryCode } from "../countries/countryRegistry";
+
 export type ClinicalSourceType =
   | 'national_guideline'
   | 'medical_reference'
@@ -18,7 +20,7 @@ export type ClinicalSourceTrustLevel =
 
 export type ClinicalSourceSeed = {
   id: string;
-  country: 'FI' | 'RU';
+  country: ClinicalCountryCode;
   name: string;
   description?: string;
   sourceType: ClinicalSourceType;
@@ -136,8 +138,47 @@ export const CLINICAL_SOURCE_SEEDS: ClinicalSourceSeed[] = [
     language: ['ru'],
     isOfficial: true,
   },
+  {
+    id: 'de-awmf-guidelines',
+    country: 'DE',
+    name: 'AWMF Leitlinienregister',
+    description: 'Official German guideline register maintained by the Association of the Scientific Medical Societies in Germany (AWMF).',
+    sourceType: 'national_guideline',
+    trustLevel: 'primary_guideline',
+    priority: 1,
+    baseUrl: 'https://register.awmf.org/de/start',
+    allowedDomains: ['register.awmf.org', 'awmf.org', 'www.awmf.org'],
+    language: ['de'],
+    isOfficial: true,
+  },
+  {
+    id: 'de-bfarm-pharmnet',
+    country: 'DE',
+    name: 'BfArM / PharmNet.Bund',
+    description: 'Official German medicinal product and regulatory reference information from BfArM and PharmNet.Bund.',
+    sourceType: 'drug_database',
+    trustLevel: 'official_reference',
+    priority: 2,
+    baseUrl: 'https://www.bfarm.de/EN/Medicinal-products/_node.html',
+    allowedDomains: ['bfarm.de', 'www.bfarm.de', 'pharmnet-bund.de', 'www.pharmnet-bund.de'],
+    language: ['de', 'en'],
+    isOfficial: true,
+  },
+  {
+    id: 'de-rki',
+    country: 'DE',
+    name: 'Robert Koch-Institut (RKI)',
+    description: 'German federal public health authority for infection control, epidemiology, prevention, and population health guidance.',
+    sourceType: 'public_health_authority',
+    trustLevel: 'authority_instruction',
+    priority: 3,
+    baseUrl: 'https://www.rki.de',
+    allowedDomains: ['rki.de', 'www.rki.de'],
+    language: ['de', 'en'],
+    isOfficial: true,
+  },
 ];
 
-export function getDefaultClinicalSources(country: 'FI' | 'RU') {
+export function getDefaultClinicalSources(country: ClinicalCountryCode) {
   return CLINICAL_SOURCE_SEEDS.filter((source) => source.country === country && source.isOfficial);
 }

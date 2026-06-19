@@ -1,3 +1,5 @@
+import type { ClinicalCountryCode } from "../clinical/countries/countryRegistry";
+
 export type LiteratureStudyFilter = "all" | "guideline" | "review" | "trial" | "observational";
 export type LiteratureRegionFilter = "all" | "us" | "europe";
 export type LiteratureSearchSort = "relevance" | "newest" | "highest_evidence";
@@ -75,7 +77,7 @@ export type LiteratureGuidelineComparisonResult = {
   cautionPoints: string[];
   suggestedChecks: string[];
   searchQuery: string;
-  clinicalCountry: "FI" | "RU";
+  clinicalCountry: ClinicalCountryCode;
   displayLanguage: string;
   sources: LiteratureGuidelineComparisonSource[];
 };

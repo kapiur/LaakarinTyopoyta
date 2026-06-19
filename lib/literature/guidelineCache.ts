@@ -1,11 +1,12 @@
 import { Prisma } from "@prisma/client";
 import { createHash } from "crypto";
 import { prisma } from "../prisma";
+import type { ClinicalCountryCode } from "../clinical/countries/countryRegistry";
 
 export type CachedGuidelineDocument = {
   id: string;
   sourceId: string;
-  country: "FI" | "RU";
+  country: ClinicalCountryCode;
   externalId?: string;
   sourceUrl: string;
   title: string;
@@ -21,7 +22,7 @@ export type CachedGuidelineDocument = {
 
 export type UpsertGuidelineDocumentInput = {
   sourceId: string;
-  country: "FI" | "RU";
+  country: ClinicalCountryCode;
   externalId?: string;
   sourceUrl: string;
   title: string;
@@ -49,8 +50,9 @@ type GuidelineDocumentRow = {
   syncStatus: string;
 };
 
-function normalizeCountry(value: string): "FI" | "RU" {
-  return value === "RU" ? "RU" : "FI";
+function normalizeCountry(value: string): ClinicalCountryCode {
+  if (value === "RU" || value === "DE") return value;
+  return "FI";
 }
 
 function mapRow(row: GuidelineDocumentRow): CachedGuidelineDocument {
@@ -140,7 +142,7 @@ export async function upsertGuidelineDocuments(documents: UpsertGuidelineDocumen
 }
 
 export async function findCachedGuidelineDocuments(input: {
-  country: "FI" | "RU";
+  country: ClinicalCountryCode;
   sourceIds: string[];
   limit?: number;
 }) {

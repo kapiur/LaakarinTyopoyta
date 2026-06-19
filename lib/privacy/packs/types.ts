@@ -1,4 +1,4 @@
-export type PrivacyLocaleKey = 'fi' | 'ru' | 'en';
+export type PrivacyLocaleKey = 'fi' | 'ru' | 'en' | 'de';
 
 export type PrivacyLocalePack = {
   locale: PrivacyLocaleKey;

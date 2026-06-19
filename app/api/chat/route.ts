@@ -12,6 +12,7 @@ import { preparePrivacyPayload } from '../../../lib/privacy/gateway';
 import { hasCriticalPrivacyFindingTypes } from '../../../lib/privacy/gateway/decision';
 import { runAiCompletion } from '../../../lib/ai/runAiCompletion';
 import { DEFAULT_AI_MODEL, DEFAULT_AI_PROVIDER } from '../../../lib/ai/modelRegistry';
+import { buildWorkspaceContextInstruction, getUserAiWorkspaceContext, type AiWorkspaceContext } from '../../../lib/ai/workspaceContext';
 import {
   buildUserAiProfileInstruction,
   defaultProfileModeForTool,
@@ -32,7 +33,7 @@ If a placeholder appears inside source text, treat it as a generic person/detail
 const MAIN_CHAT_CLINICAL_AUDIENCE_PROMPT = `
 This chat is intended exclusively for physicians and other healthcare professionals using the system during clinical work.
 Do not answer as if the user were a patient, layperson, family member or general consumer unless the user explicitly asks you to draft patient-facing instructions.
-Assume the user needs clinical decision support, documentation support or practical workflow support in the Finnish healthcare context.
+Assume the user needs clinical decision support, documentation support or practical workflow support in the clinical-country context selected in the workspace.
 Use professional medical terminology and give concise, clinically actionable answers suitable for a doctor at a health centre, urgent care, ward or similar setting.
 When useful, structure the answer around differential diagnosis, key history, focused status, investigations, treatment, follow-up, red flags and referral/consultation thresholds.
 If patient-facing counselling is relevant, separate it clearly under a heading such as "Potilaalle annettava ohje" rather than making the whole answer patient-directed.
@@ -42,12 +43,26 @@ function withPrivacyInstruction(systemPrompt: string) {
   return `${PRIVACY_PLACEHOLDER_SYSTEM_PROMPT}\n\n${systemPrompt}`;
 }
 
-function withMainChatClinicalAudience(systemPrompt: string) {
-  return `${MAIN_CHAT_CLINICAL_AUDIENCE_PROMPT}\n\n${systemPrompt}`;
+function withWorkspaceInstruction(systemPrompt: string, workspaceContext: AiWorkspaceContext, options?: { preserveExistingLanguage?: boolean }) {
+  return `${buildWorkspaceContextInstruction(workspaceContext, {
+    preserveExistingLanguage: options?.preserveExistingLanguage ?? false,
+    contentLabel: 'clinician-facing output',
+  })}\n\n${systemPrompt}`;
 }
 
-function applyProfile(systemPrompt: string, profile: UserAiProfileRecord | null, profileMode: AiProfileMode) {
-  const profileInstruction = buildUserAiProfileInstruction(profile, profileMode);
+function withMainChatClinicalAudience(systemPrompt: string, workspaceContext: AiWorkspaceContext) {
+  return `${buildWorkspaceContextInstruction(workspaceContext, {
+    contentLabel: 'clinician-facing chat output',
+  })}\n\n${MAIN_CHAT_CLINICAL_AUDIENCE_PROMPT}\n\n${systemPrompt}`;
+}
+
+function applyProfile(
+  systemPrompt: string,
+  profile: UserAiProfileRecord | null,
+  profileMode: AiProfileMode,
+  workspaceContext?: AiWorkspaceContext,
+) {
+  const profileInstruction = buildUserAiProfileInstruction(profile, profileMode, workspaceContext);
   return withUserAiProfileInstruction(systemPrompt, profileInstruction);
 }
 
@@ -143,6 +158,7 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { messages, text, mode, customPrompt } = body;
     const userAiProfile = await getUserAiProfile(userId);
+    const workspaceContext = await getUserAiWorkspaceContext(userId);
     const messageArray = Array.isArray(messages) ? messages : null;
 
     const directTextMode = typeof mode === 'string' ? 'clinicalTransform' as const : 'transientClinicalChat' as const;
@@ -156,14 +172,30 @@ export async function POST(req: Request) {
 
     if (customPrompt && text) {
       finalMessages = [
-        { role: 'system', content: withPrivacyInstruction(applyProfile(chatGateway.sanitized.customPrompt, userAiProfile, 'full')) },
+        {
+          role: 'system',
+          content: withPrivacyInstruction(
+            withWorkspaceInstruction(
+              applyProfile(chatGateway.sanitized.customPrompt, userAiProfile, 'full', workspaceContext),
+              workspaceContext,
+            ),
+          ),
+        },
         { role: 'user', content: chatGateway.sanitized.text },
       ];
     }
     else if (text && mode && DEFAULT_AI_TOOL_PROMPTS[mode as keyof typeof DEFAULT_AI_TOOL_PROMPTS]) {
       const defaultMode = defaultProfileModeForTool(mode);
       finalMessages = [
-        { role: 'system', content: withPrivacyInstruction(applyProfile(DEFAULT_AI_TOOL_PROMPTS[mode as keyof typeof DEFAULT_AI_TOOL_PROMPTS], userAiProfile, defaultMode)) },
+        {
+          role: 'system',
+          content: withPrivacyInstruction(
+            withWorkspaceInstruction(
+              applyProfile(DEFAULT_AI_TOOL_PROMPTS[mode as keyof typeof DEFAULT_AI_TOOL_PROMPTS], userAiProfile, defaultMode, workspaceContext),
+              workspaceContext,
+            ),
+          ),
+        },
         { role: 'user', content: chatGateway.sanitized.text },
       ];
     }
@@ -196,7 +228,15 @@ export async function POST(req: Request) {
       };
 
       finalMessages = [
-        { role: 'system', content: withPrivacyInstruction(applyProfile(toolGateway.sanitized.userToolPrompt, userAiProfile, userTool.profileMode)) },
+        {
+          role: 'system',
+          content: withPrivacyInstruction(
+            withWorkspaceInstruction(
+              applyProfile(toolGateway.sanitized.userToolPrompt, userAiProfile, userTool.profileMode, workspaceContext),
+              workspaceContext,
+            ),
+          ),
+        },
         { role: 'user', content: chatGateway.sanitized.text },
       ];
     }
@@ -206,9 +246,23 @@ export async function POST(req: Request) {
       privacy = messagePrivacy;
 
       if (lastMessage.toLowerCase().startsWith('malli:')) {
-        finalMessages = [{ role: 'system', content: withPrivacyInstruction(applyProfile(SYSTEM_PROMPT_MALLI, userAiProfile, 'styleOnly')) }, ...sanitizedMessages];
+        finalMessages = [{
+          role: 'system',
+          content: withPrivacyInstruction(
+            withWorkspaceInstruction(
+              applyProfile(SYSTEM_PROMPT_MALLI, userAiProfile, 'styleOnly', workspaceContext),
+              workspaceContext,
+              { preserveExistingLanguage: true },
+            ),
+          ),
+        }, ...sanitizedMessages];
       } else {
-        finalMessages = [{ role: 'system', content: withPrivacyInstruction(applyProfile(withMainChatClinicalAudience(SYSTEM_PROMPT_MEDICAL), userAiProfile, 'full')) }, ...sanitizedMessages];
+        finalMessages = [{
+          role: 'system',
+          content: withPrivacyInstruction(
+            applyProfile(withMainChatClinicalAudience(SYSTEM_PROMPT_MEDICAL, workspaceContext), userAiProfile, 'full', workspaceContext),
+          ),
+        }, ...sanitizedMessages];
       }
     } else {
       return NextResponse.json({ error: 'Puuttuvat tiedot' }, { status: 400 });

@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
+import { getLocalizedVariant } from "../lib/i18n";
 import { useI18n } from "../lib/useI18n";
 
 const copy = {
@@ -74,6 +75,29 @@ const copy = {
       "values such as ei/kyllä remain in Finnish",
     ],
   },
+  de: {
+    titles: ["Syntax-Kurzreferenz", "Vorlagensyntax"],
+    title: "Vorlagensyntax",
+    intro: "Eine Vorlage besteht aus normalem Text und Feldern in geschweiften Klammern {{...}}. Unten stehen die häufigsten Anwendungsformen.",
+    examplesTitle: "Beispiele",
+    rulesTitle: "Regeln",
+    importantTitle: "Wichtig",
+    important: "Die Sprache der Benutzeroberfläche kann wechseln, aber technischer Vorlagensyntax, Feldwerte und der endgültige medizinische Text bleiben auf Finnisch.",
+    examples: [
+      ["Einzeiliges Feld", "{{oire}}", "Ein kurzes Freitextfeld, zum Beispiel für ein Symptom oder einen Teil des Status."],
+      ["Mehrzeiliges Textfeld", "{{statuskuvaus:textarea}}", "Für längeren Freitext, zum Beispiel statuskuvaus oder suunnitelma."],
+      ["Auswahlfeld", "{{kipu:select:ei,kyllä}}", "Zeigt vordefinierte Optionen. Die Optionen werden durch Kommas getrennt geschrieben."],
+      ["Bedingtes Feld", "{{kipukuvaus:textarea:showIf:kipu=kyllä}}", "Das Feld wird nur angezeigt, wenn im Feld kipu der Wert kyllä gewählt ist."],
+    ],
+    rules: [
+      "technische Feldnamen werden in lateinischen Zeichen geschrieben",
+      "keine Leerzeichen verwenden — falls nötig _ benutzen",
+      "Feldtypen sind input, textarea und select",
+      "select-Optionen werden durch Kommas getrennt",
+      "showIf zeigt ein Feld nur bei erfüllter Bedingung an",
+      "Werte wie ei/kyllä bleiben auf Finnisch",
+    ],
+  },
 } as const;
 
 function makeEl<K extends keyof HTMLElementTagNameMap>(tag: K, className?: string, text?: string) {
@@ -89,7 +113,7 @@ export default function MalliSyntaxHelpEnhancer() {
 
   useEffect(() => {
     if (!pathname.startsWith("/malli")) return;
-    const c = copy[language] ?? copy.fi;
+    const c = getLocalizedVariant(copy, language) ?? copy.en;
 
     const enhance = () => {
       const headings = Array.from(document.querySelectorAll("h2"));

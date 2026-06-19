@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "../../../../../lib/auth";
 import { getOpenAiClientForUser } from "../../../../../lib/ai/providers/getOpenAiClientForUser";
+import { buildWorkspaceContextInstruction, getUserAiWorkspaceContext } from "../../../../../lib/ai/workspaceContext";
 import { preparePrivacyPayload } from "../../../../../lib/privacy/gateway";
 import { hasCriticalPrivacyFindingTypes } from "../../../../../lib/privacy/gateway/decision";
 import { sanitizeJsonValue } from "../../../../../lib/privacy/structured/sanitizeJsonValue";
@@ -35,6 +36,7 @@ export async function POST(req: Request) {
     if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const userId = Number((session?.user as any)?.id);
     if (!Number.isFinite(userId)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const workspaceContext = await getUserAiWorkspaceContext(userId);
     const { client, model } = await getOpenAiClientForUser(userId);
 
     const body = await req.json();
@@ -65,10 +67,14 @@ export async function POST(req: Request) {
     }
 
     const systemPrompt = `
-Olet kliininen tekstin tiivistäjä. Poimi annetusta fragmentista vain asiat, joista on hyötyä Terveysasema-lääkärin nopeassa Pikaohjeessa.
+${buildWorkspaceContextInstruction(workspaceContext, {
+  contentLabel: "Pikaohje chunk summary",
+})}
+
+Olet kliininen tekstin tiivistäjä. Poimi annetusta fragmentista vain asiat, joista on hyötyä perusterveydenhuollon lääkärin nopeassa Pikaohjeessa valitun kliinisen maan kontekstissa.
 
 Älä tee lopullista ohjekorttia. Älä kirjoita teoriaa. Älä keksi mitään. Säilytä vain toiminnallinen kliininen sisältö.
-Palauta tiivis suomenkielinen JSON:
+Palauta tiivis JSON työtilan kliinisellä vastauskielellä:
 {
   "chunkIndex": number,
   "topic": "aihe",
