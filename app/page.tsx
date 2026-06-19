@@ -465,14 +465,16 @@ export default function Dashboard() {
               ) : (
                 <div className="text-xs text-slate-500">{t("dashboard.noVisibleAiTools")}</div>
               )}
-              <button
-                type="button"
-                onClick={() => attachToAgent("sourceText")}
-                disabled={!toolText.trim()}
-                className="ml-auto flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 hover:border-blue-300 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                <MessageSquareShare size={15} /> {t("dashboard.attachSourceToAgent")}
-              </button>
+              {!toolResult && (
+                <button
+                  type="button"
+                  onClick={() => attachToAgent("sourceText")}
+                  disabled={!toolText.trim()}
+                  className="ml-auto flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 hover:border-blue-300 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <MessageSquareShare size={15} /> {t("dashboard.attachSourceToAgent")}
+                </button>
+              )}
             </div>
           </div>
 
