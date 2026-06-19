@@ -8,7 +8,8 @@ export type CalculatorWorkspaceModuleId =
   | "calculator:cad";
 
 export type TemplateWorkspaceModuleId = `template:${number}`;
-export type InlineWorkspaceModuleId = CalculatorWorkspaceModuleId | TemplateWorkspaceModuleId;
+export type RouteWorkspaceModuleId = "route:literature";
+export type InlineWorkspaceModuleId = CalculatorWorkspaceModuleId | TemplateWorkspaceModuleId | RouteWorkspaceModuleId;
 export type WorkspaceModuleId = "text" | InlineWorkspaceModuleId;
 
 export const inlineWorkspaceModules = {
@@ -62,7 +63,7 @@ export const inlineWorkspaceModules = {
 }>;
 
 export function isInlineWorkspaceActionId(actionId: string): actionId is InlineWorkspaceModuleId {
-  return actionId in inlineWorkspaceModules || /^template:\d+$/.test(actionId);
+  return actionId in inlineWorkspaceModules || /^template:\d+$/.test(actionId) || actionId === "route:literature";
 }
 
 export function isTemplateWorkspaceModuleId(moduleId: string): moduleId is TemplateWorkspaceModuleId {

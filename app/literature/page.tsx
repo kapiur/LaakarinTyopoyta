@@ -8,6 +8,7 @@ import {
   Globe,
   Languages,
   Loader2,
+  MessageSquareShare,
   Microscope,
   ShieldCheck,
   Sparkles,
@@ -76,6 +77,13 @@ type SearchOverrides = Partial<{
 }>;
 
 const DEFAULT_VISIBLE_LIMIT = 12;
+
+const workspaceLabels = {
+  fi: { discuss: "Keskustele artikkelista AI:n kanssa" },
+  ru: { discuss: "Обсудить статью с AI" },
+  en: { discuss: "Discuss article with AI" },
+  de: { discuss: "Artikel mit AI besprechen" },
+} as const;
 
 function buildInterpretationKey(pmid: string, mode: InterpretationMode) {
   return `${pmid}:${mode}`;
@@ -217,8 +225,15 @@ function stripServiceScaffolding(value: string) {
   return normalized;
 }
 
-export default function LiteraturePage() {
+export default function LiteraturePage({
+  embedded = false,
+  onDiscussResult,
+}: {
+  embedded?: boolean;
+  onDiscussResult?: (content: string, contextLabel?: string) => void;
+}) {
   const { t, language } = useI18n();
+  const workspaceCopy = workspaceLabels[language as keyof typeof workspaceLabels] ?? workspaceLabels.en;
   const [query, setQuery] = useState("");
   const [yearsBack, setYearsBack] = useState("5");
   const [studyFilter, setStudyFilter] = useState("all");
@@ -524,6 +539,36 @@ export default function LiteraturePage() {
         : "";
   const currentFollowUpValue = currentInterpretationKey ? followUpDrafts[currentInterpretationKey] ?? "" : "";
 
+  const currentDiscussionContent = useMemo(() => {
+    if (!selectedArticle) return "";
+
+    const articleText = buildArticleCurrentText(selectedArticle);
+    const interpretationText =
+      viewMode === "translation"
+        ? selectedTranslation?.translatedText || selectedTranslation?.translatedAbstract || ""
+        : viewMode === "summary"
+          ? buildSummaryDraftText(selectedSummary)
+          : "";
+    const guidelineText = selectedGuidelineComparison
+      ? [
+          "Guideline comparison",
+          `Verdict: ${selectedGuidelineComparison.verdict}`,
+          selectedGuidelineComparison.comparisonSummary,
+          selectedGuidelineComparison.agreementPoints.length > 0
+            ? `Agreement:\n${selectedGuidelineComparison.agreementPoints.map((item) => `- ${item}`).join("\n")}`
+            : "",
+          selectedGuidelineComparison.cautionPoints.length > 0
+            ? `Cautions:\n${selectedGuidelineComparison.cautionPoints.map((item) => `- ${item}`).join("\n")}`
+            : "",
+          selectedGuidelineComparison.sources.length > 0
+            ? `Official sources:\n${selectedGuidelineComparison.sources.map((source) => `- ${source.sourceTitle}: ${source.sourceUrl}`).join("\n")}`
+            : "",
+        ].filter(Boolean).join("\n\n")
+      : "";
+
+    return [articleText, interpretationText, guidelineText].filter(Boolean).join("\n\n---\n\n");
+  }, [selectedArticle, selectedGuidelineComparison, selectedSummary, selectedTranslation, viewMode]);
+
   async function submitFollowUp() {
     if (!selectedArticle || viewMode === "original" || !currentInterpretationKey) return;
 
@@ -630,8 +675,8 @@ export default function LiteraturePage() {
   }
 
   return (
-    <div className="space-y-6">
-      <header className="bg-white border border-slate-200 rounded-[2rem] p-8 shadow-sm">
+    <div className={embedded ? "space-y-4 p-4" : "space-y-6"}>
+      {!embedded && <header className="bg-white border border-slate-200 rounded-[2rem] p-8 shadow-sm">
         <div className="flex items-start gap-4">
           <div className="w-14 h-14 rounded-2xl bg-slate-900 text-white flex items-center justify-center shadow-lg">
             <BookText size={26} />
@@ -641,7 +686,7 @@ export default function LiteraturePage() {
             <p className="text-sm text-slate-500 mt-1 max-w-3xl">{t("literature.subtitle")}</p>
           </div>
         </div>
-      </header>
+      </header>}
 
       {error && (
         <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
@@ -649,8 +694,8 @@ export default function LiteraturePage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
-        <section className="xl:col-span-3 space-y-6">
+      <div className={embedded ? "grid grid-cols-1 gap-4 lg:grid-cols-2" : "grid grid-cols-1 xl:grid-cols-12 gap-6"}>
+        <section className={embedded ? "grid grid-cols-1 gap-4 lg:col-span-2 lg:grid-cols-2" : "xl:col-span-3 space-y-6"}>
           <form onSubmit={runSearch} className="bg-white border border-slate-200 rounded-[2rem] p-6 shadow-sm space-y-5">
             <div>
               <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
@@ -960,7 +1005,7 @@ export default function LiteraturePage() {
           </section>
         </section>
 
-        <section className="xl:col-span-4 bg-white border border-slate-200 rounded-[2rem] shadow-sm overflow-hidden">
+        <section className={embedded ? "overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm" : "xl:col-span-4 bg-white border border-slate-200 rounded-[2rem] shadow-sm overflow-hidden"}>
           <div className="px-6 py-5 border-b border-slate-100">
             <h2 className="text-lg font-bold text-slate-900">{results ? `${results.total} ${t("literature.resultCount")}` : t("literature.emptyTitle")}</h2>
             <p className="text-sm text-slate-500 mt-1">
@@ -1078,7 +1123,7 @@ export default function LiteraturePage() {
           </div>
         </section>
 
-        <section className="xl:col-span-5 bg-white border border-slate-200 rounded-[2rem] shadow-sm overflow-hidden">
+        <section className={embedded ? "overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm" : "xl:col-span-5 bg-white border border-slate-200 rounded-[2rem] shadow-sm overflow-hidden"}>
           <div className="px-6 py-5 border-b border-slate-100 space-y-4">
             <div>
               <div className="text-xs font-bold uppercase tracking-wider text-slate-500">{t("literature.selectedArticle")}</div>
@@ -1103,6 +1148,17 @@ export default function LiteraturePage() {
                 >
                   {t("literature.original")}
                 </button>
+                {onDiscussResult && (
+                  <button
+                    type="button"
+                    onClick={() => onDiscussResult(currentDiscussionContent, selectedArticle.title)}
+                    disabled={!currentDiscussionContent}
+                    className="inline-flex items-center gap-2 rounded-md border border-blue-200 bg-white px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-50 disabled:opacity-40"
+                  >
+                    <MessageSquareShare size={13} />
+                    {workspaceCopy.discuss}
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => loadInterpretation("translation")}
@@ -1189,7 +1245,7 @@ export default function LiteraturePage() {
                 <div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm leading-relaxed text-slate-700 whitespace-pre-line">
                   {selectedTranslation?.translatedText || selectedTranslation?.translatedAbstract || t("literature.translationEmpty")}
                 </div>
-                {currentInterpretationKey && currentInterpretationText && (
+                {!embedded && currentInterpretationKey && currentInterpretationText && (
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3">
                     <div>
                       <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{t("literature.followUpTitle")}</div>
@@ -1286,7 +1342,7 @@ export default function LiteraturePage() {
                   </div>
                 )}
 
-                {currentInterpretationKey && currentInterpretationText && (
+                {!embedded && currentInterpretationKey && currentInterpretationText && (
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3">
                     <div>
                       <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{t("literature.followUpTitle")}</div>

@@ -26,6 +26,7 @@ const VteCalculator = dynamic(() => import("../../app/calculators/vte/page"), { 
 const AbgCalculator = dynamic(() => import("../../app/calculators/abg/page"), { loading: Loading });
 const CadCalculator = dynamic(() => import("../../app/calculators/cad/page"), { loading: Loading });
 const TemplateFill = dynamic(() => import("../../app/templates/fill/page"), { loading: Loading });
+const LiteratureWorkspace = dynamic(() => import("../../app/literature/page"), { loading: Loading });
 
 const calculatorComponents: Record<CalculatorWorkspaceModuleId, ComponentType<EmbeddedCalculatorProps>> = {
   "calculator:bmi": BmiCalculator,
@@ -38,10 +39,10 @@ const calculatorComponents: Record<CalculatorWorkspaceModuleId, ComponentType<Em
 };
 
 const labels = {
-  fi: { back: "Takaisin tekstityökaluun", open: "Avaa omalla sivulla", loading: "Ladataan työkalua", template: "Tekstimalli" },
-  ru: { back: "Вернуться к работе с текстом", open: "Открыть отдельно", loading: "Загрузка инструмента", template: "Текстовый шаблон" },
-  en: { back: "Back to text workspace", open: "Open separately", loading: "Loading tool", template: "Text template" },
-  de: { back: "Zurück zum Textarbeitsbereich", open: "Separat öffnen", loading: "Werkzeug wird geladen", template: "Textvorlage" },
+  fi: { back: "Takaisin tekstityökaluun", open: "Avaa omalla sivulla", loading: "Ladataan työkalua", template: "Tekstimalli", literature: "Kirjallisuushaku" },
+  ru: { back: "Вернуться к работе с текстом", open: "Открыть отдельно", loading: "Загрузка инструмента", template: "Текстовый шаблон", literature: "Поиск литературы" },
+  en: { back: "Back to text workspace", open: "Open separately", loading: "Loading tool", template: "Text template", literature: "Literature search" },
+  de: { back: "Zurück zum Textarbeitsbereich", open: "Separat öffnen", loading: "Werkzeug wird geladen", template: "Textvorlage", literature: "Literatursuche" },
 } as const;
 
 function Loading() {
@@ -62,11 +63,14 @@ export default function WorkspaceModuleHost({
   const { language } = useI18n();
   const copy = labels[language as keyof typeof labels] ?? labels.fi;
   const templateModule = isTemplateWorkspaceModuleId(moduleId);
-  const definition = templateModule
-    ? { label: copy.template, href: `/malli?templateId=${getTemplateIdFromWorkspaceModule(moduleId)}`, icon: "FileText" }
-    : inlineWorkspaceModules[moduleId];
+  const literatureModule = moduleId === "route:literature";
+  const definition = literatureModule
+    ? { label: copy.literature, href: "/literature", icon: "BookText" }
+    : templateModule
+      ? { label: copy.template, href: `/malli?templateId=${getTemplateIdFromWorkspaceModule(moduleId)}`, icon: "FileText" }
+      : inlineWorkspaceModules[moduleId];
   const Icon = homeActionIconMap[definition.icon as keyof typeof homeActionIconMap] ?? FileText;
-  const CalculatorComponent = templateModule ? null : calculatorComponents[moduleId];
+  const CalculatorComponent = templateModule || literatureModule ? null : calculatorComponents[moduleId];
 
   return (
     <section className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
@@ -83,7 +87,12 @@ export default function WorkspaceModuleHost({
           <ExternalLink size={14} /> {copy.open}
         </Link>
       </header>
-      {templateModule ? (
+      {literatureModule ? (
+        <LiteratureWorkspace
+          embedded
+          onDiscussResult={(content, contextLabel) => onDiscussResult(content, moduleId, contextLabel || definition.label)}
+        />
+      ) : templateModule ? (
         <TemplateFill
           embedded
           initialTemplateId={getTemplateIdFromWorkspaceModule(moduleId)}
