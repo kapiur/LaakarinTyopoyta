@@ -30,6 +30,7 @@ import {
 import TemplateFieldControl from '../../../components/templates/TemplateFieldControl';
 import TemplateSnippetBuilder from '../../../components/templates/TemplateSnippetBuilder';
 import TemplateAiPolishModal from '../../../components/templates/TemplateAiPolishModal';
+import { recordWorkspaceActivity } from '../../../lib/dashboard/workspaceActivityClient';
 import { useI18n } from '../../../lib/useI18n';
 
 const emptyForm: TemplateFormData = {
@@ -509,7 +510,7 @@ export default function TemplatesRedesignPage() {
               {filteredTemplates.length === 0 ? (
                 <div className="p-6 text-sm text-slate-300 font-bold text-center">{c.noTemplates}</div>
               ) : filteredTemplates.map((template) => (
-                <button key={template.id} type="button" onClick={() => setSelectedTemplateId(template.id)} className={`w-full text-left p-4 rounded-2xl border transition-all ${selectedTemplateId === template.id ? 'bg-slate-900 text-white border-slate-900 shadow-lg shadow-slate-200' : 'bg-white border-slate-50 hover:border-blue-200 hover:bg-blue-50/30'}`}>
+                <button key={template.id} type="button" onClick={() => { setSelectedTemplateId(template.id); recordWorkspaceActivity(`template:${template.id}`); }} className={`w-full text-left p-4 rounded-2xl border transition-all ${selectedTemplateId === template.id ? 'bg-slate-900 text-white border-slate-900 shadow-lg shadow-slate-200' : 'bg-white border-slate-50 hover:border-blue-200 hover:bg-blue-50/30'}`}>
                   <div className="font-black text-sm truncate">{template.title}</div>
                   <div className={`text-[9px] font-black uppercase tracking-widest mt-1 ${selectedTemplateId === template.id ? 'text-white/40' : 'text-slate-300'}`}>{activeCategory?.name || c.sections}</div>
                 </button>

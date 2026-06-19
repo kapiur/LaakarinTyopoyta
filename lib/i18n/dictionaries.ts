@@ -130,6 +130,8 @@ export const dictionaries = {
       quickActionGuidesDescription: "Avaa kliiniset pikaohjeet.",
       quickActionMedicinesDescription: "Avaa lääketietohaku.",
       quickActionLinksDescription: "Avaa omat kliiniset linkit.",
+      recentActions: "Viimeksi käytetyt",
+      clearRecentActions: "Tyhjennä viimeksi käytetyt",
     },
     aiTools: {
       title: "Omat AI-työkalut",
@@ -432,6 +434,8 @@ export const dictionaries = {
       quickActionGuidesDescription: "Открыть клинические быстрые инструкции.",
       quickActionMedicinesDescription: "Открыть поиск лекарственной информации.",
       quickActionLinksDescription: "Открыть персональные клинические ссылки.",
+      recentActions: "Недавние",
+      clearRecentActions: "Очистить недавние действия",
     },
     aiTools: {
       title: "Мои AI-инструменты",
@@ -734,6 +738,8 @@ export const dictionaries = {
       quickActionGuidesDescription: "Open clinical quick guides.",
       quickActionMedicinesDescription: "Open medicine information search.",
       quickActionLinksDescription: "Open personal clinical links.",
+      recentActions: "Recent",
+      clearRecentActions: "Clear recent actions",
     },
     aiTools: {
       title: "My AI tools",
@@ -1036,6 +1042,8 @@ export const dictionaries = {
       quickActionGuidesDescription: "Klinische Kurzanleitungen öffnen.",
       quickActionMedicinesDescription: "Arzneimittelinformationen öffnen.",
       quickActionLinksDescription: "Persönliche klinische Links öffnen.",
+      recentActions: "Zuletzt verwendet",
+      clearRecentActions: "Zuletzt verwendete Aktionen löschen",
     },
     literature: {
       title: "Literatur und Evidenz",

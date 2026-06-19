@@ -3,34 +3,21 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
-  Activity,
-  Baby,
-  BookText,
-  Bot,
-  Calculator,
   ChevronDown,
   ChevronUp,
   FileText,
-  FlaskConical,
-  Heart,
-  Languages,
-  Link as LinkIcon,
-  ListChecks,
   Loader2,
-  Pill,
   Plus,
   Save,
-  Scissors,
   Search,
-  ShieldAlert,
   SlidersHorizontal,
-  Stethoscope,
-  Wind,
   X,
   Zap,
 } from "lucide-react";
+import { recordWorkspaceActivity, WORKSPACE_ACTIVITY_EVENT } from "../../lib/dashboard/workspaceActivityClient";
 import type { TranslationKey } from "../../lib/i18n";
 import { useI18n } from "../../lib/useI18n";
+import { homeActionIconMap } from "./homeActionIcons";
 
 export type HomeQuickAction = {
   id: string;
@@ -43,26 +30,6 @@ export type HomeQuickAction = {
   href?: string;
   icon: string;
   group: "route" | "calculator" | "template" | "aiTool";
-};
-
-const iconMap = {
-  Activity,
-  Baby,
-  BookText,
-  Bot,
-  Calculator,
-  FileText,
-  FlaskConical,
-  Heart,
-  Languages,
-  LinkIcon,
-  ListChecks,
-  Pill,
-  Scissors,
-  ShieldAlert,
-  Stethoscope,
-  Wind,
-  Zap,
 };
 
 function moveItem(items: HomeQuickAction[], index: number, direction: -1 | 1) {
@@ -166,6 +133,7 @@ export default function QuickActionsBar({
       setSelected(nextSelected);
       setDraft(nextSelected);
       setOpen(false);
+      window.dispatchEvent(new Event(WORKSPACE_ACTIVITY_EVENT));
     } catch (saveError) {
       console.error("Home quick actions saving failed", saveError);
       setError(t("dashboard.quickActionsSaveFailed"));
@@ -175,7 +143,10 @@ export default function QuickActionsBar({
   }
 
   function activate(item: HomeQuickAction) {
-    if (item.type === "aiTool") onSelectAiTool(item.key);
+    if (item.type === "aiTool") {
+      recordWorkspaceActivity(item.id);
+      onSelectAiTool(item.key);
+    }
   }
 
   return (
@@ -191,14 +162,19 @@ export default function QuickActionsBar({
             </span>
           ) : selected.length > 0 ? (
             selected.map((item) => {
-              const Icon = iconMap[item.icon as keyof typeof iconMap] ?? FileText;
+              const Icon = homeActionIconMap[item.icon as keyof typeof homeActionIconMap] ?? FileText;
               const className = `flex shrink-0 items-center gap-2 rounded-md px-3 py-2 text-xs font-bold transition-colors ${
                 item.type === "aiTool" && item.key === activeAiToolKey
                   ? "bg-blue-50 text-blue-700"
                   : "text-slate-600 hover:bg-blue-50 hover:text-blue-700"
               }`;
               return item.href ? (
-                <Link key={item.id} href={item.href} className={className}>
+                <Link
+                  key={item.id}
+                  href={item.href}
+                  onClick={() => item.type === "template" && recordWorkspaceActivity(item.id)}
+                  className={className}
+                >
                   <Icon size={15} /> {localizedLabel(item)}
                 </Link>
               ) : (
@@ -246,7 +222,7 @@ export default function QuickActionsBar({
                 <h3 className="mb-3 text-xs font-black uppercase text-slate-500">{t("dashboard.selectedQuickActions")}</h3>
                 <div className="divide-y divide-slate-100 border-y border-slate-100">
                   {draft.map((item, index) => {
-                    const Icon = iconMap[item.icon as keyof typeof iconMap] ?? FileText;
+                    const Icon = homeActionIconMap[item.icon as keyof typeof homeActionIconMap] ?? FileText;
                     return (
                       <div key={item.id} className="flex items-center gap-3 py-2.5">
                         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-blue-50 text-blue-600"><Icon size={16} /></div>
@@ -278,7 +254,7 @@ export default function QuickActionsBar({
                       <h3 className="mb-2 text-xs font-black uppercase text-slate-500">{t(`dashboard.quickActionGroup${group === "aiTool" ? "Ai" : group === "calculator" ? "Calculators" : group === "template" ? "Templates" : "Workspace"}` as TranslationKey)}</h3>
                       <div className="divide-y divide-slate-100 border-y border-slate-100">
                         {items.map((item) => {
-                          const Icon = iconMap[item.icon as keyof typeof iconMap] ?? FileText;
+                          const Icon = homeActionIconMap[item.icon as keyof typeof homeActionIconMap] ?? FileText;
                           return (
                             <button
                               key={item.id}

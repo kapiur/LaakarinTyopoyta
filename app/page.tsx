@@ -24,7 +24,9 @@ import {
 } from "lucide-react";
 import PrivacyNotice from "../components/PrivacyNotice";
 import QuickActionsBar from "../components/dashboard/QuickActionsBar";
+import RecentActionsBar from "../components/dashboard/RecentActionsBar";
 import { DEFAULT_AI_TOOL_METADATA, type DefaultAiToolMetadata } from "../lib/ai/toolMetadata";
+import { recordWorkspaceActivity } from "../lib/dashboard/workspaceActivityClient";
 import type { TranslationKey } from "../lib/i18n";
 import { useI18n } from "../lib/useI18n";
 
@@ -302,6 +304,7 @@ export default function Dashboard() {
   async function processToolText(selectedMode: string) {
     if (!toolText.trim() || isToolLoading || isRefiningToolResult) return;
     setToolMode(selectedMode);
+    recordWorkspaceActivity(`aiTool:${selectedMode}`);
     if (agentAttachment) clearAttachedContext();
     setIsToolLoading(true);
     setToolPrivacy(null);
@@ -399,6 +402,7 @@ export default function Dashboard() {
       </section>
 
       <QuickActionsBar activeAiToolKey={toolMode} onSelectAiTool={selectQuickAiTool} />
+      <RecentActionsBar onSelectAiTool={selectQuickAiTool} onRestoreAiTool={setToolMode} />
 
       <div className={`grid min-w-0 gap-4 ${assistantOpen ? "xl:grid-cols-[minmax(0,1fr)_360px]" : "grid-cols-1"}`}>
         <section className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">

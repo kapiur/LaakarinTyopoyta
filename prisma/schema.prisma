@@ -40,6 +40,7 @@ model User {
   calculatorPreferences UserCalculatorPreference[]
   sidebarPreferences SidebarMenuPreference[]
   homeQuickActions UserHomeQuickAction[]
+  workspaceActivities UserWorkspaceActivity[]
   history         AIHistory[]
   aiRunAuditLogs  AiRunAuditLog[]
   aiTools         AiTool[]
@@ -187,6 +188,22 @@ model UserHomeQuickAction {
 
   @@unique([userId, actionType, actionKey])
   @@index([userId, customOrder])
+}
+
+model UserWorkspaceActivity {
+  // Metadata only: never store patient text, prompts, AI output, literature queries, or calculator inputs.
+  id         String   @id @default(cuid())
+  userId     Int
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  actionType String
+  actionKey  String
+  useCount   Int      @default(1)
+  lastUsedAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([userId, actionType, actionKey])
+  @@index([userId, lastUsedAt])
 }
 
 model AIHistory {
