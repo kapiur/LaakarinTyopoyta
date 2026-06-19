@@ -39,6 +39,7 @@ model User {
   pedsIndications PedsIndication[]
   calculatorPreferences UserCalculatorPreference[]
   sidebarPreferences SidebarMenuPreference[]
+  homeQuickActions UserHomeQuickAction[]
   history         AIHistory[]
   aiRunAuditLogs  AiRunAuditLog[]
   aiTools         AiTool[]
@@ -172,6 +173,20 @@ model SidebarMenuPreference {
 
   @@unique([userId, itemKey])
   @@index([userId])
+}
+
+model UserHomeQuickAction {
+  id          String   @id @default(cuid())
+  userId      Int
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  actionType  String
+  actionKey   String
+  customOrder Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([userId, actionType, actionKey])
+  @@index([userId, customOrder])
 }
 
 model AIHistory {
