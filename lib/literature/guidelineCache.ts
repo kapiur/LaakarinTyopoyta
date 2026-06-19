@@ -1,4 +1,3 @@
-import { Prisma } from "@prisma/client";
 import { createHash } from "crypto";
 import { prisma } from "../prisma";
 import type { ClinicalCountryCode } from "../clinical/countries/countryRegistry";
@@ -148,28 +147,35 @@ export async function findCachedGuidelineDocuments(input: {
 }) {
   if (input.sourceIds.length === 0) return [];
 
-  const rows = await prisma.$queryRaw<GuidelineDocumentRow[]>(Prisma.sql`
-    SELECT
-      "id",
-      "sourceId",
-      "country",
-      "externalId",
-      "sourceUrl",
-      "title",
-      "searchQuery",
-      "publishedAt",
-      "rawText",
-      "normalizedText",
-      "contentHash",
-      "retrievedAt",
-      "lastSyncedAt",
-      "syncStatus"
-    FROM "GuidelineDocument"
-    WHERE "country" = ${input.country}
-      AND "sourceId" IN (${Prisma.join(input.sourceIds)})
-    ORDER BY "lastSyncedAt" DESC
-    LIMIT ${input.limit ?? 40}
-  `);
+  const sourceIdPlaceholders = input.sourceIds.map((_, index) => `$${index + 2}`).join(", ");
+  const limitPlaceholder = `$${input.sourceIds.length + 2}`;
+  const rows = (await prisma.$queryRawUnsafe(
+    `
+      SELECT
+        "id",
+        "sourceId",
+        "country",
+        "externalId",
+        "sourceUrl",
+        "title",
+        "searchQuery",
+        "publishedAt",
+        "rawText",
+        "normalizedText",
+        "contentHash",
+        "retrievedAt",
+        "lastSyncedAt",
+        "syncStatus"
+      FROM "GuidelineDocument"
+      WHERE "country" = $1
+        AND "sourceId" IN (${sourceIdPlaceholders})
+      ORDER BY "lastSyncedAt" DESC
+      LIMIT ${limitPlaceholder}
+    `,
+    input.country,
+    ...input.sourceIds,
+    input.limit ?? 40,
+  )) as GuidelineDocumentRow[];
 
   return rows.map(mapRow);
 }

@@ -32,7 +32,9 @@ export async function GET(req: Request) {
     },
   });
 
-  const preferenceBySource = new Map(preferences.map((preference) => [preference.sourceId, preference]));
+  const preferenceBySource = new Map<string, (typeof preferences)[number]>(
+    preferences.map((preference) => [preference.sourceId, preference]),
+  );
 
   return NextResponse.json({
     clinicalCountry,
