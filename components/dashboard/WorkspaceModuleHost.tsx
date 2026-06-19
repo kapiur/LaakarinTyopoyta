@@ -4,14 +4,18 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { ArrowLeft, ExternalLink, FileText, Loader2 } from "lucide-react";
 import type { ComponentType } from "react";
-import type { InlineWorkspaceModuleId } from "../../lib/dashboard/workspaceModuleRegistry";
-import { inlineWorkspaceModules } from "../../lib/dashboard/workspaceModuleRegistry";
+import type { CalculatorWorkspaceModuleId, InlineWorkspaceModuleId } from "../../lib/dashboard/workspaceModuleRegistry";
+import {
+  getTemplateIdFromWorkspaceModule,
+  inlineWorkspaceModules,
+  isTemplateWorkspaceModuleId,
+} from "../../lib/dashboard/workspaceModuleRegistry";
 import { useI18n } from "../../lib/useI18n";
 import { homeActionIconMap } from "./homeActionIcons";
 
 type EmbeddedCalculatorProps = {
   embedded?: boolean;
-  onDiscussResult?: (content: string) => void;
+  onDiscussResult?: (content: string, contextLabel?: string) => void;
 };
 
 const BmiCalculator = dynamic(() => import("../calculators/BmiCalculator"), { loading: Loading });
@@ -21,8 +25,9 @@ const PeCalculator = dynamic(() => import("../../app/calculators/pe/page"), { lo
 const VteCalculator = dynamic(() => import("../../app/calculators/vte/page"), { loading: Loading });
 const AbgCalculator = dynamic(() => import("../../app/calculators/abg/page"), { loading: Loading });
 const CadCalculator = dynamic(() => import("../../app/calculators/cad/page"), { loading: Loading });
+const TemplateFill = dynamic(() => import("../../app/templates/fill/page"), { loading: Loading });
 
-const calculatorComponents: Record<InlineWorkspaceModuleId, ComponentType<EmbeddedCalculatorProps>> = {
+const calculatorComponents: Record<CalculatorWorkspaceModuleId, ComponentType<EmbeddedCalculatorProps>> = {
   "calculator:bmi": BmiCalculator,
   "calculator:gfr": GfrCalculator,
   "calculator:chads": ChadsCalculator,
@@ -33,10 +38,10 @@ const calculatorComponents: Record<InlineWorkspaceModuleId, ComponentType<Embedd
 };
 
 const labels = {
-  fi: { back: "Takaisin tekstityökaluun", open: "Avaa omalla sivulla", loading: "Ladataan laskuria" },
-  ru: { back: "Вернуться к работе с текстом", open: "Открыть отдельно", loading: "Загрузка калькулятора" },
-  en: { back: "Back to text workspace", open: "Open separately", loading: "Loading calculator" },
-  de: { back: "Zurück zum Textarbeitsbereich", open: "Separat öffnen", loading: "Rechner wird geladen" },
+  fi: { back: "Takaisin tekstityökaluun", open: "Avaa omalla sivulla", loading: "Ladataan työkalua", template: "Tekstimalli" },
+  ru: { back: "Вернуться к работе с текстом", open: "Открыть отдельно", loading: "Загрузка инструмента", template: "Текстовый шаблон" },
+  en: { back: "Back to text workspace", open: "Open separately", loading: "Loading tool", template: "Text template" },
+  de: { back: "Zurück zum Textarbeitsbereich", open: "Separat öffnen", loading: "Werkzeug wird geladen", template: "Textvorlage" },
 } as const;
 
 function Loading() {
@@ -56,9 +61,12 @@ export default function WorkspaceModuleHost({
 }) {
   const { language } = useI18n();
   const copy = labels[language as keyof typeof labels] ?? labels.fi;
-  const definition = inlineWorkspaceModules[moduleId];
+  const templateModule = isTemplateWorkspaceModuleId(moduleId);
+  const definition = templateModule
+    ? { label: copy.template, href: `/malli?templateId=${getTemplateIdFromWorkspaceModule(moduleId)}`, icon: "FileText" }
+    : inlineWorkspaceModules[moduleId];
   const Icon = homeActionIconMap[definition.icon as keyof typeof homeActionIconMap] ?? FileText;
-  const CalculatorComponent = calculatorComponents[moduleId];
+  const CalculatorComponent = templateModule ? null : calculatorComponents[moduleId];
 
   return (
     <section className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
@@ -75,7 +83,15 @@ export default function WorkspaceModuleHost({
           <ExternalLink size={14} /> {copy.open}
         </Link>
       </header>
-      <CalculatorComponent embedded onDiscussResult={(content) => onDiscussResult(content, moduleId, definition.label)} />
+      {templateModule ? (
+        <TemplateFill
+          embedded
+          initialTemplateId={getTemplateIdFromWorkspaceModule(moduleId)}
+          onDiscussResult={(content, contextLabel) => onDiscussResult(content, moduleId, contextLabel || definition.label)}
+        />
+      ) : CalculatorComponent ? (
+        <CalculatorComponent embedded onDiscussResult={(content) => onDiscussResult(content, moduleId, definition.label)} />
+      ) : null}
     </section>
   );
 }

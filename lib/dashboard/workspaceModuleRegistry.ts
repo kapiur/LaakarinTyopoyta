@@ -1,5 +1,4 @@
-export type WorkspaceModuleId =
-  | "text"
+export type CalculatorWorkspaceModuleId =
   | "calculator:bmi"
   | "calculator:gfr"
   | "calculator:chads"
@@ -8,7 +7,9 @@ export type WorkspaceModuleId =
   | "calculator:abg"
   | "calculator:cad";
 
-export type InlineWorkspaceModuleId = Exclude<WorkspaceModuleId, "text">;
+export type TemplateWorkspaceModuleId = `template:${number}`;
+export type InlineWorkspaceModuleId = CalculatorWorkspaceModuleId | TemplateWorkspaceModuleId;
+export type WorkspaceModuleId = "text" | InlineWorkspaceModuleId;
 
 export const inlineWorkspaceModules = {
   "calculator:bmi": {
@@ -53,15 +54,23 @@ export const inlineWorkspaceModules = {
     href: "/calculators/cad",
     icon: "Stethoscope",
   },
-} as const satisfies Record<InlineWorkspaceModuleId, {
-  id: InlineWorkspaceModuleId;
+} as const satisfies Record<CalculatorWorkspaceModuleId, {
+  id: CalculatorWorkspaceModuleId;
   label: string;
   href: string;
   icon: string;
 }>;
 
 export function isInlineWorkspaceActionId(actionId: string): actionId is InlineWorkspaceModuleId {
-  return actionId in inlineWorkspaceModules;
+  return actionId in inlineWorkspaceModules || /^template:\d+$/.test(actionId);
+}
+
+export function isTemplateWorkspaceModuleId(moduleId: string): moduleId is TemplateWorkspaceModuleId {
+  return /^template:\d+$/.test(moduleId);
+}
+
+export function getTemplateIdFromWorkspaceModule(moduleId: TemplateWorkspaceModuleId) {
+  return Number(moduleId.slice("template:".length));
 }
 
 export function workspaceModuleIdForAction(actionId: string): WorkspaceModuleId | null {

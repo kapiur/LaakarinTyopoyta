@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, ClipboardCopy, FileText, Loader2, MessageSquare } from 'lucide-react';
+import { ArrowLeft, ClipboardCopy, FileText, Loader2, MessageSquare, MessageSquareShare } from 'lucide-react';
 import { normalizeUiLanguage, type UiLanguage } from '../../../lib/i18n';
 import {
   getTemplateFields,
@@ -13,6 +13,7 @@ import {
   type TemplateValues,
 } from '../../../lib/templates';
 import { useI18n } from '../../../lib/useI18n';
+import { recordWorkspaceActivity } from '../../../lib/dashboard/workspaceActivityClient';
 
 const copy = {
   fi: {
@@ -28,6 +29,7 @@ const copy = {
     copy: 'Kopioi',
     copied: 'Kopioitu',
     emptyResult: 'Valitse malli ja täytä kentät...',
+    discuss: 'Keskustele tuloksesta AI:n kanssa',
   },
   ru: {
     title: 'Заполнение шаблона',
@@ -42,6 +44,7 @@ const copy = {
     copy: 'Копировать',
     copied: 'Скопировано',
     emptyResult: 'Выбери шаблон и заполни поля...',
+    discuss: 'Обсудить результат с AI',
   },
   en: {
     title: 'Template filling',
@@ -56,6 +59,7 @@ const copy = {
     copy: 'Copy',
     copied: 'Copied',
     emptyResult: 'Select a template and fill in the fields...',
+    discuss: 'Discuss result with AI',
   },
   de: {
     title: 'Vorlage ausfüllen',
@@ -70,10 +74,19 @@ const copy = {
     copy: 'Kopieren',
     copied: 'Kopiert',
     emptyResult: 'Vorlage auswählen und Felder ausfüllen...',
+    discuss: 'Ergebnis mit AI besprechen',
   },
 } as const;
 
-export default function TemplateFillPage() {
+export default function TemplateFillPage({
+  embedded = false,
+  initialTemplateId,
+  onDiscussResult,
+}: {
+  embedded?: boolean;
+  initialTemplateId?: number;
+  onDiscussResult?: (content: string, contextLabel?: string) => void;
+}) {
   const { language } = useI18n();
   const lang = normalizeUiLanguage(language);
   const c = copy[lang] ?? copy.en;
@@ -93,7 +106,16 @@ export default function TemplateFillPage() {
         const data = await res.json();
         const nextCategories: TemplateCategory[] = Array.isArray(data) ? data : [];
         setCategories(nextCategories);
-        if (nextCategories[0]?.id) setCategoryId(nextCategories[0].id);
+        const preferredCategory = initialTemplateId
+          ? nextCategories.find((category) => category.templates?.some((template) => template.id === initialTemplateId))
+          : null;
+        const nextCategory = preferredCategory || nextCategories[0] || null;
+        setCategoryId(nextCategory?.id || null);
+        setTemplateId(
+          nextCategory?.templates?.some((template) => template.id === initialTemplateId)
+            ? initialTemplateId || null
+            : nextCategory?.templates?.[0]?.id || null,
+        );
       } catch (err: any) {
         setErrorMsg(err.message || c.loadFailed);
       } finally {
@@ -102,7 +124,7 @@ export default function TemplateFillPage() {
     };
 
     fetchTemplates();
-  }, [c.loadFailed]);
+  }, [c.loadFailed, initialTemplateId]);
 
   const activeCategory = categories.find((category) => category.id === categoryId) || null;
   const templates = activeCategory?.templates || [];
@@ -116,8 +138,10 @@ export default function TemplateFillPage() {
 
   useEffect(() => {
     const firstTemplate = templates[0];
-    setTemplateId(firstTemplate?.id || null);
-  }, [categoryId, templates.length]);
+    if (!templates.some((template) => template.id === templateId)) {
+      setTemplateId(firstTemplate?.id || null);
+    }
+  }, [categoryId, templateId, templates]);
 
   const finalText = useMemo(() => {
     if (!selectedTemplate) return '';
@@ -129,6 +153,19 @@ export default function TemplateFillPage() {
     setCopied(false);
   };
 
+  const selectCategory = (nextCategoryId: number) => {
+    const nextCategory = categories.find((category) => category.id === nextCategoryId);
+    const nextTemplateId = nextCategory?.templates?.[0]?.id || null;
+    setCategoryId(nextCategoryId);
+    setTemplateId(nextTemplateId);
+    if (nextTemplateId) recordWorkspaceActivity(`template:${nextTemplateId}`);
+  };
+
+  const selectTemplate = (nextTemplateId: number) => {
+    setTemplateId(nextTemplateId);
+    recordWorkspaceActivity(`template:${nextTemplateId}`);
+  };
+
   const copyResult = async () => {
     if (!finalText) return;
     await navigator.clipboard.writeText(finalText);
@@ -137,8 +174,8 @@ export default function TemplateFillPage() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto p-6 space-y-6 text-slate-900">
-      <div className="flex items-center justify-between bg-white border shadow-sm rounded-[2rem] p-6">
+    <div className={embedded ? "space-y-5 p-4 text-slate-900" : "max-w-7xl mx-auto p-6 space-y-6 text-slate-900"}>
+      {!embedded && <div className="flex items-center justify-between bg-white border shadow-sm rounded-[2rem] p-6">
         <div className="flex items-center gap-4">
           <Link href="/templates" className="w-11 h-11 rounded-2xl border border-slate-100 flex items-center justify-center text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors">
             <ArrowLeft size={18} />
@@ -151,7 +188,7 @@ export default function TemplateFillPage() {
         <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-blue-100">
           <MessageSquare size={22} />
         </div>
-      </div>
+      </div>}
 
       {errorMsg && (
         <div className="p-4 bg-red-50 border border-red-100 rounded-2xl text-sm font-bold text-red-700">
@@ -172,7 +209,7 @@ export default function TemplateFillPage() {
                   <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-3">{c.section}</label>
                   <select
                     value={categoryId || ''}
-                    onChange={(event) => setCategoryId(Number(event.target.value))}
+                    onChange={(event) => selectCategory(Number(event.target.value))}
                     className="w-full p-4 bg-slate-50 border-none rounded-2xl outline-none focus:ring-4 focus:ring-blue-500/5 font-bold"
                   >
                     {categories.map((category) => (
@@ -185,7 +222,7 @@ export default function TemplateFillPage() {
                   <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-3">{c.template}</label>
                   <select
                     value={selectedTemplate?.id || ''}
-                    onChange={(event) => setTemplateId(Number(event.target.value))}
+                    onChange={(event) => selectTemplate(Number(event.target.value))}
                     className="w-full p-4 bg-slate-50 border-none rounded-2xl outline-none focus:ring-4 focus:ring-blue-500/5 font-bold"
                   >
                     {templates.map((template) => (
@@ -250,19 +287,22 @@ export default function TemplateFillPage() {
 
           <div className="lg:col-span-7 sticky top-6">
             <div className="bg-blue-50/20 border border-blue-50 shadow-sm rounded-[2rem] overflow-hidden">
-              <div className="p-5 bg-white/70 border-b border-blue-50 flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-blue-50 bg-white/70 p-5">
                 <div>
                   <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{c.result}</div>
                   <div className="font-black text-slate-800">{selectedTemplate?.title || c.noTemplate}</div>
                 </div>
-                <button
-                  onClick={copyResult}
-                  disabled={!finalText}
-                  className="px-5 py-3 bg-white text-emerald-600 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-sm ring-1 ring-emerald-100 hover:bg-emerald-50 disabled:opacity-50 flex items-center gap-2"
-                >
-                  <ClipboardCopy size={14} />
-                  {copied ? c.copied : c.copy}
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  {onDiscussResult && (
+                    <button type="button" onClick={() => onDiscussResult(finalText, selectedTemplate?.title)} disabled={!finalText} className="flex items-center gap-2 rounded-md border border-blue-200 bg-white px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-50 disabled:opacity-40">
+                      <MessageSquareShare size={15} /> {c.discuss}
+                    </button>
+                  )}
+                  <button onClick={copyResult} disabled={!finalText} className="flex items-center gap-2 rounded-md bg-white px-3 py-2 text-xs font-bold text-emerald-600 shadow-sm ring-1 ring-emerald-100 hover:bg-emerald-50 disabled:opacity-50">
+                    <ClipboardCopy size={14} />
+                    {copied ? c.copied : c.copy}
+                  </button>
+                </div>
               </div>
               <div className="p-8 min-h-[560px] whitespace-pre-wrap text-slate-800 text-lg leading-relaxed bg-white/40">
                 {finalText || <span className="text-slate-300 italic">{c.emptyResult}</span>}
