@@ -15,6 +15,7 @@ import {
   Zap,
 } from "lucide-react";
 import { recordWorkspaceActivity, WORKSPACE_ACTIVITY_EVENT } from "../../lib/dashboard/workspaceActivityClient";
+import { isInlineWorkspaceActionId } from "../../lib/dashboard/workspaceModuleRegistry";
 import type { TranslationKey } from "../../lib/i18n";
 import { useI18n } from "../../lib/useI18n";
 import { homeActionIconMap } from "./homeActionIcons";
@@ -43,9 +44,11 @@ function moveItem(items: HomeQuickAction[], index: number, direction: -1 | 1) {
 export default function QuickActionsBar({
   activeAiToolKey,
   onSelectAiTool,
+  onOpenInlineAction,
 }: {
   activeAiToolKey: string;
   onSelectAiTool: (key: string) => void;
+  onOpenInlineAction: (item: HomeQuickAction) => void;
 }) {
   const { t } = useI18n();
   const [selected, setSelected] = useState<HomeQuickAction[]>([]);
@@ -143,6 +146,11 @@ export default function QuickActionsBar({
   }
 
   function activate(item: HomeQuickAction) {
+    if (isInlineWorkspaceActionId(item.id)) {
+      recordWorkspaceActivity(item.id);
+      onOpenInlineAction(item);
+      return;
+    }
     if (item.type === "aiTool") {
       recordWorkspaceActivity(item.id);
       onSelectAiTool(item.key);
@@ -168,7 +176,7 @@ export default function QuickActionsBar({
                   ? "bg-blue-50 text-blue-700"
                   : "text-slate-600 hover:bg-blue-50 hover:text-blue-700"
               }`;
-              return item.href ? (
+              return item.href && !isInlineWorkspaceActionId(item.id) ? (
                 <Link
                   key={item.id}
                   href={item.href}

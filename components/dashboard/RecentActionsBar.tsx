@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Clock3, FileText, Loader2, Trash2 } from "lucide-react";
 import { recordWorkspaceActivity, WORKSPACE_ACTIVITY_EVENT } from "../../lib/dashboard/workspaceActivityClient";
+import { isInlineWorkspaceActionId, type WorkspaceModuleId } from "../../lib/dashboard/workspaceModuleRegistry";
 import type { TranslationKey } from "../../lib/i18n";
 import { useI18n } from "../../lib/useI18n";
 import type { HomeQuickAction } from "./QuickActionsBar";
@@ -14,9 +15,13 @@ type RecentAction = HomeQuickAction & { lastUsedAt: string };
 export default function RecentActionsBar({
   onSelectAiTool,
   onRestoreAiTool,
+  onOpenInlineAction,
+  onRestoreWorkspaceModule,
 }: {
   onSelectAiTool: (key: string) => void;
   onRestoreAiTool: (key: string) => void;
+  onOpenInlineAction: (item: HomeQuickAction) => void;
+  onRestoreWorkspaceModule: (moduleId: WorkspaceModuleId) => void;
 }) {
   const { t } = useI18n();
   const [recent, setRecent] = useState<RecentAction[]>([]);
@@ -25,11 +30,13 @@ export default function RecentActionsBar({
   const initialToolApplied = useRef(false);
   const selectAiToolRef = useRef(onSelectAiTool);
   const restoreAiToolRef = useRef(onRestoreAiTool);
+  const restoreWorkspaceModuleRef = useRef(onRestoreWorkspaceModule);
 
   useEffect(() => {
     selectAiToolRef.current = onSelectAiTool;
     restoreAiToolRef.current = onRestoreAiTool;
-  }, [onRestoreAiTool, onSelectAiTool]);
+    restoreWorkspaceModuleRef.current = onRestoreWorkspaceModule;
+  }, [onRestoreAiTool, onRestoreWorkspaceModule, onSelectAiTool]);
 
   const load = useCallback(async () => {
     try {
@@ -38,8 +45,11 @@ export default function RecentActionsBar({
       const data = await response.json();
       setRecent(Array.isArray(data.recent) ? data.recent : []);
       if (!initialToolApplied.current && typeof data.lastAiToolKey === "string") {
-        initialToolApplied.current = true;
         restoreAiToolRef.current(data.lastAiToolKey);
+      }
+      if (!initialToolApplied.current && typeof data.lastWorkspaceModuleId === "string") {
+        initialToolApplied.current = true;
+        restoreWorkspaceModuleRef.current(data.lastWorkspaceModuleId as WorkspaceModuleId);
       }
     } catch (error) {
       console.error("Recent workspace actions loading failed", error);
@@ -60,6 +70,11 @@ export default function RecentActionsBar({
   }
 
   function activate(item: RecentAction) {
+    if (isInlineWorkspaceActionId(item.id)) {
+      recordWorkspaceActivity(item.id);
+      onOpenInlineAction(item);
+      return;
+    }
     if (item.type === "aiTool") {
       recordWorkspaceActivity(item.id);
       onSelectAiTool(item.key);
@@ -90,7 +105,7 @@ export default function RecentActionsBar({
         {recent.map((item) => {
           const Icon = homeActionIconMap[item.icon as keyof typeof homeActionIconMap] ?? FileText;
           const className = "flex shrink-0 items-center gap-2 rounded-md px-2.5 py-1.5 text-xs font-semibold text-slate-500 hover:bg-slate-100 hover:text-slate-800";
-          return item.href ? (
+          return item.href && !isInlineWorkspaceActionId(item.id) ? (
             <Link
               key={item.id}
               href={item.href}

@@ -25,8 +25,15 @@ import {
 import PrivacyNotice from "../components/PrivacyNotice";
 import QuickActionsBar from "../components/dashboard/QuickActionsBar";
 import RecentActionsBar from "../components/dashboard/RecentActionsBar";
+import WorkspaceModuleHost from "../components/dashboard/WorkspaceModuleHost";
+import type { HomeQuickAction } from "../components/dashboard/QuickActionsBar";
 import { DEFAULT_AI_TOOL_METADATA, type DefaultAiToolMetadata } from "../lib/ai/toolMetadata";
 import { recordWorkspaceActivity } from "../lib/dashboard/workspaceActivityClient";
+import {
+  isInlineWorkspaceActionId,
+  type InlineWorkspaceModuleId,
+  type WorkspaceModuleId,
+} from "../lib/dashboard/workspaceModuleRegistry";
 import type { TranslationKey } from "../lib/i18n";
 import { useI18n } from "../lib/useI18n";
 
@@ -36,6 +43,7 @@ type AgentAttachment = {
   type: "sourceText" | "toolResult";
   content: string;
   toolKey: string;
+  label?: string;
 };
 
 type WorkspaceContext = {
@@ -124,6 +132,7 @@ export default function Dashboard() {
   const [isToolLoading, setIsToolLoading] = useState(false);
   const [isRefiningToolResult, setIsRefiningToolResult] = useState(false);
   const [aiTools, setAiTools] = useState<DefaultAiToolMetadata[]>(DEFAULT_AI_TOOL_METADATA);
+  const [activeWorkspaceModule, setActiveWorkspaceModule] = useState<WorkspaceModuleId>("text");
 
   const [assistantOpen, setAssistantOpen] = useState(true);
   const [workspaceContext, setWorkspaceContext] = useState<WorkspaceContext | null>(null);
@@ -205,11 +214,11 @@ export default function Dashboard() {
   const attachmentTool = agentAttachment
     ? aiTools.find((tool) => tool.key === agentAttachment.toolKey)
     : null;
-  const attachmentToolLabel = attachmentTool
+  const attachmentToolLabel = agentAttachment?.label ?? (attachmentTool
     ? defaultToolLabelKeys[attachmentTool.key]
       ? t(defaultToolLabelKeys[attachmentTool.key])
       : attachmentTool.label
-    : activeToolLabel;
+    : activeToolLabel);
 
   function setAssistantVisibility(nextValue: boolean) {
     setAssistantOpen(nextValue);
@@ -230,9 +239,29 @@ export default function Dashboard() {
   }
 
   function selectQuickAiTool(key: string) {
+    setActiveWorkspaceModule("text");
     setToolMode(key);
     if (agentAttachment) clearAttachedContext();
     window.requestAnimationFrame(() => toolTextAreaRef.current?.focus());
+  }
+
+  function openInlineWorkspaceAction(item: HomeQuickAction) {
+    if (!isInlineWorkspaceActionId(item.id)) return;
+    setActiveWorkspaceModule(item.id);
+  }
+
+  function restoreWorkspaceModule(moduleId: WorkspaceModuleId) {
+    if (moduleId === "text" || isInlineWorkspaceActionId(moduleId)) setActiveWorkspaceModule(moduleId);
+  }
+
+  function discussCalculatorResult(content: string, toolKey: InlineWorkspaceModuleId, label: string) {
+    if (!content.trim()) return;
+    setAgentAttachment({ type: "toolResult", content, toolKey, label });
+    setMessages([]);
+    setChatInput("");
+    setChatPrivacy(null);
+    setAssistantVisibility(true);
+    window.requestAnimationFrame(() => chatInputRef.current?.focus());
   }
 
   function clearAttachedContext() {
@@ -401,10 +430,16 @@ export default function Dashboard() {
         )}
       </section>
 
-      <QuickActionsBar activeAiToolKey={toolMode} onSelectAiTool={selectQuickAiTool} />
-      <RecentActionsBar onSelectAiTool={selectQuickAiTool} onRestoreAiTool={setToolMode} />
+      <QuickActionsBar activeAiToolKey={toolMode} onSelectAiTool={selectQuickAiTool} onOpenInlineAction={openInlineWorkspaceAction} />
+      <RecentActionsBar
+        onSelectAiTool={selectQuickAiTool}
+        onRestoreAiTool={setToolMode}
+        onOpenInlineAction={openInlineWorkspaceAction}
+        onRestoreWorkspaceModule={restoreWorkspaceModule}
+      />
 
       <div className={`grid min-w-0 gap-4 ${assistantOpen ? "xl:grid-cols-[minmax(0,1fr)_360px]" : "grid-cols-1"}`}>
+        {activeWorkspaceModule === "text" ? (
         <section className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
           <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
             <div className="flex min-w-0 items-center gap-3">
@@ -545,6 +580,13 @@ export default function Dashboard() {
             </div>
           )}
         </section>
+        ) : (
+          <WorkspaceModuleHost
+            moduleId={activeWorkspaceModule}
+            onClose={() => setActiveWorkspaceModule("text")}
+            onDiscussResult={discussCalculatorResult}
+          />
+        )}
 
         {assistantOpen && (
           <aside className="flex min-h-[560px] flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm xl:sticky xl:top-0 xl:h-[calc(100vh-12rem)]">
