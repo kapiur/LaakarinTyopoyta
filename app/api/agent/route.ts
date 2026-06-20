@@ -379,8 +379,9 @@ function buildEvidenceAvailabilityInstruction(params: {
         'Evidence communication rule:',
         'Exact official source passages are not currently available inside the provided material.',
         'Keep the answer high-level and verification-oriented.',
-        'Use at most five short bullets and no nested lists.',
-        'Do not turn the answer into a disease overview, workup algorithm, or treatment explainer.',
+        'Use at most four short bullets and no nested lists.',
+        'Do not turn the answer into a disease overview, detailed workup list, or treatment explainer.',
+        'Prefer broad verification categories over exact test panels, thresholds, or source-language terminology unless they appear in the available evidence.',
         'Do not present disease-specific diagnostic or treatment details as settled official facts.',
         'Do not write long technical explanations about missing retrieval, backend limits, or pipeline behavior.',
       ].join('\n');
@@ -391,7 +392,8 @@ function buildEvidenceAvailabilityInstruction(params: {
         'Evidence communication rule:',
         'Exact official source passages are not currently available inside the provided material.',
         'Return only a manual comparison checklist of what the clinician should verify in the configured official sources.',
-        'Use three to six short bullets and no nested lists.',
+        'Use three to five short bullets and no nested lists.',
+        'Keep the bullets category-level and concise.',
         'Do not invent exact differences between recommendations.',
         'Do not write long technical explanations about missing retrieval, backend limits, or pipeline behavior.',
       ].join('\n');
@@ -527,6 +529,7 @@ export async function POST(req: Request) {
     const plan = createAgentPlan({
       contextType,
       userMessage: privacyResult.sanitized.userMessage,
+      uiLanguage,
       currentText: privacyResult.sanitized.currentText,
       currentTemplate: privacyResult.sanitized.currentTemplate,
     });
