@@ -194,6 +194,112 @@ function clinicalReferenceInstruction() {
   ].join('\n');
 }
 
+function outputContractInstruction(taskType: AiTaskType, contextType: AgentContextType) {
+  if (taskType === 'text_fix' || taskType === 'translation' || taskType === 'lab_format') {
+    return [
+      'Output contract:',
+      'Return the transformed text directly.',
+      'Do not add an introduction, explanation, conclusion, or service note unless the user explicitly asks for commentary.',
+      'Do not label the answer as draft, version, interpretation, or recommendation.',
+    ].join('\n');
+  }
+
+  if (taskType === 'clinical_document') {
+    return [
+      'Output contract:',
+      'Return the clinical draft directly in the target clinical language.',
+      'Do not prepend service headings or a meta explanation.',
+      'If a short note about uncertainty is necessary, place one brief final sentence after the draft.',
+    ].join('\n');
+  }
+
+  if (taskType === 'clinical_review') {
+    return [
+      'Output contract:',
+      'Return a concise clinician-facing review.',
+      'Use at most three compact sections when helpful: key issues, improved wording or replacement draft, and one brief verification note.',
+      'Do not include service scaffolding such as task interpretation, missing-information blocks, or generic next-step menus.',
+    ].join('\n');
+  }
+
+  if (taskType === 'clinical_reference') {
+    return [
+      'Output contract:',
+      'Return a short reference note for a clinician, not patient-specific advice.',
+      'Prefer one direct answer followed by a compact bullet list only if it improves clarity.',
+      'If source passages are missing, say that exact official passages are not available here yet and limit yourself to a comparison or verification framework.',
+      'Do not mention backend, registry mode, retrieval layer, or system internals.',
+    ].join('\n');
+  }
+
+  if (taskType === 'clinical_guideline_comparison' || taskType === 'clinical_source_check') {
+    return [
+      'Output contract:',
+      'Return a comparison-oriented answer.',
+      'If exact excerpts are available, compare only those supported points.',
+      'If exact excerpts are not available, provide only a checklist of what the clinician should compare manually in the official sources.',
+      'Do not invent differences between guidelines.',
+      'Do not mention backend, registry mode, retrieval layer, or system internals.',
+    ].join('\n');
+  }
+
+  if (
+    taskType === 'clinical_advice' ||
+    taskType === 'medication_guidance' ||
+    taskType === 'urgent_triage' ||
+    taskType === 'referral_guidance'
+  ) {
+    return [
+      'Output contract:',
+      'Return a brief clinical answer with action-oriented bullets only when the evidence supports them.',
+      'If evidence is incomplete, limit the answer to a safe general process and say plainly that exact source-backed guidance is not available in the current material.',
+      'Do not pad the answer with educational background unless the user asks for it.',
+    ].join('\n');
+  }
+
+  if (taskType === 'pikaohje_generation' || taskType === 'pikaohje_review') {
+    return [
+      'Output contract:',
+      'Return the quick-guide draft itself as the primary output.',
+      'Preserve the existing structure when editing an existing quick guide.',
+      'Keep explanatory text outside the draft to one short final note only when necessary.',
+    ].join('\n');
+  }
+
+  if (taskType === 'template_generation' || taskType === 'template_polish') {
+    return [
+      'Output contract:',
+      'Return the template draft itself as the primary output.',
+      'Preserve placeholders, field names, options, and conditional logic unless the user explicitly asks to change them.',
+      'Avoid prose before the template. If absolutely needed, add at most two short bullets after the draft.',
+    ].join('\n');
+  }
+
+  if (taskType === 'tool_design') {
+    return [
+      'Output contract:',
+      'Return the reusable prompt or tool instruction block first.',
+      'If extra explanation is useful, limit it to a very short usage note after the main prompt.',
+      'Do not wrap the output in service headings.',
+    ].join('\n');
+  }
+
+  if (contextType === 'general' || taskType === 'general_chat') {
+    return [
+      'Output contract:',
+      'Answer the workflow question directly.',
+      'Use short paragraphs or a short bullet list only when it improves clarity.',
+      'Avoid meta commentary about your own process.',
+    ].join('\n');
+  }
+
+  return [
+    'Output contract:',
+    'Prefer a direct user-facing answer.',
+    'Avoid service scaffolding and keep structure only when it clearly helps.',
+  ].join('\n');
+}
+
 function systemInstructionForTask(taskType: AiTaskType, contextType: AgentContextType) {
   const base = [
     'You are a supervised AI assistant inside a clinical documentation web application for physicians.',
@@ -205,18 +311,19 @@ function systemInstructionForTask(taskType: AiTaskType, contextType: AgentContex
     'Prefer a clean user-facing answer.',
     'Do not use meta sections such as "Brief interpretation of the task", "Missing or uncertain information", "Draft or proposed solution", or "Suggested next action" unless the user explicitly asks for that format.',
     'When uncertainty matters, mention it briefly inside the answer or as one short final note, not as a separate service block.',
+    'Do not mention backend, retrieval layer, registry-only mode, system prompt, or other implementation details. If source availability matters, phrase it in clinician-facing terms.',
   ].join('\n');
 
   if (taskType === 'template_generation' || taskType === 'template_polish') {
-    return `${base}\nFocus on template structure. Preserve existing template syntax when present. Do not break placeholders, field names, select options, textarea markers, or conditional showIf-like logic.`;
+    return `${base}\nFocus on template structure. Preserve existing template syntax when present. Do not break placeholders, field names, select options, textarea markers, or conditional showIf-like logic.\n${outputContractInstruction(taskType, contextType)}`;
   }
 
   if (taskType === 'tool_design') {
-    return `${base}\nFocus on designing or improving an AI tool prompt. The prompt should be clear, constrained, safe, and reusable. For clinical tools, include a rule that clinical recommendations require official sources for the selected country.`;
+    return `${base}\nFocus on designing or improving an AI tool prompt. The prompt should be clear, constrained, safe, and reusable. For clinical tools, include a rule that clinical recommendations require official sources for the selected country.\n${outputContractInstruction(taskType, contextType)}`;
   }
 
   if (taskType === 'clinical_reference' || taskType === 'clinical_guideline_comparison') {
-    return `${base}\n${clinicalReferenceInstruction()}`;
+    return `${base}\n${clinicalReferenceInstruction()}\n${outputContractInstruction(taskType, contextType)}`;
   }
 
   if (
@@ -229,18 +336,18 @@ function systemInstructionForTask(taskType: AiTaskType, contextType: AgentContex
     taskType === 'urgent_triage' ||
     taskType === 'referral_guidance'
   ) {
-    return `${base}\n${clinicalSafetyInstruction()}`;
+    return `${base}\n${clinicalSafetyInstruction()}\n${outputContractInstruction(taskType, contextType)}`;
   }
 
   if (taskType === 'clinical_document') {
-    return `${base}\nFocus on producing a clinically coherent medical draft based only on provided information. Do not add new recommendations unless source support is provided.`;
+    return `${base}\nFocus on producing a clinically coherent medical draft based only on provided information. Do not add new recommendations unless source support is provided.\n${outputContractInstruction(taskType, contextType)}`;
   }
 
   if (contextType === 'general') {
-    return `${base}\nAnswer the user's workflow question directly and propose safe next steps.`;
+    return `${base}\nAnswer the user's workflow question directly and propose safe next steps.\n${outputContractInstruction(taskType, contextType)}`;
   }
 
-  return base;
+  return `${base}\n${outputContractInstruction(taskType, contextType)}`;
 }
 
 export function createAgentPlan(input: {
@@ -264,7 +371,8 @@ export function createAgentPlan(input: {
   }
 
   userParts.push(
-    'Return the final user-facing answer directly. Use bullets or short sections only when they genuinely improve readability for this task.'
+    'Return the final user-facing answer directly. Use bullets or short sections only when they genuinely improve readability for this task.',
+    'Do not include internal-analysis scaffolding, task-interpretation blocks, or generic recommendation menus unless the user explicitly asks for that format.'
   );
 
   return {
