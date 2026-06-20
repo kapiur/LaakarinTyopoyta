@@ -22,6 +22,7 @@ import {
   ShieldCheck,
   X,
 } from "lucide-react";
+import FirstRunOnboarding, { type OnboardingSnapshot } from "../components/FirstRunOnboarding";
 import PrivacyNotice from "../components/PrivacyNotice";
 import QuickActionsBar from "../components/dashboard/QuickActionsBar";
 import RecentActionsBar from "../components/dashboard/RecentActionsBar";
@@ -112,6 +113,8 @@ function PrivacyStatus({ privacy, label }: { privacy: PrivacyInfo; label: string
 
 export default function Dashboard() {
   const { t, language } = useI18n();
+  const [onboardingLoading, setOnboardingLoading] = useState(true);
+  const [onboardingSnapshot, setOnboardingSnapshot] = useState<OnboardingSnapshot | null>(null);
   const [chatInput, setChatInput] = useState("");
   const [messages, setMessages] = useState<Array<{ role: "assistant" | "user"; content: string }>>([
     { role: "assistant", content: t("dashboard.assistantGreeting") },
@@ -150,6 +153,37 @@ export default function Dashboard() {
         : current,
     );
   }, [t]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadOnboarding() {
+      try {
+        const response = await fetch("/api/profile/onboarding", { cache: "no-store" });
+        const data = await response.json();
+        if (!mounted || !response.ok) return;
+
+        setOnboardingSnapshot(
+          data.completed
+            ? null
+            : {
+                settings: data.settings,
+                countries: data.countries,
+                interfaceLanguages: data.interfaceLanguages,
+              },
+        );
+      } catch (error) {
+        console.error("Onboarding status loading failed", error);
+      } finally {
+        if (mounted) setOnboardingLoading(false);
+      }
+    }
+
+    loadOnboarding();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(min-width: 1280px)");
@@ -420,6 +454,28 @@ export default function Dashboard() {
 
   function moveResultToChat() {
     attachToAgent("toolResult");
+  }
+
+  if (onboardingLoading) {
+    return (
+      <div className="flex min-h-[70vh] items-center justify-center">
+        <div className="flex items-center gap-3 rounded-[2rem] border border-slate-200 bg-white px-6 py-5 text-sm font-semibold text-slate-500 shadow-sm">
+          <Loader2 size={18} className="animate-spin" />
+          {t("onboarding.loading")}
+        </div>
+      </div>
+    );
+  }
+
+  if (onboardingSnapshot) {
+    return (
+      <FirstRunOnboarding
+        snapshot={onboardingSnapshot}
+        onCompleted={(redirectPath) => {
+          window.location.assign(redirectPath || "/");
+        }}
+      />
+    );
   }
 
   return (

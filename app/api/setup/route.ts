@@ -18,7 +18,8 @@ export async function GET() {
       data: {
         email: newUserEmail.toLowerCase().trim(),
         password: hashedPassword,
-        name: newUserName
+        name: newUserName,
+        onboardingCompletedAt: null,
       }
     });
 
