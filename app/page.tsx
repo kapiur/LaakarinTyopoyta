@@ -250,10 +250,6 @@ export default function Dashboard() {
     setActiveWorkspaceModule(item.id);
   }
 
-  function restoreWorkspaceModule(moduleId: WorkspaceModuleId) {
-    if (moduleId === "text" || isInlineWorkspaceActionId(moduleId)) setActiveWorkspaceModule(moduleId);
-  }
-
   function discussCalculatorResult(content: string, toolKey: InlineWorkspaceModuleId, label: string) {
     if (!content.trim()) return;
     setAgentAttachment({ type: "toolResult", content, toolKey, label });
@@ -435,7 +431,6 @@ export default function Dashboard() {
         onSelectAiTool={selectQuickAiTool}
         onRestoreAiTool={setToolMode}
         onOpenInlineAction={openInlineWorkspaceAction}
-        onRestoreWorkspaceModule={restoreWorkspaceModule}
       />
 
       <div className={`grid min-w-0 gap-4 ${assistantOpen ? "xl:grid-cols-[minmax(0,1fr)_360px]" : "grid-cols-1"}`}>

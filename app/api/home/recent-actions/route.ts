@@ -7,7 +7,6 @@ import {
   parseHomeActionId,
 } from "../../../../lib/dashboard/homeActionCatalog";
 import { prisma } from "../../../../lib/prisma";
-import { workspaceModuleIdForAction } from "../../../../lib/dashboard/workspaceModuleRegistry";
 
 const RECENT_ACTION_LIMIT = 5;
 
@@ -45,9 +44,6 @@ export async function GET() {
       }))
       .filter((activity) => catalogMap.has(activity.actionId));
     const lastAiTool = validActivities.find((activity) => activity.actionId.startsWith("aiTool:"));
-    const lastWorkspaceModuleId = validActivities
-      .map((activity) => workspaceModuleIdForAction(activity.actionId))
-      .find((moduleId) => moduleId !== null) ?? null;
     const recent = validActivities
       .filter((activity) => !pinnedIds.has(activity.actionId))
       .slice(0, RECENT_ACTION_LIMIT)
@@ -59,7 +55,6 @@ export async function GET() {
     return NextResponse.json({
       recent,
       lastAiToolKey: lastAiTool?.actionId.slice("aiTool:".length) ?? null,
-      lastWorkspaceModuleId,
     });
   } catch (error) {
     console.error("Recent workspace actions loading failed", error);
