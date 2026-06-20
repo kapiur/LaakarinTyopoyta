@@ -24,19 +24,28 @@ type DefaultToolVisibilityRow = {
 
 export const DEFAULT_HOME_ACTION_IDS = [
   "aiTool:summarize",
-  "calculator:gfr",
-  "calculator:abg",
-  "route:literature",
+  "route:calculators",
   "route:quick-guides",
+  "route:literature",
 ];
 
 const routeActions: HomeActionItem[] = [
   {
+    id: "route:calculators",
+    type: "route",
+    key: "calculators",
+    labelKey: "dashboard.startActionCalculateMetric",
+    descriptionKey: "dashboard.startActionCalculateMetricDescription",
+    href: "/calculators",
+    icon: "Calculator",
+    group: "route",
+  },
+  {
     id: "route:literature",
     type: "route",
     key: "literature",
-    labelKey: "sidebar.literature",
-    descriptionKey: "dashboard.quickActionLiteratureDescription",
+    labelKey: "dashboard.startActionStudyArticle",
+    descriptionKey: "dashboard.startActionStudyArticleDescription",
     href: "/literature",
     icon: "BookText",
     group: "route",
@@ -45,8 +54,8 @@ const routeActions: HomeActionItem[] = [
     id: "route:quick-guides",
     type: "route",
     key: "quick-guides",
-    labelKey: "sidebar.quickGuides",
-    descriptionKey: "dashboard.quickActionGuidesDescription",
+    labelKey: "dashboard.startActionFindGuideline",
+    descriptionKey: "dashboard.startActionFindGuidelineDescription",
     href: "/pikaohjeet-v2",
     icon: "Zap",
     group: "route",
@@ -163,8 +172,11 @@ export async function buildHomeActionCatalog(userId: number): Promise<HomeAction
         id: `aiTool:${tool.key}`,
         type: "aiTool",
         key: tool.key,
-        labelKey: `dashboard.tool${suffix}`,
-        descriptionKey: `dashboard.tool${suffix}Description`,
+        labelKey: tool.key === "summarize" ? "dashboard.startActionProcessNote" : `dashboard.tool${suffix}`,
+        descriptionKey:
+          tool.key === "summarize"
+            ? "dashboard.startActionProcessNoteDescription"
+            : `dashboard.tool${suffix}Description`,
         icon: tool.icon,
         group: "aiTool",
       };
