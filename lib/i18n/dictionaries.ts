@@ -15,6 +15,19 @@ export const dictionaries = {
       refresh: "Päivitä",
       saved: "Tallennettu.",
     },
+    auth: {
+      loginTitle: "Lääkärin Työpöytä",
+      loginSubtitle: "Kirjaudu sisään jatkaaksesi omiin työkaluihisi, kliinisiin lähteisiin ja AI-työtilaan.",
+      languageLabel: "Käyttöliittymän kieli",
+      emailLabel: "Sähköposti",
+      emailPlaceholder: "etunimi.sukunimi@esimerkki.fi",
+      passwordLabel: "Salasana",
+      passwordPlaceholder: "Anna salasanasi",
+      signIn: "Kirjaudu",
+      signingIn: "Kirjaudutaan...",
+      invalidCredentials: "Väärä sähköposti tai salasana.",
+      serverError: "Palvelinvirhe. Yritä uudelleen.",
+    },
     sidebar: {
       home: "Pääsivu",
       templates: "Mallit",
@@ -318,6 +331,19 @@ export const dictionaries = {
       clear: "Очистить",
       refresh: "Обновить",
       saved: "Сохранено.",
+    },
+    auth: {
+      loginTitle: "Рабочий стол врача",
+      loginSubtitle: "Войдите, чтобы продолжить работу со своими инструментами, клиническими источниками и AI-пространством.",
+      languageLabel: "Язык интерфейса",
+      emailLabel: "Электронная почта",
+      emailPlaceholder: "name@example.com",
+      passwordLabel: "Пароль",
+      passwordPlaceholder: "Введите пароль",
+      signIn: "Войти",
+      signingIn: "Вход...",
+      invalidCredentials: "Неверная почта или пароль.",
+      serverError: "Ошибка сервера. Попробуйте снова.",
     },
     sidebar: {
       home: "Главная",
@@ -623,6 +649,19 @@ export const dictionaries = {
       refresh: "Refresh",
       saved: "Saved.",
     },
+    auth: {
+      loginTitle: "Doctor's Workspace",
+      loginSubtitle: "Sign in to continue to your tools, clinical sources, and AI workspace.",
+      languageLabel: "Interface language",
+      emailLabel: "Email",
+      emailPlaceholder: "name@example.com",
+      passwordLabel: "Password",
+      passwordPlaceholder: "Enter your password",
+      signIn: "Sign in",
+      signingIn: "Signing in...",
+      invalidCredentials: "Incorrect email or password.",
+      serverError: "Server error. Try again.",
+    },
     sidebar: {
       home: "Home",
       templates: "Templates",
@@ -927,6 +966,19 @@ export const dictionaries = {
       refresh: "Aktualisieren",
       saved: "Gespeichert.",
     },
+    auth: {
+      loginTitle: "Aerztlicher Arbeitsplatz",
+      loginSubtitle: "Melden Sie sich an, um Ihre Werkzeuge, klinischen Quellen und den AI-Arbeitsbereich zu nutzen.",
+      languageLabel: "Sprache der Oberflaeche",
+      emailLabel: "E-Mail",
+      emailPlaceholder: "name@example.com",
+      passwordLabel: "Passwort",
+      passwordPlaceholder: "Passwort eingeben",
+      signIn: "Anmelden",
+      signingIn: "Anmeldung laeuft...",
+      invalidCredentials: "E-Mail oder Passwort ist falsch.",
+      serverError: "Serverfehler. Bitte erneut versuchen.",
+    },
     sidebar: {
       home: "Start",
       templates: "Vorlagen",
@@ -1149,6 +1201,7 @@ export const dictionaries = {
 
 export type TranslationKey =
   | `common.${keyof typeof dictionaries.fi.common}`
+  | `auth.${keyof typeof dictionaries.fi.auth}`
   | `sidebar.${keyof typeof dictionaries.fi.sidebar}`
   | `settings.${keyof typeof dictionaries.fi.settings}`
   | `dashboard.${keyof typeof dictionaries.fi.dashboard}`

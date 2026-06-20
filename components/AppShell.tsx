@@ -74,7 +74,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   }, [pathname]);
 
   if (isLogin) {
-    return <>{children}</>;
+    return <Providers>{children}</Providers>;
   }
 
   return (
