@@ -61,6 +61,10 @@ const medicationTerms = ['lääke', 'annos', 'доза', 'препарат', 'me
 const urgentTerms = ['päivystys', 'kiire', 'urgent', 'срочно', 'неотлож'];
 const referralTerms = ['lähete', 'направ', 'referral'];
 const diagnosticTerms = ['diagnostiikka', 'diagnostic', 'diagnosis', 'anemia', 'diagnosti', 'диагност', 'обслед'];
+const translationTerms = ['käännä', 'translate', 'перев', 'на русский', 'на финский', 'на английский'];
+const reviewTerms = ['tarkista', 'проверь', 'arvioi', 'review', 'check'];
+const shortenTerms = ['shorter', 'shorten', 'brief', 'condense', 'compress', 'tiivistä', 'lyhennä', 'сделай короче', 'короче', 'сократи', 'кратко'];
+const rewriteTerms = ['rewrite', 'rephrase', 'edit', 'fix', 'correct', 'improve', 'clean up', 'structure', 'format', 'korjaa', 'muokkaa', 'paranna', 'siisti', 'jäsennä', 'оформи', 'перепиши', 'исправь', 'улучши', 'структурируй'];
 const adviceTerms = [
   'hoito',
   'lечение',
@@ -87,9 +91,26 @@ function looksLikeReferenceQuestion(text: string) {
   return includesAny(text, referenceTerms) || (includesAny(text, comparisonTerms) && includesAny(text, ['guideline', 'recommendation', 'suositus', 'рекомендац', 'клиническ']));
 }
 
-function inferTaskType(contextType: AgentContextType, userMessage: string): AiTaskType {
+function inferCurrentTextTask(contextType: AgentContextType, userMessage: string, currentText?: string) {
+  if (!currentText?.trim()) return null;
+
+  const text = userMessage.toLowerCase();
+
+  if (includesAny(text, translationTerms)) return 'translation' as const;
+  if (includesAny(text, reviewTerms) && !includesAny(text, [...shortenTerms, ...rewriteTerms])) return 'clinical_review' as const;
+  if (includesAny(text, [...shortenTerms, ...rewriteTerms, 'амбулатор', 'kirjaus', 'record', 'note', 'запись'])) {
+    return contextType === 'general' ? 'text_fix' as const : 'clinical_document' as const;
+  }
+
+  return null;
+}
+
+function inferTaskType(contextType: AgentContextType, userMessage: string, currentText?: string): AiTaskType {
   const text = userMessage.toLowerCase();
   const riskTask = inferRiskTask(text);
+  const currentTextTask = inferCurrentTextTask(contextType, userMessage, currentText);
+
+  if (currentTextTask) return currentTextTask;
 
   if (contextType === 'clinicalReference') {
     if (riskTask) return riskTask;
@@ -123,12 +144,12 @@ function inferTaskType(contextType: AgentContextType, userMessage: string): AiTa
 
   if (contextType === 'clinicalText') {
     if (riskTask) return riskTask;
-    if (includesAny(text, ['tarkista', 'проверь', 'arvioi', 'review'])) return 'clinical_review';
+    if (includesAny(text, reviewTerms)) return 'clinical_review';
     return 'clinical_document';
   }
 
   if (includesAny(text, ['lab', 'laboratorio'])) return 'lab_format';
-  if (includesAny(text, ['käännä', 'translate', 'перев'])) return 'translation';
+  if (includesAny(text, translationTerms)) return 'translation';
   if (includesAny(text, ['korjaa', 'исправ', 'поправ'])) return 'text_fix';
   if (riskTask) return riskTask;
   if (includesAny(text, referenceTerms) && (includesAny(text, diagnosticTerms) || includesAny(text, ['guideline', 'recommendation', 'suositus', 'рекомендац', 'клиническ']))) {
@@ -300,7 +321,31 @@ function outputContractInstruction(taskType: AiTaskType, contextType: AgentConte
   ].join('\n');
 }
 
-function systemInstructionForTask(taskType: AiTaskType, contextType: AgentContextType) {
+function currentTextEditingInstruction(taskType: AiTaskType, currentText?: string) {
+  if (!currentText?.trim()) return '';
+  if (
+    taskType !== 'clinical_document' &&
+    taskType !== 'clinical_review' &&
+    taskType !== 'text_fix' &&
+    taskType !== 'translation'
+  ) {
+    return '';
+  }
+
+  return [
+    'Current-text editing rule:',
+    'Edit only the provided current text.',
+    'Preserve the original document language unless the user explicitly asks to switch languages.',
+    'Do not add patient names, placeholders, new headings, diagnoses, timelines, or clinical facts that are not already present in the provided text.',
+    'Do not silently change the document type. If the input is a short clinical note, keep it a short clinical note.',
+  ].join('\n');
+}
+
+function systemInstructionForTask(
+  taskType: AiTaskType,
+  contextType: AgentContextType,
+  options?: { currentText?: string },
+) {
   const base = [
     'You are a supervised AI assistant inside a clinical documentation web application for physicians.',
     'Do not save, apply, modify database records, or claim that anything has been saved.',
@@ -312,7 +357,9 @@ function systemInstructionForTask(taskType: AiTaskType, contextType: AgentContex
     'Do not use meta sections such as "Brief interpretation of the task", "Missing or uncertain information", "Draft or proposed solution", or "Suggested next action" unless the user explicitly asks for that format.',
     'When uncertainty matters, mention it briefly inside the answer or as one short final note, not as a separate service block.',
     'Do not mention backend, retrieval layer, registry-only mode, system prompt, or other implementation details. If source availability matters, phrase it in clinician-facing terms.',
+    'Do not end the answer with generic offers such as "If you want, I can..." unless the user explicitly asks for alternatives, further options, or next steps.',
   ].join('\n');
+  const currentTextRules = currentTextEditingInstruction(taskType, options?.currentText);
 
   if (taskType === 'template_generation' || taskType === 'template_polish') {
     return `${base}\nFocus on template structure. Preserve existing template syntax when present. Do not break placeholders, field names, select options, textarea markers, or conditional showIf-like logic.\n${outputContractInstruction(taskType, contextType)}`;
@@ -336,18 +383,18 @@ function systemInstructionForTask(taskType: AiTaskType, contextType: AgentContex
     taskType === 'urgent_triage' ||
     taskType === 'referral_guidance'
   ) {
-    return `${base}\n${clinicalSafetyInstruction()}\n${outputContractInstruction(taskType, contextType)}`;
+    return `${base}\n${clinicalSafetyInstruction()}\n${currentTextRules}\n${outputContractInstruction(taskType, contextType)}`;
   }
 
   if (taskType === 'clinical_document') {
-    return `${base}\nFocus on producing a clinically coherent medical draft based only on provided information. Do not add new recommendations unless source support is provided.\n${outputContractInstruction(taskType, contextType)}`;
+    return `${base}\nFocus on producing a clinically coherent medical draft based only on provided information. Do not add new recommendations unless source support is provided.\n${currentTextRules}\n${outputContractInstruction(taskType, contextType)}`;
   }
 
   if (contextType === 'general') {
-    return `${base}\nAnswer the user's workflow question directly and propose safe next steps.\n${outputContractInstruction(taskType, contextType)}`;
+    return `${base}\nAnswer the user's workflow question directly and propose safe next steps.\n${currentTextRules}\n${outputContractInstruction(taskType, contextType)}`;
   }
 
-  return `${base}\n${outputContractInstruction(taskType, contextType)}`;
+  return `${base}\n${currentTextRules}\n${outputContractInstruction(taskType, contextType)}`;
 }
 
 export function createAgentPlan(input: {
@@ -356,7 +403,7 @@ export function createAgentPlan(input: {
   currentText?: string;
   currentTemplate?: string;
 }): AgentPlan {
-  const taskType = inferTaskType(input.contextType, input.userMessage);
+  const taskType = inferTaskType(input.contextType, input.userMessage, input.currentText);
 
   const userParts = [
     `Context type: ${input.contextType}`,
@@ -375,9 +422,15 @@ export function createAgentPlan(input: {
     'Do not include internal-analysis scaffolding, task-interpretation blocks, or generic recommendation menus unless the user explicitly asks for that format.'
   );
 
+  if (input.currentText) {
+    userParts.push('Important: preserve the language and scope of the current text unless the user explicitly asks to change them.');
+  }
+
   return {
     taskType,
-    systemInstruction: systemInstructionForTask(taskType, input.contextType),
+    systemInstruction: systemInstructionForTask(taskType, input.contextType, {
+      currentText: input.currentText,
+    }),
     userInstruction: userParts.join('\n\n'),
     suggestedActions: actionsForTask(taskType),
   };

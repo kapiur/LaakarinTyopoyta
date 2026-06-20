@@ -7,6 +7,7 @@ import type { AgentContextType, AgentRequestBody, AgentUiLanguage } from '../../
 import { runRoutedAiCompletion } from '../../../lib/ai/runRoutedAiCompletion';
 import { preparePrivacyPayload } from '../../../lib/privacy/gateway';
 import { hasCriticalPrivacyFindingTypes } from '../../../lib/privacy/gateway/decision';
+import type { AiTaskType } from '../../../lib/ai/taskTypes';
 import { taskAllowsRegistryOnlyReference, taskRequiresEvidence } from '../../../lib/ai/taskTypes';
 import { normalizeUiLanguage as normalizeSharedUiLanguage } from '../../../lib/i18n/config';
 import {
@@ -184,6 +185,10 @@ function normalizeReplyForDisplay(content: string) {
   return trimmed;
 }
 
+function uniqueStrings(values: string[]) {
+  return Array.from(new Set(values.filter(Boolean)));
+}
+
 function localizedEvidenceWarnings(
   language: AgentUiLanguage,
   status: string,
@@ -232,6 +237,56 @@ function localizedEvidenceWarnings(
   }
 
   return [];
+}
+
+function localizeEvidenceWarning(
+  language: AgentUiLanguage,
+  warning: string,
+  options: { status: string; registryOnlyReference: boolean },
+) {
+  if (warning.startsWith('Official source registry is available')) {
+    return localizedEvidenceWarnings(language, options.status, options.registryOnlyReference)[0] ?? warning;
+  }
+
+  if (warning.startsWith('No enabled official clinical sources are available')) {
+    return localizedEvidenceWarnings(language, 'not_found', false)[0] ?? warning;
+  }
+
+  if (warning.startsWith('Could not load cached guideline evidence:')) {
+    const details = warning.replace('Could not load cached guideline evidence:', '').trim();
+    if (language === 'ru') return `Не удалось загрузить локальный кэш рекомендаций: ${details || 'неизвестная ошибка'}`;
+    if (language === 'fi') return `Paikallista suositusvälimuistia ei voitu ladata: ${details || 'tuntematon virhe'}`;
+    return `Could not load cached guideline cache: ${details || 'unknown error'}`;
+  }
+
+  if (warning.startsWith('Skipped non-allowed source URL:')) {
+    if (language === 'ru') return 'Ссылка на источник вне разрешённого списка была пропущена.';
+    if (language === 'fi') return 'Lähdeosoite ohitettiin, koska se ei kuulu sallittuihin lähteisiin.';
+    return 'A source URL outside the allowed source list was skipped.';
+  }
+
+  if (warning.startsWith('Could not retrieve source URL')) {
+    if (language === 'ru') return 'Не удалось получить текст по указанной ссылке на источник.';
+    if (language === 'fi') return 'Annetusta lähdeosoitteesta ei saatu tekstiä.';
+    return 'Could not retrieve text from the provided source URL.';
+  }
+
+  return warning;
+}
+
+function localizeEvidenceWarningList(
+  language: AgentUiLanguage,
+  warnings: string[],
+  options: { status: string; registryOnlyReference: boolean },
+) {
+  const mapped = warnings.map((warning) => localizeEvidenceWarning(language, warning, options));
+  const fallback = localizedEvidenceWarnings(language, options.status, options.registryOnlyReference);
+  const hasGenericRegistryWarning = mapped.some((warning) => warning === fallback[0]);
+
+  return uniqueStrings([
+    ...mapped,
+    ...(!hasGenericRegistryWarning && fallback.length > 0 ? fallback : []),
+  ]);
 }
 
 function buildPrivacyBlockReply(language: AgentUiLanguage) {
@@ -313,11 +368,32 @@ function buildGroundingRetryInstruction(unsupportedClaims: string[]) {
 }
 
 function buildEvidenceAvailabilityInstruction(params: {
+  taskType: AiTaskType;
   status: string;
   registryOnlyReference: boolean;
   hasExcerpts: boolean;
 }) {
   if (params.registryOnlyReference) {
+    if (params.taskType === 'clinical_reference') {
+      return [
+        'Evidence communication rule:',
+        'Exact official source passages are not currently available inside the provided material.',
+        'Keep the answer high-level and verification-oriented.',
+        'Do not present disease-specific diagnostic or treatment details as settled official facts.',
+        'Do not write long technical explanations about missing retrieval, backend limits, or pipeline behavior.',
+      ].join('\n');
+    }
+
+    if (params.taskType === 'clinical_guideline_comparison') {
+      return [
+        'Evidence communication rule:',
+        'Exact official source passages are not currently available inside the provided material.',
+        'Return only a manual comparison checklist of what the clinician should verify in the configured official sources.',
+        'Do not invent exact differences between recommendations.',
+        'Do not write long technical explanations about missing retrieval, backend limits, or pipeline behavior.',
+      ].join('\n');
+    }
+
     return [
       'Evidence communication rule:',
       'Exact official source passages are not currently available inside the provided material.',
@@ -468,10 +544,10 @@ export async function POST(req: Request) {
 
     const localizedEvidence = {
       ...evidence,
-      warnings:
-        evidence.warnings.length > 0
-          ? evidence.warnings
-          : localizedEvidenceWarnings(uiLanguage, evidence.status, isRegistryOnlyReference),
+      warnings: localizeEvidenceWarningList(uiLanguage, evidence.warnings, {
+        status: evidence.status,
+        registryOnlyReference: isRegistryOnlyReference,
+      }),
     };
 
     if (
@@ -525,6 +601,7 @@ export async function POST(req: Request) {
       }),
       buildEvidenceModeInstruction(clinicalConfig),
       buildEvidenceAvailabilityInstruction({
+        taskType: plan.taskType,
         status: evidence.status,
         registryOnlyReference: isRegistryOnlyReference,
         hasExcerpts: evidence.excerpts.length > 0,
