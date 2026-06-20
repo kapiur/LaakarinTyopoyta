@@ -124,14 +124,21 @@ export function buildEvidencePackageFromRetrieved(input: {
 
   const sourceLevels = input.retrieved.sources.map((source) => sourceLevel(source.trustLevel));
   const highestLevel = sourceLevels.find((level) => level === 'official_guideline' || level === 'official_reference') ?? fallback.level;
+  const hasRetrievedExcerpts = input.retrieved.excerpts.length > 0;
+  const effectiveWarnings =
+    input.retrieved.warnings.length > 0
+      ? input.retrieved.warnings
+      : hasRetrievedExcerpts
+        ? []
+        : fallback.warnings;
 
   return {
     ...fallback,
     status: input.retrieved.status,
-    level: input.retrieved.excerpts.length > 0 ? highestLevel : fallback.level,
+    level: hasRetrievedExcerpts ? highestLevel : fallback.level,
     sources: input.retrieved.sources.length > 0 ? input.retrieved.sources : fallback.sources,
     excerpts: input.retrieved.excerpts,
-    warnings: input.retrieved.warnings.length > 0 ? input.retrieved.warnings : fallback.warnings,
+    warnings: effectiveWarnings,
   };
 }
 
