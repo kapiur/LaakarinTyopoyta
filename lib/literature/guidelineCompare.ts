@@ -32,6 +32,19 @@ type ComparisonSourceCandidate = {
   lastSyncedAt?: Date;
 };
 
+export type OfficialGuidelineEvidenceCandidate = {
+  sourceId: string;
+  country: ClinicalCountryCode;
+  externalId?: string;
+  sourceName: string;
+  sourceUrl: string;
+  sourceTitle: string;
+  excerpt?: string;
+  matchReason: string;
+  publishedAt?: string;
+  retrievedText: boolean;
+};
+
 type LocalizedComparisonStrings = {
   notFoundVerdict: string;
   notFoundSummary: string;
@@ -1024,6 +1037,44 @@ async function retrieveGuidelineCandidates(
   }
 }
 
+export async function retrieveOfficialGuidelineEvidenceCandidates(
+  clinicalConfig: UserClinicalEvidenceConfig,
+  searchQuery: string,
+  options?: { limit?: number; initialCandidates?: ComparisonSourceCandidate[] },
+): Promise<OfficialGuidelineEvidenceCandidate[]> {
+  const limit = Math.max(1, Math.min(options?.limit ?? 3, 6));
+  const candidates = options?.initialCandidates ?? await retrieveGuidelineCandidates(clinicalConfig, searchQuery);
+  const prioritizedCandidates = candidates.slice(0, Math.max(limit, 4));
+  const enrichedCandidates = await Promise.all(
+    prioritizedCandidates.map((candidate) => enrichCandidateText(candidate)),
+  );
+  const mergedCandidates = mergeCandidates(candidates, enrichedCandidates);
+
+  try {
+    if (mergedCandidates.length > 0) {
+      await persistGuidelineCandidates(mergedCandidates.slice(0, Math.max(limit, 4)), searchQuery);
+    }
+  } catch (error) {
+    console.error("Guideline cache persist after evidence retrieval failed:", error);
+  }
+
+  return mergedCandidates
+    .filter((candidate) => candidate.retrievedText && candidate.excerpt)
+    .slice(0, limit)
+    .map((candidate) => ({
+      sourceId: candidate.sourceId,
+      country: candidate.country,
+      externalId: candidate.externalId,
+      sourceName: candidate.sourceName,
+      sourceUrl: candidate.sourceUrl,
+      sourceTitle: candidate.sourceTitle,
+      excerpt: candidate.excerpt,
+      matchReason: candidate.matchReason,
+      publishedAt: candidate.publishedAt,
+      retrievedText: candidate.retrievedText,
+    }));
+}
+
 export async function compareArticleWithGuidelines(input: {
   userId: number;
   article: LiteratureArticle;
@@ -1042,19 +1093,26 @@ export async function compareArticleWithGuidelines(input: {
     console.error("Guideline retrieval failed:", error);
   }
 
-  const prioritizedCandidates = candidates.slice(0, 4);
-  const enrichedCandidates = await Promise.all(
-    prioritizedCandidates.map((candidate) => enrichCandidateText(candidate)),
-  );
-  const mergedCandidates = mergeCandidates(candidates, enrichedCandidates);
+  const mergedCandidates = await retrieveOfficialGuidelineEvidenceCandidates(
+    input.clinicalConfig,
+    searchQuery,
+    { limit: 4, initialCandidates: candidates },
+  ).then((retrieved) => {
+    const asCandidates: ComparisonSourceCandidate[] = retrieved.map((candidate) => ({
+      sourceId: candidate.sourceId,
+      country: candidate.country,
+      externalId: candidate.externalId,
+      sourceName: candidate.sourceName,
+      sourceUrl: candidate.sourceUrl,
+      sourceTitle: candidate.sourceTitle,
+      excerpt: candidate.excerpt,
+      matchReason: candidate.matchReason,
+      publishedAt: candidate.publishedAt,
+      retrievedText: candidate.retrievedText,
+    }));
 
-  try {
-    if (mergedCandidates.length > 0) {
-      await persistGuidelineCandidates(mergedCandidates.slice(0, 4), searchQuery);
-    }
-  } catch (error) {
-    console.error("Guideline cache persist after enrichment failed:", error);
-  }
+    return mergeCandidates(candidates, asCandidates);
+  });
 
   const retrievedCandidates = mergedCandidates.filter((candidate) => candidate.retrievedText);
   if (retrievedCandidates.length === 0) {

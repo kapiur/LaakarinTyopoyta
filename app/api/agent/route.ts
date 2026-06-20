@@ -638,6 +638,7 @@ export async function POST(req: Request) {
     const requiresEvidence = taskRequiresEvidence(plan.taskType);
     const allowsRegistryOnlyReference = taskAllowsRegistryOnlyReference(plan.taskType);
     const retrievedEvidence = await retrieveClinicalEvidence({
+      userId,
       taskType: plan.taskType,
       requiresEvidence: requiresEvidence || allowsRegistryOnlyReference,
       config: clinicalConfig,

@@ -1,6 +1,8 @@
 import type { AiTaskType } from '../../ai/taskTypes';
 import type { UserClinicalEvidenceConfig } from './userClinicalSettings';
 import { findCachedGuidelineDocuments, scoreCachedGuidelineDocuments, upsertGuidelineDocuments } from '../../literature/guidelineCache';
+import { retrieveOfficialGuidelineEvidenceCandidates } from '../../literature/guidelineCompare';
+import { runRoutedAiCompletion } from '../../ai/runRoutedAiCompletion';
 
 export type RetrievedEvidenceSource = {
   id: string;
@@ -83,6 +85,92 @@ function extractQueryTerms(...inputs: string[]) {
       .map((term) => term.trim())
       .filter((term) => term.length >= 3 && !QUERY_STOP_WORDS.has(term)),
   ).slice(0, 16);
+}
+
+function deriveEvidenceSearchQuery(input: {
+  userMessage: string;
+  currentText: string;
+  currentTemplate?: string;
+}) {
+  const userMessage = input.userMessage.trim();
+  if (userMessage.length >= 6) return userMessage;
+
+  const currentText = normalizeWhitespace(input.currentText).slice(0, 240);
+  if (currentText.length >= 12) return currentText;
+
+  const currentTemplate = normalizeWhitespace(input.currentTemplate || '').slice(0, 240);
+  return currentTemplate;
+}
+
+function containsCyrillic(value: string) {
+  return /[А-Яа-яЁё]/.test(value);
+}
+
+function sanitizeSearchQueryCandidate(content: string) {
+  const cleaned = content
+    .trim()
+    .replace(/^```[\w-]*\s*/i, '')
+    .replace(/\s*```$/i, '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find(Boolean) || '';
+
+  return cleaned
+    .replace(/^(query|search terms|hakusanat|suchbegriffe)\s*[:\-]\s*/i, '')
+    .replace(/^["'`]+|["'`]+$/g, '')
+    .trim();
+}
+
+async function maybeRewriteOfficialSearchQuery(input: {
+  userId?: number;
+  searchQuery: string;
+  config: UserClinicalEvidenceConfig;
+}) {
+  const query = input.searchQuery.trim();
+  if (!query || !input.userId) return query;
+
+  const targetLanguage = input.config.clinicalCountry === 'FI'
+    ? 'Finnish'
+    : input.config.clinicalCountry === 'DE'
+      ? 'German'
+      : input.config.clinicalCountry === 'RU'
+        ? 'Russian'
+        : input.config.clinicalOutputLanguage;
+
+  const shouldRewrite =
+    (input.config.clinicalCountry === 'FI' || input.config.clinicalCountry === 'DE') &&
+    containsCyrillic(query);
+
+  if (!shouldRewrite) return query;
+
+  try {
+    const result = await runRoutedAiCompletion({
+      userId: input.userId,
+      taskType: 'translation',
+      temperature: 0,
+      messages: [
+        {
+          role: 'system',
+          content: [
+            'You rewrite short clinical reference questions into compact official-guideline search terms.',
+            `Translate into ${targetLanguage}.`,
+            'Preserve the clinical topic conservatively.',
+            'Prefer short terminology suitable for official site search.',
+            'Return one plain line only, without explanation or markdown.',
+          ].join(' '),
+        },
+        {
+          role: 'user',
+          content: query,
+        },
+      ],
+    });
+
+    const rewritten = sanitizeSearchQueryCandidate(result.content);
+    return rewritten.length >= 3 ? rewritten : query;
+  } catch {
+    return query;
+  }
 }
 
 function normalizeWhitespace(text: string) {
@@ -326,6 +414,7 @@ async function fetchCachedDocumentExcerpt(
 }
 
 export async function retrieveClinicalEvidence(input: {
+  userId?: number;
   taskType: AiTaskType;
   requiresEvidence: boolean;
   config: UserClinicalEvidenceConfig;
@@ -354,6 +443,7 @@ export async function retrieveClinicalEvidence(input: {
   const excerpts: RetrievedEvidenceExcerpt[] = [];
   const excerptSources = new Map<string, RetrievedEvidenceSource>();
   const queryTerms = extractQueryTerms(input.userMessage, input.currentText, input.currentTemplate || '');
+  const searchQuery = deriveEvidenceSearchQuery(input);
 
   if (looksLikeUserProvidedExcerpt(input.currentText)) {
     excerptSources.set('user-provided-source-excerpt', {
@@ -411,6 +501,48 @@ export async function retrieveClinicalEvidence(input: {
       }
     } catch (error: any) {
       warnings.push(`Could not load cached guideline evidence: ${error?.message || 'Unknown error'}`);
+    }
+  }
+
+  if (excerpts.length < MAX_EXCERPTS && input.config.hasOfficialSources && searchQuery) {
+    try {
+      const liveSearchQuery = await maybeRewriteOfficialSearchQuery({
+        userId: input.userId,
+        searchQuery,
+        config: input.config,
+      });
+      const liveCandidates = await retrieveOfficialGuidelineEvidenceCandidates(
+        input.config,
+        liveSearchQuery,
+        { limit: MAX_EXCERPTS - excerpts.length },
+      );
+
+      for (const candidate of liveCandidates) {
+        if (excerpts.length >= MAX_EXCERPTS) break;
+        const focusedText = buildRelevantExcerpt(candidate.excerpt || '', queryTerms);
+        if (!focusedText) continue;
+        if (excerpts.some((excerpt) => excerpt.url && excerpt.url === candidate.sourceUrl)) continue;
+
+        const source = input.config.allowedSources.find((item) => item.id === candidate.sourceId);
+        if (!source) continue;
+
+        excerptSources.set(candidate.sourceId, {
+          id: source.id,
+          name: source.name,
+          sourceType: source.sourceType,
+          trustLevel: source.trustLevel,
+          baseUrl: source.baseUrl,
+        });
+        excerpts.push({
+          sourceId: candidate.sourceId,
+          title: candidate.sourceTitle,
+          url: candidate.sourceUrl,
+          text: focusedText,
+          retrievedAt: new Date().toISOString(),
+        });
+      }
+    } catch (error: any) {
+      warnings.push(`Could not retrieve live guideline evidence: ${error?.message || 'Unknown error'}`);
     }
   }
 
