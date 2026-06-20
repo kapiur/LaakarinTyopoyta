@@ -101,7 +101,7 @@ function PrivacyStatus({ privacy, label }: { privacy: PrivacyInfo; label: string
         }`}
       >
         <ShieldCheck size={13} />
-        <span>{label}</span>
+        <span className="hidden sm:inline">{label}</span>
       </summary>
       <div className="absolute right-0 top-full z-30 mt-2 w-[min(24rem,calc(100vw-2rem))] shadow-xl">
         <PrivacyNotice privacy={privacy} compact />
@@ -134,7 +134,8 @@ export default function Dashboard() {
   const [aiTools, setAiTools] = useState<DefaultAiToolMetadata[]>(DEFAULT_AI_TOOL_METADATA);
   const [activeWorkspaceModule, setActiveWorkspaceModule] = useState<WorkspaceModuleId>("text");
 
-  const [assistantOpen, setAssistantOpen] = useState(true);
+  const [assistantOpen, setAssistantOpen] = useState(false);
+  const [desktopAssistantLayout, setDesktopAssistantLayout] = useState(false);
   const [workspaceContext, setWorkspaceContext] = useState<WorkspaceContext | null>(null);
   const [countries, setCountries] = useState<CountryOption[]>([]);
 
@@ -151,12 +152,37 @@ export default function Dashboard() {
   }, [t]);
 
   useEffect(() => {
-    try {
-      setAssistantOpen(window.localStorage.getItem(ASSISTANT_STATE_KEY) !== "false");
-    } catch (error) {
-      console.error("Assistant panel state loading failed", error);
-    }
+    const mediaQuery = window.matchMedia("(min-width: 1280px)");
+    const syncLayout = () => {
+      setDesktopAssistantLayout(mediaQuery.matches);
+      if (!mediaQuery.matches) {
+        setAssistantOpen(false);
+        return;
+      }
+      try {
+        setAssistantOpen(window.localStorage.getItem(ASSISTANT_STATE_KEY) !== "false");
+      } catch (error) {
+        console.error("Assistant panel state loading failed", error);
+      }
+    };
+    syncLayout();
+    mediaQuery.addEventListener("change", syncLayout);
+    return () => mediaQuery.removeEventListener("change", syncLayout);
   }, []);
+
+  useEffect(() => {
+    if (!assistantOpen || desktopAssistantLayout) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setAssistantVisibility(false);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [assistantOpen, desktopAssistantLayout]);
 
   useEffect(() => {
     let mounted = true;
@@ -408,7 +434,7 @@ export default function Dashboard() {
             <Globe2 size={17} className="text-blue-600" />
             {practiceCountryName}
           </span>
-          <span className="h-4 w-px bg-slate-200" />
+          <span className="hidden h-4 w-px bg-slate-200 sm:block" />
           <span>{t("dashboard.clinicalCountryShort")}: <strong className="text-slate-800">{workspaceContext?.clinicalCountry ?? "..."}</strong></span>
           <span>{t("dashboard.clinicalLanguageShort")}: <strong className="text-slate-800">{workspaceContext?.clinicalOutputLanguage ?? "..."}</strong></span>
           <span className="rounded-md bg-slate-100 px-2 py-1 text-[11px] font-bold text-slate-600">
@@ -436,7 +462,7 @@ export default function Dashboard() {
       <div className={`grid min-w-0 gap-4 ${assistantOpen ? "xl:grid-cols-[minmax(0,1fr)_360px]" : "grid-cols-1"}`}>
         {activeWorkspaceModule === "text" ? (
         <section className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-          <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
+          <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-3 py-3 sm:px-4">
             <div className="flex min-w-0 items-center gap-3">
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-blue-50 text-blue-600">
                 <FileText size={19} />
@@ -446,7 +472,7 @@ export default function Dashboard() {
                 <p className="truncate text-xs text-slate-500">{activeToolDescription}</p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex shrink-0 items-center gap-2">
               <PrivacyStatus privacy={toolPrivacy} label={t("dashboard.privacyEnabled")} />
               <Link
                 href="/ai-tools"
@@ -468,13 +494,13 @@ export default function Dashboard() {
             </div>
           </header>
 
-          <div className="p-4">
+          <div className="p-3 sm:p-4">
             <textarea
               ref={toolTextAreaRef}
               value={toolText}
               onChange={(event) => setToolText(event.target.value)}
               placeholder={t("dashboard.textAreaPlaceholder")}
-              className="min-h-[270px] w-full resize-y rounded-lg border border-slate-200 bg-slate-50/40 p-4 text-sm font-medium outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-500/10"
+              className="min-h-[220px] w-full resize-y rounded-lg border border-slate-200 bg-slate-50/40 p-3 text-sm font-medium outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-500/10 sm:min-h-[270px] sm:p-4"
             />
 
             <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -504,7 +530,7 @@ export default function Dashboard() {
                   type="button"
                   onClick={() => attachToAgent("sourceText")}
                   disabled={!toolText.trim()}
-                  className="ml-auto flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 hover:border-blue-300 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 hover:border-blue-300 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-40 sm:ml-auto"
                 >
                   <MessageSquareShare size={15} /> {t("dashboard.attachSourceToAgent")}
                 </button>
@@ -516,7 +542,7 @@ export default function Dashboard() {
             <div id="text-tool-result" className="scroll-mt-4 border-t border-blue-100 bg-blue-50/40 px-4 py-5 animate-in fade-in duration-200">
               <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
                 <h2 className="text-xs font-black uppercase text-slate-500">{t("dashboard.resultTitle")}</h2>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center justify-end gap-2">
                   <button
                     type="button"
                     onClick={moveResultToChat}
@@ -583,9 +609,18 @@ export default function Dashboard() {
           />
         )}
 
+        {assistantOpen && !desktopAssistantLayout && (
+          <button
+            type="button"
+            className="fixed inset-0 z-[89] bg-slate-950/45 backdrop-blur-[2px] xl:hidden"
+            onClick={() => setAssistantVisibility(false)}
+            aria-label={t("dashboard.closeAssistant")}
+          />
+        )}
+
         {assistantOpen && (
-          <aside className="flex min-h-[560px] flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm xl:sticky xl:top-0 xl:h-[calc(100vh-12rem)]">
-            <header className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+          <aside className="fixed inset-y-0 right-0 z-[90] flex h-[100dvh] w-full max-w-lg flex-col overflow-hidden border-l border-slate-200 bg-white shadow-2xl xl:sticky xl:top-0 xl:z-auto xl:h-[calc(100vh-12rem)] xl:min-h-[560px] xl:w-auto xl:max-w-none xl:rounded-lg xl:border xl:shadow-sm">
+            <header className="flex items-center justify-between border-b border-slate-100 px-3 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))] sm:px-4 xl:pt-3">
               <div className="flex min-w-0 items-center gap-3">
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-blue-600 text-white">
                   <Bot size={18} />
@@ -669,7 +704,7 @@ export default function Dashboard() {
               <div ref={chatEndRef} />
             </div>
 
-            <div className="border-t border-slate-100 bg-white p-3">
+            <div className="border-t border-slate-100 bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
               <div className="flex items-end gap-2 rounded-lg border border-slate-200 bg-slate-50 p-1.5 focus-within:border-blue-400">
                 <textarea
                   ref={chatInputRef}

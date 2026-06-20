@@ -2,6 +2,42 @@
 @tailwind components;
 @tailwind utilities;
 
+html,
+body {
+  min-height: 100%;
+  overflow-x: hidden;
+}
+
 body {
   background-color: rgb(248 250 252);
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  -webkit-tap-highlight-color: transparent;
+}
+
+@layer utilities {
+  .safe-area-top {
+    padding-top: env(safe-area-inset-top);
+  }
+
+  .safe-area-bottom {
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+  }
+}
+
+@media (max-width: 1023px) {
+  .pika-notes-grid > * {
+    grid-column: 1 / -1 !important;
+  }
+
+  .pika-notes-grid > section {
+    min-height: 32rem;
+    padding: 0.75rem;
+    border-radius: 1rem;
+  }
 }

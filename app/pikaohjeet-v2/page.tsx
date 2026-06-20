@@ -522,24 +522,24 @@ export default function PikaohjeetV2Page({
   };
 
   return (
-    <div className={embedded ? "flex min-h-[650px] flex-col gap-4 p-4 text-slate-900" : "mx-auto flex h-[calc(100vh-96px)] max-w-[1700px] flex-col gap-4 p-4 text-slate-900"}>
-      {!embedded && <header className="flex shrink-0 items-center justify-between rounded-[2rem] border border-slate-100 bg-white px-7 py-5 shadow-sm">
-        <div className="flex items-center gap-4">
+    <div className={embedded ? "flex min-h-[650px] flex-col gap-4 p-3 text-slate-900 sm:p-4" : "mx-auto flex min-h-[calc(100dvh-5rem)] max-w-[1700px] flex-col gap-4 p-0 text-slate-900 sm:p-2 lg:h-[calc(100dvh-96px)] lg:p-4"}>
+      {!embedded && <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-white px-4 py-4 shadow-sm sm:px-7 sm:py-5 lg:rounded-[2rem]">
+        <div className="flex min-w-0 items-center gap-3 sm:gap-4">
           <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-100"><BookOpen size={21} /></div>
-          <div>
-            <h1 className="text-2xl font-black tracking-tight text-slate-900">{dict.title}</h1>
-            <p className="text-xs font-bold text-slate-400">{dict.subtitle}</p>
+          <div className="min-w-0">
+            <h1 className="truncate text-lg font-black tracking-tight text-slate-900 sm:text-2xl">{dict.title}</h1>
+            <p className="hidden text-xs font-bold text-slate-400 sm:block">{dict.subtitle}</p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
           {saveOk && <span className={cn("rounded-2xl border px-4 py-2 text-xs font-black", badgeClass("emerald"))}>{dict.saved}</span>}
           <a href="/pikaohjeet" className="rounded-2xl border border-slate-200 px-4 py-2 text-xs font-black text-slate-500 transition hover:bg-slate-50">{dict.openOld}</a>
           <button onClick={() => setShowNoteDrawer(true)} className="flex items-center gap-2 rounded-2xl bg-blue-600 px-5 py-2.5 text-xs font-black uppercase tracking-wide text-white shadow-lg shadow-blue-100 transition hover:bg-blue-700"><Plus size={16} /> {dict.newNote}</button>
         </div>
       </header>}
 
-      <main className={embedded ? "grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[minmax(240px,0.35fr)_minmax(0,1fr)]" : "grid min-h-0 flex-1 grid-cols-12 gap-5 overflow-hidden"}>
-        <aside className={embedded ? "flex min-h-0 flex-col gap-4" : "col-span-4 flex min-h-0 flex-col gap-4 xl:col-span-3"}>
+      <main className={embedded ? "grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[minmax(240px,0.35fr)_minmax(0,1fr)]" : "grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-12 lg:gap-5 lg:overflow-hidden"}>
+        <aside className={embedded ? "flex min-h-0 flex-col gap-4" : "col-span-1 flex min-h-0 flex-col gap-4 lg:col-span-4 xl:col-span-3"}>
           <div className="rounded-[2rem] border border-slate-100 bg-white p-4 shadow-sm">
             <div className="relative">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
@@ -552,7 +552,7 @@ export default function PikaohjeetV2Page({
             </div>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+          <div className="min-h-0 max-h-[32rem] flex-1 overflow-y-auto pr-1 lg:max-h-none">
             {loadingList ? <div className="flex h-40 items-center justify-center text-blue-500"><Loader2 className="animate-spin" /></div> : filteredCards.length === 0 ? <div className="rounded-[2rem] border border-dashed border-slate-200 bg-white p-8 text-center text-sm font-bold text-slate-300">{dict.noCards}</div> : (
               <div className="space-y-2">
                 {filteredCards.map((card) => (
@@ -569,14 +569,14 @@ export default function PikaohjeetV2Page({
           </div>
         </aside>
 
-        <section className={embedded ? "min-h-0 overflow-hidden rounded-lg border border-slate-100 bg-slate-50 shadow-sm" : "col-span-8 min-h-0 overflow-hidden rounded-[2rem] border border-slate-100 bg-slate-50 shadow-sm xl:col-span-9"}>
+        <section className={embedded ? "min-h-0 overflow-hidden rounded-lg border border-slate-100 bg-slate-50 shadow-sm" : "col-span-1 min-h-[32rem] overflow-hidden rounded-2xl border border-slate-100 bg-slate-50 shadow-sm lg:col-span-8 lg:min-h-0 lg:rounded-[2rem] xl:col-span-9"}>
           {loadingCard && !draftCard ? <div className="flex h-full items-center justify-center text-blue-500"><Loader2 className="animate-spin" /></div> : visibleCard ? (
-            <div className="h-full overflow-y-auto p-6 xl:p-10">
-              <div className="mb-7 rounded-[2rem] border border-slate-100 bg-white p-7 shadow-sm">
+            <div className="h-full overflow-y-auto p-3 sm:p-6 xl:p-10">
+              <div className="mb-5 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm sm:mb-7 sm:p-7 lg:rounded-[2rem]">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div>
                     <div className="mb-3 flex flex-wrap gap-2"><span className={cn("inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-[10px] font-black uppercase tracking-wide", visibleCard.type === "PERSONAL" ? badgeClass("slate") : badgeClass("blue"))}>{visibleCard.type === "PERSONAL" ? <UserRound size={13} /> : <Stethoscope size={13} />}{visibleCard.type === "PERSONAL" ? dict.personal : dict.clinical}</span><span className={cn("inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-[10px] font-black uppercase tracking-wide", visibleCard.sourceStatus?.includes("CHECKED") ? badgeClass("emerald") : badgeClass("amber"))}>{visibleCard.sourceStatus?.includes("CHECKED") ? <CheckCircle2 size={13} /> : <AlertTriangle size={13} />}{visibleCard.sourceStatus?.includes("CHECKED") ? dict.sourceChecked : dict.sourceUnchecked}</span>{visibleCard.visibility === "PRIVATE" && <span className={cn("inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-[10px] font-black uppercase tracking-wide", badgeClass("slate"))}><Lock size={13} /> {dict.private}</span>}</div>
-                    <h2 className={embedded ? "text-2xl font-black tracking-tight text-slate-900" : "text-4xl font-black tracking-tight text-slate-900"}>{visibleCard.title}</h2>
+                    <h2 className={embedded ? "text-xl font-black tracking-tight text-slate-900 sm:text-2xl" : "text-2xl font-black tracking-tight text-slate-900 sm:text-3xl lg:text-4xl"}>{visibleCard.title}</h2>
                     {visibleCard.description && <p className="mt-2 max-w-3xl text-sm font-semibold leading-relaxed text-slate-500">{visibleCard.description}</p>}
                     {visibleCard.tags?.length > 0 && <div className="mt-4 flex flex-wrap gap-2">{visibleCard.tags.map((tag) => <span key={tag} className="rounded-xl bg-slate-100 px-3 py-1 text-[10px] font-black text-slate-500">#{tag}</span>)}</div>}
                   </div>
@@ -593,7 +593,7 @@ export default function PikaohjeetV2Page({
 
               <div className="space-y-5">
                 {[...(visibleCard.sections || [])].sort((a, b) => a.order - b.order).map((section) => (
-                  <article key={section.key} className={cn("rounded-[2rem] border p-7 shadow-sm", sectionTone(section.kind))}>
+                  <article key={section.key} className={cn("rounded-2xl border p-4 shadow-sm sm:p-7 lg:rounded-[2rem]", sectionTone(section.kind))}>
                     <div className="mb-5 flex items-center justify-between gap-4"><h3 className="text-sm font-black uppercase tracking-wide text-slate-800">{section.title}</h3><button onClick={() => handleCopy(section.key, section.content)} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-wide text-slate-500 transition hover:bg-slate-50"><Clipboard size={13} /> {copiedKey === section.key ? dict.copied : dict.copy}</button></div>
                     <div className="prose prose-slate max-w-none text-sm font-semibold leading-relaxed prose-p:my-2 prose-li:my-1"><ReactMarkdown>{section.content}</ReactMarkdown></div>
                   </article>

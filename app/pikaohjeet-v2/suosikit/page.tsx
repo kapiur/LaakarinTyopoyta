@@ -187,8 +187,8 @@ export default function PikaohjeetFavoritesPage() {
   const activeIsFavorite = Boolean(activeListItem?.isFavorite || activeCard?.isFavorite);
 
   return (
-    <div className="mx-auto flex h-[calc(100vh-96px)] max-w-[1700px] flex-col gap-4 p-4 text-slate-900">
-      <header className="flex shrink-0 items-center justify-between rounded-[2rem] border border-slate-100 bg-white px-7 py-5 shadow-sm">
+    <div className="mx-auto flex min-h-[calc(100dvh-5rem)] max-w-[1700px] flex-col gap-4 p-0 text-slate-900 sm:p-2 lg:h-[calc(100dvh-96px)] lg:p-4">
+      <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-white px-4 py-4 shadow-sm sm:px-7 sm:py-5 lg:rounded-[2rem]">
         <div>
           <a href="/pikaohjeet-v2" className="mb-3 inline-flex items-center gap-2 text-xs font-black uppercase tracking-wide text-slate-400 hover:text-blue-600"><ArrowLeft size={14} /> {dict.back}</a>
           <h1 className="text-2xl font-black tracking-tight text-slate-900">{dict.title}</h1>
@@ -202,8 +202,8 @@ export default function PikaohjeetFavoritesPage() {
         )}
       </header>
 
-      <main className="grid min-h-0 flex-1 grid-cols-12 gap-5 overflow-hidden">
-        <aside className="col-span-4 flex min-h-0 flex-col gap-4 xl:col-span-3">
+      <main className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-12 lg:gap-5 lg:overflow-hidden">
+        <aside className="col-span-1 flex min-h-0 flex-col gap-4 lg:col-span-4 xl:col-span-3">
           <div className="rounded-[2rem] border border-slate-100 bg-white p-4 shadow-sm">
             <div className="relative">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
@@ -215,7 +215,7 @@ export default function PikaohjeetFavoritesPage() {
             </div>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+          <div className="min-h-0 max-h-[30rem] flex-1 overflow-y-auto pr-1 lg:max-h-none">
             {loading ? <div className="flex h-40 items-center justify-center text-blue-500"><Loader2 className="animate-spin" /></div> : filteredCards.length === 0 ? <div className="rounded-[2rem] border border-dashed border-slate-200 bg-white p-8 text-center text-sm font-bold text-slate-300">{favoritesOnly ? dict.noFavorites : dict.noCards}</div> : (
               <div className="space-y-2">
                 {filteredCards.map((card) => (
@@ -238,21 +238,21 @@ export default function PikaohjeetFavoritesPage() {
           </div>
         </aside>
 
-        <section className="col-span-8 min-h-0 overflow-y-auto rounded-[2rem] border border-slate-100 bg-slate-50 p-6 shadow-sm xl:col-span-9">
+        <section className="col-span-1 min-h-[30rem] overflow-y-auto rounded-2xl border border-slate-100 bg-slate-50 p-3 shadow-sm sm:p-6 lg:col-span-8 lg:min-h-0 lg:rounded-[2rem] xl:col-span-9">
           {loadingCard ? <div className="flex h-full items-center justify-center text-blue-500"><Loader2 className="animate-spin" /></div> : !activeCard ? <div className="flex h-full items-center justify-center text-sm font-black uppercase tracking-widest text-slate-300">{dict.select}</div> : (
             <div className="mx-auto max-w-5xl space-y-5">
-              <div className="rounded-[2rem] border border-slate-100 bg-white p-7 shadow-sm">
+              <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm sm:p-7 lg:rounded-[2rem]">
                 <div className="mb-3 flex flex-wrap gap-2">
                   <span className="inline-flex items-center gap-1 rounded-xl border border-slate-100 bg-slate-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-slate-600">{activeCard.type === "PERSONAL" ? <UserRound size={13} /> : <Stethoscope size={13} />} {activeCard.type === "PERSONAL" ? dict.personal : dict.clinical}</span>
                   {activeIsFavorite && <span className="inline-flex items-center gap-1 rounded-xl border border-amber-100 bg-amber-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-amber-800"><Star size={13} fill="currentColor" /> {dict.favorites}</span>}
                 </div>
-                <h2 className="text-3xl font-black tracking-tight text-slate-900">{activeCard.title}</h2>
+                <h2 className="text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">{activeCard.title}</h2>
                 {activeCard.description && <p className="mt-2 text-sm font-semibold leading-relaxed text-slate-500">{activeCard.description}</p>}
                 {activeListItem?.tags?.length ? <div className="mt-4 flex flex-wrap gap-2">{activeListItem.tags.map((tag) => <span key={tag} className="rounded-xl bg-slate-100 px-3 py-1 text-[10px] font-black text-slate-500">#{tag}</span>)}</div> : null}
               </div>
 
               {[...(activeCard.sections || [])].sort((a, b) => a.order - b.order).map((section) => (
-                <article key={section.key} className={`rounded-[2rem] border p-6 shadow-sm ${sectionTone(section.kind)}`}>
+                <article key={section.key} className={`rounded-2xl border p-4 shadow-sm sm:p-6 lg:rounded-[2rem] ${sectionTone(section.kind)}`}>
                   <div className="mb-4 flex items-center justify-between gap-4">
                     <h3 className="text-sm font-black uppercase tracking-wide text-slate-800">{section.title}</h3>
                     <button onClick={() => copyText(section.key, section.content)} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-wide text-slate-500 hover:bg-slate-50"><Clipboard size={13} /> {copiedKey === section.key ? dict.copied : dict.copy}</button>

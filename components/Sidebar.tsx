@@ -17,7 +17,8 @@ import {
   BookText,
   ChevronLeft,
   ChevronRight,
-  User
+  User,
+  X
 } from "lucide-react";
 import { useI18n } from "../lib/useI18n";
 import type { TranslationKey } from "../lib/i18n";
@@ -47,7 +48,7 @@ const iconMap = {
 
 const SIDEBAR_STATE_KEY = "laakarin-tyopoyta:sidebar-collapsed";
 
-export default function Sidebar() {
+export default function Sidebar({ mobile = false, onNavigate }: { mobile?: boolean; onNavigate?: () => void }) {
   const pathname = usePathname();
   const { data: session } = useSession();
   const { t } = useI18n();
@@ -112,31 +113,40 @@ export default function Sidebar() {
     });
   }
 
+  const collapsed = !mobile && isCollapsed;
+
   return (
-    <aside className={`${isCollapsed ? "w-20" : "w-64"} bg-white border-r border-slate-200 flex flex-col shadow-sm z-10 transition-[width] duration-200 ease-out`}>
-      <div className={`border-b border-slate-100 ${isCollapsed ? "p-3" : "p-6"}`}>
-        <div className={`relative flex items-center ${isCollapsed ? "justify-center" : "justify-between"} gap-2`}>
+    <aside className={`${mobile ? "flex h-full w-[min(20rem,calc(100vw-2rem))]" : collapsed ? "hidden w-20 md:flex" : "hidden w-64 md:flex"} min-h-0 shrink-0 flex-col border-r border-slate-200 bg-white shadow-sm z-10 transition-[width] duration-200 ease-out`}>
+      <div className={`border-b border-slate-100 ${collapsed ? "p-3" : mobile ? "p-4" : "p-6"}`}>
+        <div className={`relative flex items-center ${collapsed ? "justify-center" : "justify-between"} gap-2`}>
           <Link
             href="/"
+            onClick={onNavigate}
             title={t("dashboard.title")}
-            className={`text-blue-600 flex items-center hover:opacity-80 transition-opacity ${isCollapsed ? "justify-center" : "gap-2 text-xl font-bold"}`}
+            className={`text-blue-600 flex min-w-0 items-center hover:opacity-80 transition-opacity ${collapsed ? "justify-center" : "gap-2 text-lg font-bold"}`}
           >
             <LayoutDashboard size={24} />
-            {!isCollapsed && <span>{t("sidebar.workspace")}</span>}
+            {!collapsed && <span className="truncate">{t("sidebar.workspace")}</span>}
           </Link>
-          <button
-            type="button"
-            onClick={toggleCollapsed}
-            title={isCollapsed ? t("sidebar.expand") : t("sidebar.collapse")}
-            aria-label={isCollapsed ? t("sidebar.expand") : t("sidebar.collapse")}
-            className={`rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-700 transition-colors ${isCollapsed ? "absolute top-0 -right-3 z-20 bg-white p-1.5 shadow-sm" : "p-2.5"}`}
-          >
-            {isCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
-          </button>
+          {mobile ? (
+            <button type="button" onClick={onNavigate} aria-label={t("common.close")} title={t("common.close")} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-slate-500 hover:bg-slate-100">
+              <X size={20} />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={toggleCollapsed}
+              title={collapsed ? t("sidebar.expand") : t("sidebar.collapse")}
+              aria-label={collapsed ? t("sidebar.expand") : t("sidebar.collapse")}
+              className={`rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-700 transition-colors ${collapsed ? "absolute top-0 -right-3 z-20 bg-white p-1.5 shadow-sm" : "p-2.5"}`}
+            >
+              {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+            </button>
+          )}
         </div>
       </div>
       
-      <nav className={`flex-1 ${isCollapsed ? "p-3" : "p-4"} space-y-2`}>
+      <nav className={`min-h-0 flex-1 overflow-y-auto ${collapsed ? "p-3" : "p-4"} space-y-2`}>
         {visibleNavItems.map((item) => {
           const Icon = iconMap[item.icon] ?? LayoutDashboard;
           const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(`${item.href}/`));
@@ -144,27 +154,28 @@ export default function Sidebar() {
             <Link 
               key={item.href} 
               href={item.href} 
+              onClick={onNavigate}
               title={t(item.labelKey)}
               className={`flex items-center rounded-xl transition-all group ${
-                isCollapsed ? "justify-center px-0 py-3" : "gap-3 px-4 py-3"
+                collapsed ? "justify-center px-0 py-3" : "min-h-11 gap-3 px-4 py-3"
               } ${
                 isActive ? 'bg-blue-50 text-blue-600 font-bold shadow-sm' : 'text-slate-600 hover:bg-blue-50 hover:text-blue-600'
               }`}
             >
               <Icon size={20} className={isActive ? '' : 'group-hover:scale-110 transition-transform'} />
-              {!isCollapsed && <span>{t(item.labelKey)}</span>}
+              {!collapsed && <span>{t(item.labelKey)}</span>}
             </Link>
           );
         })}
       </nav>
 
-      <div className={`${isCollapsed ? "p-3" : "p-4"} border-t border-slate-100 space-y-2`}>
+      <div className={`${collapsed ? "p-3" : "p-4"} safe-area-bottom border-t border-slate-100 space-y-2`}>
         {session?.user && (
           <div
             title={session.user.email || undefined}
-            className={`${isCollapsed ? "mb-2 flex justify-center px-0 py-2" : "px-4 py-2 mb-2"} bg-slate-50 rounded-xl`}
+            className={`${collapsed ? "mb-2 flex justify-center px-0 py-2" : "px-4 py-2 mb-2"} bg-slate-50 rounded-xl`}
           >
-            {isCollapsed ? (
+            {collapsed ? (
               <div className="relative">
                 <User size={18} className="text-slate-600" />
                 {isAdmin && <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-blue-600" />}
@@ -181,21 +192,22 @@ export default function Sidebar() {
         
         <Link
           href="/settings"
+          onClick={onNavigate}
           title={t("sidebar.settings")}
-          className={`flex items-center w-full transition-all group rounded-xl ${isCollapsed ? "justify-center px-0 py-3" : "gap-3 px-4 py-3"} ${pathname.startsWith('/settings') || pathname.startsWith('/profile/security') || pathname.startsWith('/admin/users') ? 'bg-blue-50 text-blue-600 font-bold shadow-sm' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
+          className={`flex min-h-11 items-center w-full transition-all group rounded-xl ${collapsed ? "justify-center px-0 py-3" : "gap-3 px-4 py-3"} ${pathname.startsWith('/settings') || pathname.startsWith('/profile/security') || pathname.startsWith('/admin/users') ? 'bg-blue-50 text-blue-600 font-bold shadow-sm' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
         >
           <Settings size={20} className="group-hover:rotate-45 transition-transform" />
-          {!isCollapsed && <span className="text-sm font-medium">{t("sidebar.settings")}</span>}
+          {!collapsed && <span className="text-sm font-medium">{t("sidebar.settings")}</span>}
         </Link>
 
         <button 
           onClick={() => signOut({ callbackUrl: '/login' })}
           title={t("sidebar.logout")}
           aria-label={t("sidebar.logout")}
-          className={`flex items-center w-full text-red-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all group font-medium ${isCollapsed ? "justify-center px-0 py-3" : "gap-3 px-4 py-3"}`}
+          className={`flex min-h-11 items-center w-full text-red-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all group font-medium ${collapsed ? "justify-center px-0 py-3" : "gap-3 px-4 py-3"}`}
         >
           <LogOut size={20} className="group-hover:translate-x-1 transition-transform" />
-          {!isCollapsed && <span className="text-sm">{t("sidebar.logout")}</span>}
+          {!collapsed && <span className="text-sm">{t("sidebar.logout")}</span>}
         </button>
       </div>
     </aside>

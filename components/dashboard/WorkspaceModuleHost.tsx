@@ -81,16 +81,16 @@ export default function WorkspaceModuleHost({
 
   return (
     <section className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
-        <div className="flex min-w-0 flex-wrap items-center gap-3">
-          <button type="button" onClick={onClose} className="flex shrink-0 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 hover:bg-blue-50 hover:text-blue-700">
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-3 py-3 sm:px-4">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
+          <button type="button" onClick={onClose} className="flex min-h-10 shrink-0 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 hover:bg-blue-50 hover:text-blue-700">
             <ArrowLeft size={15} /> {copy.back}
           </button>
           <span className="hidden h-6 w-px bg-slate-200 sm:block" />
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-blue-50 text-blue-600"><Icon size={19} /></div>
           <h1 className="truncate text-base font-bold text-slate-900">{definition.label}</h1>
         </div>
-        <Link href={definition.href} className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 hover:text-blue-700">
+        <Link href={definition.href} className="flex min-h-10 items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 hover:text-blue-700">
           <ExternalLink size={14} /> {copy.open}
         </Link>
       </header>

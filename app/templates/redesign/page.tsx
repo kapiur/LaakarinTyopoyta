@@ -453,30 +453,30 @@ export default function TemplatesRedesignPage() {
   };
 
   return (
-    <div className="max-w-[1800px] mx-auto min-h-[calc(100vh-80px)] p-5 text-slate-900 space-y-5">
-      <header className="bg-white border shadow-sm rounded-[2rem] p-5 flex items-center justify-between">
-        <div className="flex items-center gap-4">
+    <div className="mx-auto min-h-[calc(100dvh-5rem)] max-w-[1800px] space-y-4 p-0 text-slate-900 sm:p-2 lg:space-y-5 lg:p-5">
+      <header className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border bg-white p-3 shadow-sm sm:p-5 lg:rounded-[2rem]">
+        <div className="flex min-w-0 items-center gap-3 sm:gap-4">
           <Link href="/" className="w-11 h-11 rounded-2xl border border-slate-100 flex items-center justify-center text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors">
             <ArrowLeft size={18} />
           </Link>
           <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-blue-100">
             <FileText size={22} />
           </div>
-          <div>
-            <h1 className="text-2xl font-black tracking-tight">{c.pageTitle}</h1>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{c.pageSubtitle}</p>
+          <div className="min-w-0">
+            <h1 className="truncate text-lg font-black tracking-tight sm:text-2xl">{c.pageTitle}</h1>
+            <p className="hidden text-[10px] font-black uppercase tracking-widest text-slate-400 sm:block">{c.pageSubtitle}</p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <button type="button" onClick={() => setShowHelp(true)} className="w-11 h-11 rounded-2xl bg-white border border-slate-100 text-slate-400 hover:text-blue-600 hover:bg-blue-50 flex items-center justify-center transition-colors" title={c.syntaxHelp}>
             <HelpCircle size={18} />
           </button>
-          <button type="button" onClick={() => setShowSectionManager(true)} className="h-11 px-5 rounded-2xl bg-white border border-slate-100 text-slate-500 hover:bg-slate-50 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest transition-colors">
-            <Settings size={14} /> {c.sections}
+          <button type="button" onClick={() => setShowSectionManager(true)} className="flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-100 bg-white text-slate-500 transition-colors hover:bg-slate-50 sm:w-auto sm:px-5" title={c.sections}>
+            <Settings size={14} /> <span className="ml-2 hidden text-[10px] font-black uppercase tracking-widest sm:inline">{c.sections}</span>
           </button>
-          <button type="button" onClick={openNewTemplate} className="h-11 px-5 rounded-2xl bg-blue-600 text-white hover:bg-blue-700 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest shadow-lg shadow-blue-100 transition-colors">
-            <Plus size={14} /> {c.newTemplate}
+          <button type="button" onClick={openNewTemplate} className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-100 transition-colors hover:bg-blue-700 sm:w-auto sm:px-5" title={c.newTemplate}>
+            <Plus size={14} /> <span className="ml-2 hidden text-[10px] font-black uppercase tracking-widest sm:inline">{c.newTemplate}</span>
           </button>
         </div>
       </header>
@@ -486,8 +486,8 @@ export default function TemplatesRedesignPage() {
       {loading ? (
         <div className="h-[60vh] flex items-center justify-center text-blue-500"><Loader2 className="animate-spin" /></div>
       ) : (
-        <main className="grid grid-cols-12 gap-5 min-h-[calc(100vh-220px)]">
-          <aside className="col-span-3 bg-white border shadow-sm rounded-[2rem] overflow-hidden flex flex-col">
+        <main className="grid min-h-0 grid-cols-1 gap-4 lg:min-h-[calc(100vh-220px)] lg:grid-cols-12 lg:gap-5">
+          <aside className="col-span-1 flex max-h-[34rem] flex-col overflow-hidden rounded-2xl border bg-white shadow-sm lg:col-span-3 lg:max-h-none lg:rounded-[2rem]">
             <div className="p-5 border-b border-slate-100">
               <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">{c.sections}</div>
               <div className="flex flex-wrap gap-2">
@@ -518,7 +518,7 @@ export default function TemplatesRedesignPage() {
             </div>
           </aside>
 
-          <section className="col-span-4 bg-white border shadow-sm rounded-[2rem] overflow-hidden flex flex-col">
+          <section className="col-span-1 flex min-h-[24rem] flex-col overflow-hidden rounded-2xl border bg-white shadow-sm lg:col-span-4 lg:rounded-[2rem]">
             <div className="p-5 border-b border-slate-100 flex items-center justify-between">
               <div>
                 <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{c.fillFields}</div>
@@ -547,7 +547,7 @@ export default function TemplatesRedesignPage() {
             </div>
           </section>
 
-          <section className="col-span-5 bg-blue-50/20 border border-blue-50 shadow-sm rounded-[2rem] overflow-hidden flex flex-col">
+          <section className="col-span-1 flex min-h-[24rem] flex-col overflow-hidden rounded-2xl border border-blue-50 bg-blue-50/20 shadow-sm lg:col-span-5 lg:rounded-[2rem]">
             <div className="p-5 border-b border-blue-50 bg-white/70 flex items-center justify-between">
               <div><div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{c.result}</div><div className="font-black text-slate-800">{selectedTemplate?.title || c.noTemplate}</div></div>
               <div className="flex items-center gap-2">
@@ -555,7 +555,7 @@ export default function TemplatesRedesignPage() {
                 <button type="button" onClick={copyResult} disabled={!finalText} className="px-4 py-2.5 rounded-xl bg-white text-emerald-600 ring-1 ring-emerald-100 text-[10px] font-black uppercase tracking-widest hover:bg-emerald-50 disabled:opacity-50 flex items-center gap-2"><ClipboardCopy size={13} /> {copied ? c.copied : c.copy}</button>
               </div>
             </div>
-            <div className="p-8 flex-1 overflow-y-auto whitespace-pre-wrap text-slate-800 text-lg leading-relaxed bg-white/30 no-scrollbar">{finalText || <span className="text-slate-300 italic">{c.emptyResult}</span>}</div>
+            <div className="no-scrollbar flex-1 overflow-y-auto whitespace-pre-wrap bg-white/30 p-5 text-base leading-relaxed text-slate-800 sm:p-8 sm:text-lg">{finalText || <span className="text-slate-300 italic">{c.emptyResult}</span>}</div>
           </section>
         </main>
       )}

@@ -5,7 +5,7 @@ import { useSession } from "next-auth/react";
 import { BookOpen, HelpCircle, NotebookTabs, Settings2, Sparkles, Star } from "lucide-react";
 import { useI18n } from "../../lib/useI18n";
 
-type UiLang = "fi" | "ru" | "en";
+type UiLang = "fi" | "ru" | "en" | "de";
 
 const ui = {
   fi: {
@@ -32,6 +32,14 @@ const ui = {
     manager: "Clinical Manager",
     builder: "Clinical Builder",
   },
+  de: {
+    main: "Kurzanleitungen",
+    favorites: "Favoriten",
+    notes: "Meine Notizen",
+    help: "Hilfe",
+    manager: "Clinical Manager",
+    builder: "Clinical Builder",
+  },
 };
 
 export default function PikaohjeetV2Layout({ children }: { children: ReactNode }) {
@@ -41,28 +49,28 @@ export default function PikaohjeetV2Layout({ children }: { children: ReactNode }
   const isAdmin = (session?.user as any)?.role === "ADMIN";
 
   return (
-    <div className="relative min-h-screen">
+    <div className="relative min-h-[100dvh] pb-24 md:pb-0">
       {children}
-      <nav className="fixed bottom-5 right-5 z-40 flex max-w-[calc(100vw-2.5rem)] flex-wrap gap-2 rounded-[1.5rem] border border-slate-200 bg-white/95 p-2 shadow-2xl shadow-slate-200/60 backdrop-blur">
-        <a href="/pikaohjeet-v2" className="inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-xs font-black uppercase tracking-wide text-slate-600 transition hover:bg-slate-100">
+      <nav className="fixed bottom-[max(0.5rem,env(safe-area-inset-bottom))] left-2 right-2 z-40 flex max-w-full flex-nowrap gap-1 overflow-x-auto rounded-[1.5rem] border border-slate-200 bg-white/95 p-2 shadow-2xl shadow-slate-200/60 backdrop-blur md:bottom-5 md:left-auto md:right-5 md:max-w-[calc(100vw-2.5rem)] md:gap-2">
+        <a href="/pikaohjeet-v2" className="inline-flex shrink-0 items-center gap-2 rounded-2xl px-4 py-3 text-xs font-black uppercase tracking-wide text-slate-600 transition hover:bg-slate-100">
           <BookOpen size={15} /> {dict.main}
         </a>
-        <a href="/pikaohjeet-v2/suosikit" className="inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-xs font-black uppercase tracking-wide text-amber-700 transition hover:bg-amber-50">
+        <a href="/pikaohjeet-v2/suosikit" className="inline-flex shrink-0 items-center gap-2 rounded-2xl px-4 py-3 text-xs font-black uppercase tracking-wide text-amber-700 transition hover:bg-amber-50">
           <Star size={15} /> {dict.favorites}
         </a>
-        <a href="/pikaohjeet-v2/muistilaput" className="inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-xs font-black uppercase tracking-wide text-slate-600 transition hover:bg-slate-100">
+        <a href="/pikaohjeet-v2/muistilaput" className="inline-flex shrink-0 items-center gap-2 rounded-2xl px-4 py-3 text-xs font-black uppercase tracking-wide text-slate-600 transition hover:bg-slate-100">
           <NotebookTabs size={15} /> {dict.notes}
         </a>
-        <a href="/pikaohjeet-v2/help" className="inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-xs font-black uppercase tracking-wide text-slate-600 transition hover:bg-slate-100">
+        <a href="/pikaohjeet-v2/help" className="inline-flex shrink-0 items-center gap-2 rounded-2xl px-4 py-3 text-xs font-black uppercase tracking-wide text-slate-600 transition hover:bg-slate-100">
           <HelpCircle size={15} /> {dict.help}
         </a>
         {isAdmin && (
-          <a href="/pikaohjeet-v2/clinical-manager" className="inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-xs font-black uppercase tracking-wide text-slate-600 transition hover:bg-slate-100">
+          <a href="/pikaohjeet-v2/clinical-manager" className="inline-flex shrink-0 items-center gap-2 rounded-2xl px-4 py-3 text-xs font-black uppercase tracking-wide text-slate-600 transition hover:bg-slate-100">
             <Settings2 size={15} /> {dict.manager}
           </a>
         )}
         {isAdmin && (
-          <a href="/pikaohjeet-v2/clinical-builder" className="inline-flex items-center gap-2 rounded-2xl bg-blue-600 px-4 py-3 text-xs font-black uppercase tracking-wide text-white shadow-lg shadow-blue-100 transition hover:bg-blue-700">
+          <a href="/pikaohjeet-v2/clinical-builder" className="inline-flex shrink-0 items-center gap-2 rounded-2xl bg-blue-600 px-4 py-3 text-xs font-black uppercase tracking-wide text-white shadow-lg shadow-blue-100 transition hover:bg-blue-700">
             <Sparkles size={15} /> {dict.builder}
           </a>
         )}

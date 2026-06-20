@@ -676,7 +676,7 @@ export default function LiteraturePage({
 
   return (
     <div className={embedded ? "space-y-4 p-4" : "space-y-6"}>
-      {!embedded && <header className="bg-white border border-slate-200 rounded-[2rem] p-8 shadow-sm">
+      {!embedded && <header className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-8 lg:rounded-[2rem]">
         <div className="flex items-start gap-4">
           <div className="w-14 h-14 rounded-2xl bg-slate-900 text-white flex items-center justify-center shadow-lg">
             <BookText size={26} />
@@ -696,7 +696,7 @@ export default function LiteraturePage({
 
       <div className={embedded ? "grid grid-cols-1 gap-4 lg:grid-cols-2" : "grid grid-cols-1 xl:grid-cols-12 gap-6"}>
         <section className={embedded ? "contents" : "xl:col-span-3 space-y-6"}>
-          <form onSubmit={runSearch} className={embedded ? "order-1 space-y-5 rounded-lg border border-slate-200 bg-white p-6 shadow-sm lg:col-span-2" : "bg-white border border-slate-200 rounded-[2rem] p-6 shadow-sm space-y-5"}>
+          <form onSubmit={runSearch} className={embedded ? "order-1 space-y-5 rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-6 lg:col-span-2" : "space-y-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6 lg:rounded-[2rem]"}>
             <div>
               <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
                 <FileSearch size={20} className="text-blue-600" />
@@ -814,7 +814,7 @@ export default function LiteraturePage({
               <p className="text-sm text-slate-500 mt-1">{t("literature.guidelineContextDescription")}</p>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 text-sm">
+            <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
               <div className="rounded-2xl bg-slate-50 border border-slate-200 p-4">
                 <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{t("literature.currentClinicalCountry")}</div>
                 <div className="mt-2 text-base font-bold text-slate-900">{results?.context?.clinicalCountry ?? "-"}</div>
