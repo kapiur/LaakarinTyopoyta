@@ -8,7 +8,6 @@ type AgentContextType = "general" | "clinicalReference" | "malli" | "aiTool" | "
 
 type AgentSuggestedAction = {
   type: string;
-  label: string;
 };
 
 type AgentRouteState = {
@@ -76,6 +75,12 @@ const localLabels = {
     unsupportedClaimsLabel: "Tarkistettavat väitteet",
     applyDraft: "Käytä luonnosta editorissa",
     appliedDraft: "Luonnos siirretty editoriin",
+    actionCopyDraft: "Kopioi luonnos",
+    actionUseTemplateDraft: "Käytä malliluonnoksena",
+    actionOpenTemplateEditor: "Avaa mallieditorissa",
+    actionUseAiToolPrompt: "Käytä AI-työkalun pohjana",
+    actionUsePikaohjeDraft: "Käytä pikaohjeluonnoksena",
+    actionReviewAgain: "Tarkista uudelleen",
     followUpLabel: "Tarkenna tätä tulosta",
     followUpPlaceholder: "Esim. tee lyhyempi, säilytä muuttujat, lisää rakenne...",
     sendFollowUp: "Lähetä tarkennus",
@@ -100,15 +105,21 @@ const localLabels = {
     noAutoSaveNotice: "Черновик не сохраняется автоматически.",
     transientHistoryNotice: "История диалога хранится только пока открыто это окно.",
     unsupportedClaimsLabel: "Утверждения для проверки",
-    applyDraft: "Применить draft в редакторе",
-    appliedDraft: "Draft перенесён в редактор",
+    applyDraft: "Применить черновик в редакторе",
+    appliedDraft: "Черновик перенесён в редактор",
+    actionCopyDraft: "Скопировать черновик",
+    actionUseTemplateDraft: "Использовать как шаблон",
+    actionOpenTemplateEditor: "Открыть в редакторе шаблонов",
+    actionUseAiToolPrompt: "Использовать как основу для AI-инструмента",
+    actionUsePikaohjeDraft: "Использовать как быструю инструкцию",
+    actionReviewAgain: "Проверить ещё раз",
     followUpLabel: "Уточнить этот результат",
     followUpPlaceholder: "Например: сделай короче, сохрани переменные, добавь структуру...",
     sendFollowUp: "Отправить уточнение",
     conversationTitle: "Диалог",
     turnUser: "Пользователь",
     turnAssistant: "Агент",
-    reviewAgainDraft: "Проверь draft ещё раз и сфокусируйся на рискованных местах, нехватке source support и точках для улучшения.",
+    reviewAgainDraft: "Проверь черновик ещё раз и сфокусируйся на рискованных местах, нехватке опоры на источники и точках для улучшения.",
   },
   en: {
     contextPikaohje: "Quick guide",
@@ -128,6 +139,12 @@ const localLabels = {
     unsupportedClaimsLabel: "Claims to verify",
     applyDraft: "Use draft in editor",
     appliedDraft: "Draft moved to editor",
+    actionCopyDraft: "Copy draft",
+    actionUseTemplateDraft: "Use as template draft",
+    actionOpenTemplateEditor: "Open in template editor",
+    actionUseAiToolPrompt: "Use as AI tool prompt",
+    actionUsePikaohjeDraft: "Use as quick-guide draft",
+    actionReviewAgain: "Review again",
     followUpLabel: "Refine this result",
     followUpPlaceholder: "For example: make it shorter, keep variables, add structure...",
     sendFollowUp: "Send refinement",
@@ -186,9 +203,21 @@ export default function AgentPanel({ defaultContextType = "general", initialText
 
   const selectedContext = useMemo(() => contextOptions.find((option) => option.value === contextType), [contextOptions, contextType]);
   const contextLabelMap = useMemo(() => new Map(contextOptions.map((option) => [option.value, option.label])), [contextOptions]);
+  const suggestedActionLabelMap = useMemo<Record<string, string>>(() => ({
+    copy_draft: l.actionCopyDraft,
+    use_as_template_draft: l.actionUseTemplateDraft,
+    open_template_editor: l.actionOpenTemplateEditor,
+    use_as_ai_tool_prompt: l.actionUseAiToolPrompt,
+    use_as_pikaohje_draft: l.actionUsePikaohjeDraft,
+    review_again: l.actionReviewAgain,
+  }), [l]);
   const visibleHistory = turns.slice(0, -1);
   const visibleReply = stripServiceScaffolding(response?.reply);
   const visibleDraft = stripServiceScaffolding(response?.draft);
+
+  function suggestedActionLabel(type: string) {
+    return suggestedActionLabelMap[type] ?? type;
+  }
 
   async function callAgent(message: string, previousTurns: AgentTurn[]) {
     setLoading(true);
@@ -529,7 +558,7 @@ export default function AgentPanel({ defaultContextType = "general", initialText
                         onClick={() => handleSuggestedAction(action)}
                         className="px-3 py-2 rounded-xl bg-purple-50 text-purple-700 border border-purple-100 text-xs font-bold hover:bg-purple-100"
                       >
-                        {action.label}
+                        {suggestedActionLabel(action.type)}
                       </button>
                     ))}
                   </div>

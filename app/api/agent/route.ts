@@ -15,7 +15,16 @@ import {
 } from '../../../lib/clinical/evidence/evidencePackage';
 import { checkEvidenceConsistency } from '../../../lib/clinical/evidence/checkEvidenceConsistency';
 import { retrieveClinicalEvidence } from '../../../lib/clinical/evidence/retrieveClinicalEvidence';
-import { getUserClinicalEvidenceConfig } from '../../../lib/clinical/evidence/userClinicalSettings';
+import {
+  getUserClinicalEvidenceConfig,
+  type UserClinicalEvidenceConfig,
+} from '../../../lib/clinical/evidence/userClinicalSettings';
+import {
+  buildWorkspaceContextInstruction,
+  getUserAiWorkspaceContext,
+} from '../../../lib/ai/workspaceContext';
+import { buildUserAiProfileInstruction } from '../../../lib/ai/userAiProfile';
+import { getUserAiProfile } from '../../../lib/ai/userAiProfileStore';
 
 function normalizeContextType(value: unknown): AgentContextType {
   if (
@@ -257,6 +266,52 @@ function buildPrivacyOutputBlockReply(language: AgentUiLanguage) {
   return 'Agentin vastaus sisälsi henkilötietoihin viittaavia tietoja, joten sitä ei näytetä turvallisuussyistä. Muotoile pyyntö yleisemmin ilman tunnistetietoja ja yritä uudelleen.';
 }
 
+function buildEvidenceModeInstruction(config: UserClinicalEvidenceConfig) {
+  const shared = [
+    `Evidence operating mode: ${config.evidenceStrictness}.`,
+    'Regional and source-selection settings are user-controlled workspace defaults and must be respected throughout the answer.',
+  ];
+
+  if (config.evidenceStrictness === 'strict') {
+    return [
+      ...shared,
+      'Use only enabled official sources from the selected clinical country as the basis for clinical claims.',
+      'Local workflow instructions may be mentioned only as operational context, never as justification for diagnosis, treatment choice, target values, dosing, contraindications, red flags, or referral thresholds.',
+      'If retrieved evidence is missing or incomplete, stay conservative, state the uncertainty plainly, and do not fill gaps from general model knowledge.',
+    ].join('\n');
+  }
+
+  if (config.evidenceStrictness === 'local-aware') {
+    return [
+      ...shared,
+      'Use enabled official national sources first for clinical claims.',
+      'Enabled local or hospital sources may supplement workflow framing, local process notes, or documentation conventions, but keep them clearly separate from national clinical recommendations.',
+      'If official evidence is missing, do not turn local instructions into stand-in clinical authority.',
+    ].join('\n');
+  }
+
+  return [
+    ...shared,
+    'Use enabled official sources first and keep them primary in the reasoning and wording.',
+    'Supplementary enabled sources may be used only to add context or clarify implementation details, and you must preserve the distinction between official recommendations and supplementary material.',
+    'Do not overstate certainty beyond the retrieved evidence.',
+  ].join('\n');
+}
+
+function buildGroundingRetryInstruction(unsupportedClaims: string[]) {
+  const claimsBlock = unsupportedClaims.length > 0
+    ? unsupportedClaims.map((claim, index) => `${index + 1}. ${claim}`).join('\n')
+    : 'No specific claims were extracted, but the previous answer exceeded the retrieved evidence.';
+
+  return [
+    'Revise the previous answer so that every clinical claim is directly grounded in the retrieved evidence and workspace settings.',
+    'Remove, soften, or explicitly mark as uncertain any statement that is not supported by the available excerpts or approved source context.',
+    'Do not add new unsupported claims during the rewrite.',
+    'Claims flagged for revision:',
+    claimsBlock,
+  ].join('\n\n');
+}
+
 export async function POST(req: Request) {
   const { session, error } = await requireAuthenticatedUser();
   if (error) return error;
@@ -345,7 +400,13 @@ export async function POST(req: Request) {
       currentTemplate: privacyResult.sanitized.currentTemplate,
     });
 
-    const clinicalConfig = await getUserClinicalEvidenceConfig(userId);
+    const clinicalConfigPromise = getUserClinicalEvidenceConfig(userId, { surface: 'agent' });
+    const userAiProfilePromise = getUserAiProfile(userId);
+    const clinicalConfig = await clinicalConfigPromise;
+    const [workspaceContext, userAiProfile] = await Promise.all([
+      getUserAiWorkspaceContext(userId, { clinicalConfig }),
+      userAiProfilePromise,
+    ]);
     const requiresEvidence = taskRequiresEvidence(plan.taskType);
     const allowsRegistryOnlyReference = taskAllowsRegistryOnlyReference(plan.taskType);
     const retrievedEvidence = await retrieveClinicalEvidence({
@@ -419,11 +480,12 @@ export async function POST(req: Request) {
       });
     }
 
+    const profileInstruction = buildUserAiProfileInstruction(userAiProfile, 'full', workspaceContext);
     const evidenceContext = [
-      `Clinical country: ${clinicalConfig.clinicalCountry}`,
-      `Clinical output language: ${clinicalConfig.clinicalOutputLanguage}`,
-      `UI language: ${uiLanguage}`,
-      `Evidence strictness: ${clinicalConfig.evidenceStrictness}`,
+      buildWorkspaceContextInstruction(workspaceContext, {
+        contentLabel: 'clinician-facing agent output',
+      }),
+      buildEvidenceModeInstruction(clinicalConfig),
       `Evidence status: ${evidence.status}`,
       `Registry-only reference mode: ${isRegistryOnlyReference ? 'yes' : 'no'}`,
       `Used sources: ${evidence.sources.map((source) => `${source.name} (${source.trustLevel})`).join(', ') || 'none'}`,
@@ -447,6 +509,7 @@ export async function POST(req: Request) {
     ].filter(Boolean).join('\n\n');
 
     const messages = [
+      profileInstruction ? { role: 'system' as const, content: profileInstruction } : null,
       { role: 'system' as const, content: plan.systemInstruction },
       { role: 'system' as const, content: evidenceContext },
       privacyResult.sanitized.conversationContext
@@ -455,17 +518,17 @@ export async function POST(req: Request) {
       { role: 'user' as const, content: plan.userInstruction },
     ].filter((message): message is { role: 'system' | 'user'; content: string } => Boolean(message));
 
-    const result = await runRoutedAiCompletion({
+    let result = await runRoutedAiCompletion({
       userId,
       taskType: plan.taskType,
       messages,
       temperature: 0,
     });
 
-    const outputPrivacy = preparePrivacyPayload([
+    let outputPrivacy = preparePrivacyPayload([
       { key: 'output', value: result.content, mode: 'persistentStorage' },
     ]);
-    const safeOutputContent = outputPrivacy.sanitized.output ?? result.content;
+    let safeOutputContent = outputPrivacy.sanitized.output ?? result.content;
 
     if (
       outputPrivacy.privacy.blocked &&
@@ -514,12 +577,57 @@ export async function POST(req: Request) {
       });
     }
 
-    const consistencyCheck = checkEvidenceConsistency({
+    let consistencyCheck = checkEvidenceConsistency({
       taskType: plan.taskType,
       answer: safeOutputContent,
       evidence: localizedEvidence,
       language: uiLanguage,
     });
+
+    if (requiresEvidence && consistencyCheck.unsupportedClaims.length > 0) {
+      const retryResult = await runRoutedAiCompletion({
+        userId,
+        taskType: plan.taskType,
+        messages: [
+          ...messages,
+          { role: 'assistant', content: safeOutputContent },
+          { role: 'system', content: buildGroundingRetryInstruction(consistencyCheck.unsupportedClaims) },
+        ],
+        temperature: 0,
+      });
+
+      const retryOutputPrivacy = preparePrivacyPayload([
+        { key: 'output', value: retryResult.content, mode: 'persistentStorage' },
+      ]);
+      const retrySafeOutputContent = retryOutputPrivacy.sanitized.output ?? retryResult.content;
+
+      if (
+        !(
+          retryOutputPrivacy.privacy.blocked &&
+          hasCriticalPrivacyFindingTypes([
+            ...retryOutputPrivacy.privacy.findingTypes,
+            ...retryOutputPrivacy.privacy.residualFindingTypes,
+          ])
+        )
+      ) {
+        const retryConsistencyCheck = checkEvidenceConsistency({
+          taskType: plan.taskType,
+          answer: retrySafeOutputContent,
+          evidence: localizedEvidence,
+          language: uiLanguage,
+        });
+
+        if (
+          retryConsistencyCheck.unsupportedClaims.length <= consistencyCheck.unsupportedClaims.length
+        ) {
+          result = retryResult;
+          outputPrivacy = retryOutputPrivacy;
+          safeOutputContent = retrySafeOutputContent;
+          consistencyCheck = retryConsistencyCheck;
+        }
+      }
+    }
+
     const finalEvidence = {
       ...localizedEvidence,
       warnings: [...localizedEvidence.warnings, ...consistencyCheck.warnings],
