@@ -1,6 +1,6 @@
 import type { AiTaskType } from '../../ai/taskTypes';
 import type { UserClinicalEvidenceConfig } from './userClinicalSettings';
-import { findCachedGuidelineDocuments, scoreCachedGuidelineDocuments } from '../../literature/guidelineCache';
+import { findCachedGuidelineDocuments, scoreCachedGuidelineDocuments, upsertGuidelineDocuments } from '../../literature/guidelineCache';
 
 export type RetrievedEvidenceSource = {
   id: string;
@@ -27,6 +27,7 @@ export type RetrievedEvidence = {
 
 const MAX_FETCHED_TEXT_CHARS = 6000;
 const MAX_EXCERPTS = 3;
+const MAX_FETCH_FROM_CACHE_URLS = 2;
 const URL_PATTERN = /https?:\/\/[^\s<>"'`]+/gi;
 const SOURCE_MARKERS = [
   'käypä hoito',
@@ -88,12 +89,77 @@ function normalizeWhitespace(text: string) {
   return text.replace(/\r\n/g, '\n').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
+function truncateAtBoundary(text: string, maxLength: number) {
+  if (text.length <= maxLength) return text;
+  const slice = text.slice(0, maxLength);
+  const lastBreak = Math.max(
+    slice.lastIndexOf('\n\n'),
+    slice.lastIndexOf('. '),
+    slice.lastIndexOf('; '),
+  );
+
+  return normalizeWhitespace((lastBreak > maxLength * 0.6 ? slice.slice(0, lastBreak + 1) : slice).trim());
+}
+
+function splitParagraphs(text: string) {
+  return normalizeWhitespace(text)
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter((paragraph) => paragraph.length > 40);
+}
+
+function countTermHits(text: string, queryTerms: string[]) {
+  const haystack = text.toLowerCase();
+  return queryTerms.reduce((score, term) => (haystack.includes(term.toLowerCase()) ? score + 1 : score), 0);
+}
+
+function buildRelevantExcerpt(text: string, queryTerms: string[], maxLength = MAX_FETCHED_TEXT_CHARS) {
+  const normalized = normalizeWhitespace(text);
+  if (!normalized) return '';
+
+  const paragraphs = splitParagraphs(normalized);
+  if (paragraphs.length === 0) return truncateAtBoundary(normalized, maxLength);
+  if (queryTerms.length === 0) return truncateAtBoundary(normalized, maxLength);
+
+  const scored = paragraphs
+    .map((paragraph, index) => ({
+      index,
+      paragraph,
+      score: countTermHits(paragraph, queryTerms),
+    }))
+    .filter((item) => item.score > 0)
+    .sort((left, right) => {
+      if (right.score !== left.score) return right.score - left.score;
+      return left.index - right.index;
+    });
+
+  if (scored.length === 0) {
+    return truncateAtBoundary(normalized, maxLength);
+  }
+
+  const selectedIndexes = new Set<number>();
+  for (const item of scored.slice(0, 3)) {
+    selectedIndexes.add(item.index);
+    if (item.index > 0) selectedIndexes.add(item.index - 1);
+    if (item.index < paragraphs.length - 1) selectedIndexes.add(item.index + 1);
+  }
+
+  const excerpt = Array.from(selectedIndexes)
+    .sort((left, right) => left - right)
+    .map((index) => paragraphs[index])
+    .join('\n\n');
+
+  return truncateAtBoundary(excerpt || normalized, maxLength);
+}
+
 function excerptFromCachedDocument(
   document: Awaited<ReturnType<typeof findCachedGuidelineDocuments>>[number],
   config: UserClinicalEvidenceConfig,
+  queryTerms: string[],
 ) {
   const source = config.allowedSources.find((item) => item.id === document.sourceId);
-  const text = normalizeWhitespace(document.normalizedText ?? document.rawText ?? '').slice(0, MAX_FETCHED_TEXT_CHARS);
+  const fullText = document.normalizedText ?? document.rawText ?? '';
+  const text = buildRelevantExcerpt(fullText, queryTerms);
   if (!source || !text) return null;
 
   return {
@@ -168,6 +234,7 @@ function sourceForUrl(url: URL, config: UserClinicalEvidenceConfig) {
 async function fetchAllowedSourceExcerpt(rawUrl: string, config: UserClinicalEvidenceConfig): Promise<{
   source: RetrievedEvidenceSource;
   excerpt: RetrievedEvidenceExcerpt;
+  rawText: string;
 } | null> {
   let url: URL;
   try {
@@ -196,7 +263,8 @@ async function fetchAllowedSourceExcerpt(rawUrl: string, config: UserClinicalEvi
 
   const contentType = response.headers.get('content-type') || '';
   const raw = await response.text();
-  const text = normalizeWhitespace(contentType.includes('html') ? stripHtml(raw) : raw).slice(0, MAX_FETCHED_TEXT_CHARS);
+  const rawText = normalizeWhitespace(contentType.includes('html') ? stripHtml(raw) : raw);
+  const text = truncateAtBoundary(rawText, MAX_FETCHED_TEXT_CHARS);
 
   if (!text) {
     throw new Error('Fetched page did not produce readable text');
@@ -216,6 +284,43 @@ async function fetchAllowedSourceExcerpt(rawUrl: string, config: UserClinicalEvi
       url: url.toString(),
       text,
       retrievedAt: new Date().toISOString(),
+    },
+    rawText,
+  };
+}
+
+async function fetchCachedDocumentExcerpt(
+  document: Awaited<ReturnType<typeof findCachedGuidelineDocuments>>[number],
+  config: UserClinicalEvidenceConfig,
+  queryTerms: string[],
+) {
+  const fetched = await fetchAllowedSourceExcerpt(document.sourceUrl, config);
+  if (!fetched) return null;
+
+  const focusedText = buildRelevantExcerpt(fetched.rawText, queryTerms);
+  if (!focusedText) return null;
+
+  await upsertGuidelineDocuments([
+    {
+      sourceId: document.sourceId,
+      country: document.country,
+      externalId: document.externalId,
+      sourceUrl: document.sourceUrl,
+      title: document.title,
+      searchQuery: document.searchQuery,
+      publishedAt: document.publishedAt,
+      rawText: fetched.rawText,
+      normalizedText: fetched.rawText,
+      syncStatus: 'ready',
+    },
+  ]);
+
+  return {
+    source: fetched.source,
+    excerpt: {
+      ...fetched.excerpt,
+      title: document.title || fetched.excerpt.title,
+      text: focusedText,
     },
   };
 }
@@ -248,6 +353,7 @@ export async function retrieveClinicalEvidence(input: {
   const warnings: string[] = [];
   const excerpts: RetrievedEvidenceExcerpt[] = [];
   const excerptSources = new Map<string, RetrievedEvidenceSource>();
+  const queryTerms = extractQueryTerms(input.userMessage, input.currentText, input.currentTemplate || '');
 
   if (looksLikeUserProvidedExcerpt(input.currentText)) {
     excerptSources.set('user-provided-source-excerpt', {
@@ -266,7 +372,6 @@ export async function retrieveClinicalEvidence(input: {
 
   if (excerpts.length < MAX_EXCERPTS && input.config.hasOfficialSources) {
     try {
-      const queryTerms = extractQueryTerms(input.userMessage, input.currentText, input.currentTemplate || '');
       const cachedDocuments = await findCachedGuidelineDocuments({
         country: input.config.clinicalCountry,
         sourceIds: input.config.allowedSources.map((source) => source.id),
@@ -277,11 +382,32 @@ export async function retrieveClinicalEvidence(input: {
       for (const document of scoredDocuments) {
         if (excerpts.length >= MAX_EXCERPTS) break;
         if (document.syncStatus !== 'ready') continue;
-        const cached = excerptFromCachedDocument(document, input.config);
+        const cached = excerptFromCachedDocument(document, input.config, queryTerms);
         if (!cached) continue;
         if (excerpts.some((excerpt) => excerpt.url && excerpt.url === cached.excerpt.url)) continue;
         excerptSources.set(cached.source.id, cached.source);
         excerpts.push(cached.excerpt);
+      }
+
+      if (excerpts.length < MAX_EXCERPTS) {
+        let fetchedCount = 0;
+
+        for (const document of scoredDocuments) {
+          if (excerpts.length >= MAX_EXCERPTS) break;
+          if (fetchedCount >= MAX_FETCH_FROM_CACHE_URLS) break;
+          if (document.syncStatus === 'ready' && (document.rawText || document.normalizedText)) continue;
+
+          try {
+            const fetched = await fetchCachedDocumentExcerpt(document, input.config, queryTerms);
+            fetchedCount += 1;
+            if (!fetched) continue;
+            if (excerpts.some((excerpt) => excerpt.url && excerpt.url === fetched.excerpt.url)) continue;
+            excerptSources.set(fetched.source.id, fetched.source);
+            excerpts.push(fetched.excerpt);
+          } catch (error: any) {
+            warnings.push(`Could not refresh cached guideline source ${document.sourceUrl}: ${error?.message || 'Unknown error'}`);
+          }
+        }
       }
     } catch (error: any) {
       warnings.push(`Could not load cached guideline evidence: ${error?.message || 'Unknown error'}`);
@@ -298,7 +424,10 @@ export async function retrieveClinicalEvidence(input: {
       }
 
       excerptSources.set(fetched.source.id, fetched.source);
-      excerpts.push(fetched.excerpt);
+      excerpts.push({
+        ...fetched.excerpt,
+        text: buildRelevantExcerpt(fetched.rawText, queryTerms),
+      });
       if (excerpts.length >= MAX_EXCERPTS) break;
     } catch (error: any) {
       warnings.push(`Could not retrieve source URL ${rawUrl}: ${error?.message || 'Unknown error'}`);
