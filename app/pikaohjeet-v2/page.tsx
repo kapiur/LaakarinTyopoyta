@@ -11,16 +11,19 @@ import {
   FileText,
   Loader2,
   Lock,
+  MessageSquareShare,
   Plus,
   Save,
   Search,
   Sparkles,
   Stethoscope,
+  Star,
   Trash2,
   UserRound,
   X,
 } from "lucide-react";
 import { useI18n } from "../../lib/useI18n";
+import { recordWorkspaceActivity } from "../../lib/dashboard/workspaceActivityClient";
 
 type UiLang = "fi" | "ru" | "en";
 
@@ -45,6 +48,7 @@ type PikaohjeListItem = {
   tags: string[];
   updatedAt: string;
   sectionCount: number;
+  isFavorite?: boolean;
 };
 
 type PikaohjeDetail = PikaohjeListItem & {
@@ -107,6 +111,10 @@ const ui = {
     openOld: "Avaa vanha Pikaohjeet",
     draftReady: "AI-luonnos valmis. Tarkista sisältö ja tallenna, jos se on sopiva.",
     confirmArchive: "Arkistoidaanko tämä muistilappu?",
+    favorites: "Suosikit",
+    addFavorite: "Lisää suosikkeihin",
+    removeFavorite: "Poista suosikeista",
+    discuss: "Keskustele ohjeesta AI:n kanssa",
   },
   ru: {
     title: "Pikaohjeet v2",
@@ -146,6 +154,10 @@ const ui = {
     openOld: "Открыть старый Pikaohjeet",
     draftReady: "AI-черновик готов. Проверь содержание и сохрани, если всё подходит.",
     confirmArchive: "Отправить эту заметку в архив?",
+    favorites: "Избранное",
+    addFavorite: "Добавить в избранное",
+    removeFavorite: "Убрать из избранного",
+    discuss: "Обсудить инструкцию с AI",
   },
   en: {
     title: "Pikaohjeet v2",
@@ -185,6 +197,10 @@ const ui = {
     openOld: "Open old Pikaohjeet",
     draftReady: "AI draft is ready. Review it and save it if it looks right.",
     confirmArchive: "Archive this note?",
+    favorites: "Favorites",
+    addFavorite: "Add to favorites",
+    removeFavorite: "Remove from favorites",
+    discuss: "Discuss guide with AI",
   },
 };
 
@@ -252,7 +268,15 @@ function toEditableDraft(card: PikaohjeDetail): DraftCard {
   };
 }
 
-export default function PikaohjeetV2Page() {
+export default function PikaohjeetV2Page({
+  embedded = false,
+  initialSlug,
+  onDiscussResult,
+}: {
+  embedded?: boolean;
+  initialSlug?: string;
+  onDiscussResult?: (content: string, contextLabel?: string) => void;
+}) {
   const { language } = useI18n();
   const dict = ui[(language as UiLang) || "fi"] ?? ui.fi;
 
@@ -262,7 +286,7 @@ export default function PikaohjeetV2Page() {
   const [loadingList, setLoadingList] = useState(true);
   const [loadingCard, setLoadingCard] = useState(false);
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<"all" | "clinical" | "personal" | "checked" | "review">("all");
+  const [filter, setFilter] = useState<"all" | "clinical" | "personal" | "checked" | "review" | "favorites">("all");
   const [showNoteDrawer, setShowNoteDrawer] = useState(false);
   const [showEditDrawer, setShowEditDrawer] = useState(false);
   const [noteTitle, setNoteTitle] = useState("");
@@ -274,6 +298,7 @@ export default function PikaohjeetV2Page() {
   const [editDraft, setEditDraft] = useState<DraftCard | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [saveOk, setSaveOk] = useState(false);
+  const [togglingFavorite, setTogglingFavorite] = useState(false);
 
   async function loadCards(selectSlug?: string) {
     setLoadingList(true);
@@ -291,9 +316,10 @@ export default function PikaohjeetV2Page() {
   }
 
   useEffect(() => {
-    loadCards();
+    const requestedSlug = initialSlug || new URLSearchParams(window.location.search).get("card") || undefined;
+    loadCards(requestedSlug);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [initialSlug]);
 
   useEffect(() => {
     if (!activeSlug) {
@@ -324,6 +350,7 @@ export default function PikaohjeetV2Page() {
       if (filter === "personal" && card.type !== "PERSONAL") return false;
       if (filter === "checked" && !card.sourceStatus.includes("CHECKED")) return false;
       if (filter === "review" && card.status !== "NEEDS_REVIEW") return false;
+      if (filter === "favorites" && !card.isFavorite) return false;
       if (!q) return true;
       return [card.title, card.description ?? "", ...card.tags].join(" ").toLowerCase().includes(q);
     });
@@ -433,6 +460,12 @@ export default function PikaohjeetV2Page() {
     setTimeout(() => setCopiedKey(null), 1400);
   };
 
+  const selectCard = (slug: string) => {
+    setDraftCard(null);
+    setActiveSlug(slug);
+    recordWorkspaceActivity(`guide:${slug}`);
+  };
+
   const visibleCard = draftCard
     ? {
         title: draftCard.title,
@@ -447,6 +480,38 @@ export default function PikaohjeetV2Page() {
       }
     : activeCard;
 
+  const activeListItem = activeCard ? cards.find((card) => card.slug === activeCard.slug) : null;
+  const activeIsFavorite = Boolean(activeListItem?.isFavorite);
+  const guideText = visibleCard
+    ? [
+        visibleCard.title,
+        visibleCard.description || "",
+        ...[...(visibleCard.sections || [])]
+          .sort((a, b) => a.order - b.order)
+          .map((section) => `${section.title}\n${section.content}`),
+      ].filter(Boolean).join("\n\n")
+    : "";
+
+  const toggleFavorite = async () => {
+    if (!activeListItem || togglingFavorite) return;
+    const nextValue = !activeIsFavorite;
+    setTogglingFavorite(true);
+    setCards((current) => current.map((card) => card.slug === activeListItem.slug ? { ...card, isFavorite: nextValue } : card));
+    try {
+      const response = await fetch(`/api/pikaohjeet-v2/${encodeURIComponent(activeListItem.slug)}/favorite`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isFavorite: nextValue }),
+      });
+      if (!response.ok) throw new Error("Favorite update failed");
+    } catch (error) {
+      console.error("Quick guide favorite update failed", error);
+      setCards((current) => current.map((card) => card.slug === activeListItem.slug ? { ...card, isFavorite: !nextValue } : card));
+    } finally {
+      setTogglingFavorite(false);
+    }
+  };
+
   const updateEditSection = (index: number, patch: Partial<PikaohjeSection>) => {
     setEditDraft((current) => {
       if (!current) return current;
@@ -457,8 +522,8 @@ export default function PikaohjeetV2Page() {
   };
 
   return (
-    <div className="mx-auto flex h-[calc(100vh-96px)] max-w-[1700px] flex-col gap-4 p-4 text-slate-900">
-      <header className="flex shrink-0 items-center justify-between rounded-[2rem] border border-slate-100 bg-white px-7 py-5 shadow-sm">
+    <div className={embedded ? "flex min-h-[650px] flex-col gap-4 p-4 text-slate-900" : "mx-auto flex h-[calc(100vh-96px)] max-w-[1700px] flex-col gap-4 p-4 text-slate-900"}>
+      {!embedded && <header className="flex shrink-0 items-center justify-between rounded-[2rem] border border-slate-100 bg-white px-7 py-5 shadow-sm">
         <div className="flex items-center gap-4">
           <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-100"><BookOpen size={21} /></div>
           <div>
@@ -471,17 +536,17 @@ export default function PikaohjeetV2Page() {
           <a href="/pikaohjeet" className="rounded-2xl border border-slate-200 px-4 py-2 text-xs font-black text-slate-500 transition hover:bg-slate-50">{dict.openOld}</a>
           <button onClick={() => setShowNoteDrawer(true)} className="flex items-center gap-2 rounded-2xl bg-blue-600 px-5 py-2.5 text-xs font-black uppercase tracking-wide text-white shadow-lg shadow-blue-100 transition hover:bg-blue-700"><Plus size={16} /> {dict.newNote}</button>
         </div>
-      </header>
+      </header>}
 
-      <main className="grid min-h-0 flex-1 grid-cols-12 gap-5 overflow-hidden">
-        <aside className="col-span-4 flex min-h-0 flex-col gap-4 xl:col-span-3">
+      <main className={embedded ? "grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[minmax(240px,0.35fr)_minmax(0,1fr)]" : "grid min-h-0 flex-1 grid-cols-12 gap-5 overflow-hidden"}>
+        <aside className={embedded ? "flex min-h-0 flex-col gap-4" : "col-span-4 flex min-h-0 flex-col gap-4 xl:col-span-3"}>
           <div className="rounded-[2rem] border border-slate-100 bg-white p-4 shadow-sm">
             <div className="relative">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
               <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={dict.search} className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-11 pr-4 text-sm font-semibold outline-none transition focus:border-blue-200 focus:bg-white focus:ring-4 focus:ring-blue-500/10" />
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
-              {[["all", dict.all], ["clinical", dict.clinical], ["personal", dict.personal], ["checked", dict.checked], ["review", dict.review]].map(([key, label]) => (
+              {[["all", dict.all], ["clinical", dict.clinical], ["personal", dict.personal], ["checked", dict.checked], ["review", dict.review], ["favorites", dict.favorites]].map(([key, label]) => (
                 <button key={key} onClick={() => setFilter(key as any)} className={cn("rounded-xl border px-3 py-2 text-[10px] font-black uppercase tracking-wide transition", filter === key ? "border-blue-200 bg-blue-50 text-blue-700" : "border-slate-100 bg-white text-slate-400 hover:bg-slate-50")}>{label}</button>
               ))}
             </div>
@@ -491,10 +556,10 @@ export default function PikaohjeetV2Page() {
             {loadingList ? <div className="flex h-40 items-center justify-center text-blue-500"><Loader2 className="animate-spin" /></div> : filteredCards.length === 0 ? <div className="rounded-[2rem] border border-dashed border-slate-200 bg-white p-8 text-center text-sm font-bold text-slate-300">{dict.noCards}</div> : (
               <div className="space-y-2">
                 {filteredCards.map((card) => (
-                  <button key={card.slug} onClick={() => { setDraftCard(null); setActiveSlug(card.slug); }} className={cn("w-full rounded-[1.35rem] border p-4 text-left transition", activeSlug === card.slug && !draftCard ? "border-blue-200 bg-blue-50 shadow-sm" : "border-slate-100 bg-white hover:border-blue-100 hover:bg-slate-50")}>
+                  <button key={card.slug} onClick={() => selectCard(card.slug)} className={cn("w-full rounded-[1.35rem] border p-4 text-left transition", activeSlug === card.slug && !draftCard ? "border-blue-200 bg-blue-50 shadow-sm" : "border-slate-100 bg-white hover:border-blue-100 hover:bg-slate-50")}>
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0"><div className="truncate text-sm font-black text-slate-800">{card.title}</div>{card.description && <div className="mt-1 line-clamp-2 text-xs font-semibold text-slate-400">{card.description}</div>}</div>
-                      {card.type === "PERSONAL" ? <UserRound size={16} className="shrink-0 text-slate-400" /> : <Stethoscope size={16} className="shrink-0 text-blue-500" />}
+                      <span className="flex shrink-0 items-center gap-2">{card.isFavorite && <Star size={15} fill="currentColor" className="text-amber-500" />}{card.type === "PERSONAL" ? <UserRound size={16} className="text-slate-400" /> : <Stethoscope size={16} className="text-blue-500" />}</span>
                     </div>
                     <div className="mt-3 flex flex-wrap gap-1.5"><span className={cn("rounded-lg border px-2 py-1 text-[9px] font-black uppercase", badgeClass(card.type === "PERSONAL" ? "slate" : "blue"))}>{card.type === "PERSONAL" ? dict.personal : dict.legacy}</span><span className={cn("rounded-lg border px-2 py-1 text-[9px] font-black uppercase", badgeClass("amber"))}>{dict.sourceUnchecked}</span></div>
                   </button>
@@ -504,19 +569,21 @@ export default function PikaohjeetV2Page() {
           </div>
         </aside>
 
-        <section className="col-span-8 min-h-0 overflow-hidden rounded-[2rem] border border-slate-100 bg-slate-50 shadow-sm xl:col-span-9">
+        <section className={embedded ? "min-h-0 overflow-hidden rounded-lg border border-slate-100 bg-slate-50 shadow-sm" : "col-span-8 min-h-0 overflow-hidden rounded-[2rem] border border-slate-100 bg-slate-50 shadow-sm xl:col-span-9"}>
           {loadingCard && !draftCard ? <div className="flex h-full items-center justify-center text-blue-500"><Loader2 className="animate-spin" /></div> : visibleCard ? (
             <div className="h-full overflow-y-auto p-6 xl:p-10">
               <div className="mb-7 rounded-[2rem] border border-slate-100 bg-white p-7 shadow-sm">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div>
                     <div className="mb-3 flex flex-wrap gap-2"><span className={cn("inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-[10px] font-black uppercase tracking-wide", visibleCard.type === "PERSONAL" ? badgeClass("slate") : badgeClass("blue"))}>{visibleCard.type === "PERSONAL" ? <UserRound size={13} /> : <Stethoscope size={13} />}{visibleCard.type === "PERSONAL" ? dict.personal : dict.clinical}</span><span className={cn("inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-[10px] font-black uppercase tracking-wide", visibleCard.sourceStatus?.includes("CHECKED") ? badgeClass("emerald") : badgeClass("amber"))}>{visibleCard.sourceStatus?.includes("CHECKED") ? <CheckCircle2 size={13} /> : <AlertTriangle size={13} />}{visibleCard.sourceStatus?.includes("CHECKED") ? dict.sourceChecked : dict.sourceUnchecked}</span>{visibleCard.visibility === "PRIVATE" && <span className={cn("inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-[10px] font-black uppercase tracking-wide", badgeClass("slate"))}><Lock size={13} /> {dict.private}</span>}</div>
-                    <h2 className="text-4xl font-black tracking-tight text-slate-900">{visibleCard.title}</h2>
+                    <h2 className={embedded ? "text-2xl font-black tracking-tight text-slate-900" : "text-4xl font-black tracking-tight text-slate-900"}>{visibleCard.title}</h2>
                     {visibleCard.description && <p className="mt-2 max-w-3xl text-sm font-semibold leading-relaxed text-slate-500">{visibleCard.description}</p>}
                     {visibleCard.tags?.length > 0 && <div className="mt-4 flex flex-wrap gap-2">{visibleCard.tags.map((tag) => <span key={tag} className="rounded-xl bg-slate-100 px-3 py-1 text-[10px] font-black text-slate-500">#{tag}</span>)}</div>}
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    {activeCard?.type === "PERSONAL" && !draftCard && <><button onClick={startEdit} className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-xs font-black uppercase tracking-wide text-slate-600 transition hover:bg-slate-50"><Edit3 size={15} /> {dict.edit}</button><button onClick={archiveActive} disabled={archiving} className="flex items-center gap-2 rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-xs font-black uppercase tracking-wide text-rose-700 transition hover:bg-rose-100 disabled:opacity-50">{archiving ? <Loader2 className="animate-spin" size={15} /> : <Trash2 size={15} />} {dict.archive}</button></>}
+                    {activeListItem && <button type="button" onClick={toggleFavorite} disabled={togglingFavorite} className={cn("flex items-center gap-2 rounded-md border px-3 py-2 text-xs font-bold", activeIsFavorite ? "border-amber-200 bg-amber-50 text-amber-800" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50")}>{togglingFavorite ? <Loader2 className="animate-spin" size={15} /> : <Star size={15} fill={activeIsFavorite ? "currentColor" : "none"} />}{activeIsFavorite ? dict.removeFavorite : dict.addFavorite}</button>}
+                    {onDiscussResult && guideText && <button type="button" onClick={() => onDiscussResult(guideText, visibleCard.title)} className="flex items-center gap-2 rounded-md border border-blue-200 bg-white px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-50"><MessageSquareShare size={15} />{dict.discuss}</button>}
+                    {!embedded && activeCard?.type === "PERSONAL" && !draftCard && <><button onClick={startEdit} className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-xs font-black uppercase tracking-wide text-slate-600 transition hover:bg-slate-50"><Edit3 size={15} /> {dict.edit}</button><button onClick={archiveActive} disabled={archiving} className="flex items-center gap-2 rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-xs font-black uppercase tracking-wide text-rose-700 transition hover:bg-rose-100 disabled:opacity-50">{archiving ? <Loader2 className="animate-spin" size={15} /> : <Trash2 size={15} />} {dict.archive}</button></>}
                     {draftCard && <button onClick={() => saveNewDraft()} disabled={savingDraft} className="flex items-center gap-2 rounded-2xl bg-emerald-600 px-5 py-3 text-xs font-black uppercase tracking-wide text-white shadow-lg shadow-emerald-100 transition hover:bg-emerald-700 disabled:opacity-50">{savingDraft ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />} {dict.saveDraft}</button>}
                   </div>
                 </div>

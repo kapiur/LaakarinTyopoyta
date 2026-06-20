@@ -83,7 +83,7 @@ export function parseHomeActionId(actionId: string) {
 }
 
 export async function buildHomeActionCatalog(userId: number): Promise<HomeActionItem[]> {
-  const [calculatorPreferences, templateRows, userToolRows, visibilityRows] = await Promise.all([
+  const [calculatorPreferences, templateRows, userToolRows, visibilityRows, userRecord, guideRows] = await Promise.all([
     prisma.userCalculatorPreference.findMany({ where: { userId } }),
     prisma.template.findMany({
       where: { userId },
@@ -100,6 +100,12 @@ export async function buildHomeActionCatalog(userId: number): Promise<HomeAction
       FROM "UserAiToolVisibility"
       WHERE "userId" = ${userId}
     `.catch(() => [] as DefaultToolVisibilityRow[]),
+    prisma.user.findUnique({ where: { id: userId }, select: { email: true } }),
+    prisma.clinicalCard.findMany({
+      where: { isPublished: true },
+      select: { slug: true, title: true, subtitle: true, environment: true, tags: true, updatedByUserId: true },
+      orderBy: [{ updatedAt: "desc" }, { title: "asc" }],
+    }),
   ]);
 
   const calculatorVisibility = new Map(
@@ -131,6 +137,24 @@ export async function buildHomeActionCatalog(userId: number): Promise<HomeAction
     group: "template",
   }));
 
+  const userEmail = userRecord?.email?.trim().toLowerCase() ?? "";
+  const guides: HomeActionItem[] = guideRows
+    .filter((guide) => {
+      if (guide.environment !== "personal") return true;
+      if (guide.updatedByUserId === String(userId)) return true;
+      return Boolean(userEmail && guide.tags.includes(`_share:${userEmail}`));
+    })
+    .map((guide) => ({
+      id: `guide:${guide.slug}`,
+      type: "route",
+      key: guide.slug,
+      label: guide.title,
+      description: guide.subtitle ?? "",
+      href: `/pikaohjeet-v2?card=${encodeURIComponent(guide.slug)}`,
+      icon: "Zap",
+      group: "route",
+    }));
+
   const defaultTools: HomeActionItem[] = DEFAULT_AI_TOOL_METADATA
     .filter((tool) => defaultToolVisibility.get(tool.key) !== false)
     .map((tool) => {
@@ -156,5 +180,5 @@ export async function buildHomeActionCatalog(userId: number): Promise<HomeAction
     group: "aiTool",
   }));
 
-  return [...defaultTools, ...userTools, ...calculators, ...templates, ...routeActions];
+  return [...defaultTools, ...userTools, ...calculators, ...templates, ...guides, ...routeActions];
 }

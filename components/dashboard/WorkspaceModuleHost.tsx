@@ -7,8 +7,10 @@ import type { ComponentType } from "react";
 import type { CalculatorWorkspaceModuleId, InlineWorkspaceModuleId } from "../../lib/dashboard/workspaceModuleRegistry";
 import {
   getTemplateIdFromWorkspaceModule,
+  getGuideSlugFromWorkspaceModule,
   inlineWorkspaceModules,
   isTemplateWorkspaceModuleId,
+  isGuideWorkspaceModuleId,
 } from "../../lib/dashboard/workspaceModuleRegistry";
 import { useI18n } from "../../lib/useI18n";
 import { homeActionIconMap } from "./homeActionIcons";
@@ -27,6 +29,7 @@ const AbgCalculator = dynamic(() => import("../../app/calculators/abg/page"), { 
 const CadCalculator = dynamic(() => import("../../app/calculators/cad/page"), { loading: Loading });
 const TemplateFill = dynamic(() => import("../../app/templates/fill/page"), { loading: Loading });
 const LiteratureWorkspace = dynamic(() => import("../../app/literature/page"), { loading: Loading });
+const QuickGuidesWorkspace = dynamic(() => import("../../app/pikaohjeet-v2/page"), { loading: Loading });
 
 const calculatorComponents: Record<CalculatorWorkspaceModuleId, ComponentType<EmbeddedCalculatorProps>> = {
   "calculator:bmi": BmiCalculator,
@@ -39,10 +42,10 @@ const calculatorComponents: Record<CalculatorWorkspaceModuleId, ComponentType<Em
 };
 
 const labels = {
-  fi: { back: "Takaisin tekstityökaluun", open: "Avaa omalla sivulla", loading: "Ladataan työkalua", template: "Tekstimalli", literature: "Kirjallisuushaku" },
-  ru: { back: "Вернуться к работе с текстом", open: "Открыть отдельно", loading: "Загрузка инструмента", template: "Текстовый шаблон", literature: "Поиск литературы" },
-  en: { back: "Back to text workspace", open: "Open separately", loading: "Loading tool", template: "Text template", literature: "Literature search" },
-  de: { back: "Zurück zum Textarbeitsbereich", open: "Separat öffnen", loading: "Werkzeug wird geladen", template: "Textvorlage", literature: "Literatursuche" },
+  fi: { back: "Takaisin tekstityökaluun", open: "Avaa omalla sivulla", loading: "Ladataan työkalua", template: "Tekstimalli", literature: "Kirjallisuushaku", guides: "Pikaohjeet" },
+  ru: { back: "Вернуться к работе с текстом", open: "Открыть отдельно", loading: "Загрузка инструмента", template: "Текстовый шаблон", literature: "Поиск литературы", guides: "Клинические инструкции" },
+  en: { back: "Back to text workspace", open: "Open separately", loading: "Loading tool", template: "Text template", literature: "Literature search", guides: "Quick guides" },
+  de: { back: "Zurück zum Textarbeitsbereich", open: "Separat öffnen", loading: "Werkzeug wird geladen", template: "Textvorlage", literature: "Literatursuche", guides: "Kurzanleitungen" },
 } as const;
 
 function Loading() {
@@ -64,13 +67,17 @@ export default function WorkspaceModuleHost({
   const copy = labels[language as keyof typeof labels] ?? labels.fi;
   const templateModule = isTemplateWorkspaceModuleId(moduleId);
   const literatureModule = moduleId === "route:literature";
-  const definition = literatureModule
+  const guideModule = moduleId === "route:quick-guides" || isGuideWorkspaceModuleId(moduleId);
+  const guideSlug = isGuideWorkspaceModuleId(moduleId) ? getGuideSlugFromWorkspaceModule(moduleId) : undefined;
+  const definition = guideModule
+    ? { label: copy.guides, href: guideSlug ? `/pikaohjeet-v2?card=${encodeURIComponent(guideSlug)}` : "/pikaohjeet-v2", icon: "Zap" }
+    : literatureModule
     ? { label: copy.literature, href: "/literature", icon: "BookText" }
     : templateModule
       ? { label: copy.template, href: `/malli?templateId=${getTemplateIdFromWorkspaceModule(moduleId)}`, icon: "FileText" }
       : inlineWorkspaceModules[moduleId];
   const Icon = homeActionIconMap[definition.icon as keyof typeof homeActionIconMap] ?? FileText;
-  const CalculatorComponent = templateModule || literatureModule ? null : calculatorComponents[moduleId];
+  const CalculatorComponent = templateModule || literatureModule || guideModule ? null : calculatorComponents[moduleId];
 
   return (
     <section className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
@@ -87,7 +94,13 @@ export default function WorkspaceModuleHost({
           <ExternalLink size={14} /> {copy.open}
         </Link>
       </header>
-      {literatureModule ? (
+      {guideModule ? (
+        <QuickGuidesWorkspace
+          embedded
+          initialSlug={guideSlug}
+          onDiscussResult={(content, contextLabel) => onDiscussResult(content, moduleId, contextLabel || definition.label)}
+        />
+      ) : literatureModule ? (
         <LiteratureWorkspace
           embedded
           onDiscussResult={(content, contextLabel) => onDiscussResult(content, moduleId, contextLabel || definition.label)}

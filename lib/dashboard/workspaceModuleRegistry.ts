@@ -8,8 +8,9 @@ export type CalculatorWorkspaceModuleId =
   | "calculator:cad";
 
 export type TemplateWorkspaceModuleId = `template:${number}`;
-export type RouteWorkspaceModuleId = "route:literature";
-export type InlineWorkspaceModuleId = CalculatorWorkspaceModuleId | TemplateWorkspaceModuleId | RouteWorkspaceModuleId;
+export type GuideWorkspaceModuleId = `guide:${string}`;
+export type RouteWorkspaceModuleId = "route:literature" | "route:quick-guides";
+export type InlineWorkspaceModuleId = CalculatorWorkspaceModuleId | TemplateWorkspaceModuleId | GuideWorkspaceModuleId | RouteWorkspaceModuleId;
 export type WorkspaceModuleId = "text" | InlineWorkspaceModuleId;
 
 export const inlineWorkspaceModules = {
@@ -63,7 +64,7 @@ export const inlineWorkspaceModules = {
 }>;
 
 export function isInlineWorkspaceActionId(actionId: string): actionId is InlineWorkspaceModuleId {
-  return actionId in inlineWorkspaceModules || /^template:\d+$/.test(actionId) || actionId === "route:literature";
+  return actionId in inlineWorkspaceModules || /^template:\d+$/.test(actionId) || /^guide:[A-Za-z0-9._~-]+$/.test(actionId) || actionId === "route:literature" || actionId === "route:quick-guides";
 }
 
 export function isTemplateWorkspaceModuleId(moduleId: string): moduleId is TemplateWorkspaceModuleId {
@@ -72,6 +73,14 @@ export function isTemplateWorkspaceModuleId(moduleId: string): moduleId is Templ
 
 export function getTemplateIdFromWorkspaceModule(moduleId: TemplateWorkspaceModuleId) {
   return Number(moduleId.slice("template:".length));
+}
+
+export function isGuideWorkspaceModuleId(moduleId: string): moduleId is GuideWorkspaceModuleId {
+  return /^guide:[A-Za-z0-9._~-]+$/.test(moduleId);
+}
+
+export function getGuideSlugFromWorkspaceModule(moduleId: GuideWorkspaceModuleId) {
+  return moduleId.slice("guide:".length);
 }
 
 export function workspaceModuleIdForAction(actionId: string): WorkspaceModuleId | null {
