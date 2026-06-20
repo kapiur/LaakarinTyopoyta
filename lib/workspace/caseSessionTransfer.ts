@@ -1,10 +1,12 @@
 "use client";
 
 export type CaseSessionTransferTarget = "text_tool" | "assistant";
+export type CaseSessionTransferToolKey = "fix" | "summarize";
 
 export type CaseSessionTransferPayload = {
   target: CaseSessionTransferTarget;
   content: string;
+  toolKey?: CaseSessionTransferToolKey;
 };
 
 export const CASE_SESSION_TRANSFER_EVENT = "laakarin-tyopoyta:case-session-transfer";
@@ -34,6 +36,7 @@ export function consumeQueuedCaseSessionTransfer(): CaseSessionTransferPayload |
       return {
         target: parsed.target,
         content: parsed.content.trim(),
+        toolKey: parsed.toolKey === "fix" || parsed.toolKey === "summarize" ? parsed.toolKey : undefined,
       };
     }
   } catch (error) {

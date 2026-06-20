@@ -326,6 +326,9 @@ export default function Dashboard() {
 
       if (payload.target === "text_tool") {
         clearAttachedContext();
+        if (payload.toolKey) {
+          setToolMode(payload.toolKey);
+        }
         setToolText(payload.content);
         setToolResult("");
         setPreviousToolResult("");

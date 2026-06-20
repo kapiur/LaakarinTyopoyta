@@ -7,6 +7,7 @@ import {
   ArrowUpRight,
   Briefcase,
   Copy,
+  FilePlus2,
   ListTodo,
   MessageSquareShare,
   RefreshCcw,
@@ -32,6 +33,11 @@ const copyByLanguage = {
     questionsLabel: "Kysymykset AI:lle",
     questionsPlaceholder: "Mita haluat AI:n arvioivan tai muotoilevan naiden materiaalien pohjalta?",
     resetDraft: "Tyhjennä runko",
+    draftActionsTitle: "Kokoa tyoluonnos",
+    draftActionsHint: "Muodosta nykyisesta sessiosta heti kaytettava luonnos ja avaa se tekstityokalussa.",
+    draftSummary: "Kliininen yhteenveto",
+    draftPlan: "Toimintasuunnitelma",
+    draftConsult: "Konsultaatiopyynto",
     materialsTitle: "Kootut materiaalit",
     empty: "Lisää tähän väliaikaisesti kliininen luonnos, laskelma, artikkelitulkinta tai keskusteluvastaus.",
     open: "Avaa tapaussessio",
@@ -54,6 +60,11 @@ const copyByLanguage = {
     questionsLabel: "Вопросы к AI",
     questionsPlaceholder: "Что именно вы хотите спросить у AI по этим материалам?",
     resetDraft: "Очистить структуру",
+    draftActionsTitle: "Собрать рабочий черновик",
+    draftActionsHint: "Сформируйте из текущей сессии готовую заготовку и откройте ее в текстовом AI-инструменте.",
+    draftSummary: "Клинический итог",
+    draftPlan: "План действий",
+    draftConsult: "Запрос на консультацию",
     materialsTitle: "Собранные материалы",
     empty: "Сюда можно временно складывать клинический черновик, расчет, разбор статьи или ответ ассистента.",
     open: "Открыть сессию случая",
@@ -76,6 +87,11 @@ const copyByLanguage = {
     questionsLabel: "Questions for AI",
     questionsPlaceholder: "What exactly should the AI help you think through from these materials?",
     resetDraft: "Clear structure",
+    draftActionsTitle: "Build a working draft",
+    draftActionsHint: "Turn the current case session into a usable draft and open it in the text AI tool.",
+    draftSummary: "Clinical summary",
+    draftPlan: "Action plan",
+    draftConsult: "Consult request",
     materialsTitle: "Collected materials",
     empty: "Temporarily collect a clinical draft, calculation, article interpretation, or assistant reply here.",
     open: "Open case session",
@@ -98,6 +114,11 @@ const copyByLanguage = {
     questionsLabel: "Fragen an die AI",
     questionsPlaceholder: "Wobei genau soll die AI anhand dieser Materialien helfen?",
     resetDraft: "Struktur leeren",
+    draftActionsTitle: "Arbeitsentwurf erstellen",
+    draftActionsHint: "Erstellen Sie aus der aktuellen Sitzung sofort einen nutzbaren Entwurf und offnen Sie ihn im Text-AI-Werkzeug.",
+    draftSummary: "Klinische Zusammenfassung",
+    draftPlan: "Handlungsplan",
+    draftConsult: "Konsilanfrage",
     materialsTitle: "Gesammelte Materialien",
     empty: "Hier koennen voruebergehend klinische Entwuerfe, Berechnungen, Artikelinterpretationen oder Assistentenantworten gesammelt werden.",
     open: "Fallsitzung oeffnen",
@@ -149,6 +170,59 @@ const exportSectionLabels = {
   },
 } as const;
 
+const draftTemplateCopy = {
+  fi: {
+    summaryTitle: "Kliininen yhteenveto",
+    planTitle: "Toimintasuunnitelma",
+    consultTitle: "Konsultaatiopyynto",
+    situation: "Tilanne",
+    assessment: "Nykyarvio",
+    nextSteps: "Seuraavat askeleet",
+    questions: "Kysymykset AI:lle",
+    consultationGoal: "Konsultaation tavoite",
+    consultantRequest: "Mita toivot konsultilta",
+    materials: "Kootut materiaalit",
+  },
+  ru: {
+    summaryTitle: "Клинический итог",
+    planTitle: "План действий",
+    consultTitle: "Запрос на консультацию",
+    situation: "Ситуация",
+    assessment: "Текущая оценка",
+    nextSteps: "Следующие шаги",
+    questions: "Вопросы к AI",
+    consultationGoal: "Цель консультации",
+    consultantRequest: "Что требуется от консультанта",
+    materials: "Собранные материалы",
+  },
+  en: {
+    summaryTitle: "Clinical summary",
+    planTitle: "Action plan",
+    consultTitle: "Consult request",
+    situation: "Situation",
+    assessment: "Current assessment",
+    nextSteps: "Next steps",
+    questions: "Questions for AI",
+    consultationGoal: "Consultation goal",
+    consultantRequest: "What is needed from the consultant",
+    materials: "Collected materials",
+  },
+  de: {
+    summaryTitle: "Klinische Zusammenfassung",
+    planTitle: "Handlungsplan",
+    consultTitle: "Konsilanfrage",
+    situation: "Situation",
+    assessment: "Aktuelle Einschatzung",
+    nextSteps: "Naechste Schritte",
+    questions: "Fragen an die AI",
+    consultationGoal: "Ziel der Konsultation",
+    consultantRequest: "Was vom Konsiliararzt benoetigt wird",
+    materials: "Gesammelte Materialien",
+  },
+} as const;
+
+type DraftActionKind = "summary" | "plan" | "consult";
+
 export default function CaseSessionDock() {
   const router = useRouter();
   const pathname = usePathname();
@@ -157,6 +231,7 @@ export default function CaseSessionDock() {
   const [open, setOpen] = useState(false);
   const copy = copyByLanguage[language as keyof typeof copyByLanguage] ?? copyByLanguage.en;
   const exportLabels = exportSectionLabels[language as keyof typeof exportSectionLabels] ?? exportSectionLabels.en;
+  const draftTemplateLabels = draftTemplateCopy[language as keyof typeof draftTemplateCopy] ?? draftTemplateCopy.en;
 
   const materialsText = useMemo(
     () =>
@@ -198,6 +273,65 @@ export default function CaseSessionDock() {
   function sendSession(target: "text_tool" | "assistant") {
     if (!sessionText) return;
     queueCaseSessionTransfer({ target, content: sessionText });
+    setOpen(false);
+    if (pathname !== "/") {
+      router.push("/");
+    }
+  }
+
+  function buildDraftDocument(kind: DraftActionKind) {
+    const trimmedSummary = draft.summary.trim();
+    const trimmedPlan = draft.plan.trim();
+    const trimmedQuestions = draft.questions.trim();
+
+    if (kind === "summary") {
+      return [
+        draftTemplateLabels.summaryTitle,
+        "",
+        `${draftTemplateLabels.situation}\n${trimmedSummary || "-"}`,
+        "",
+        `${draftTemplateLabels.assessment}\n${trimmedPlan || "-"}`,
+        "",
+        trimmedQuestions ? `${draftTemplateLabels.questions}\n${trimmedQuestions}` : "",
+        "",
+        `${draftTemplateLabels.materials}\n${materialsText || "-"}`,
+      ].filter(Boolean).join("\n");
+    }
+
+    if (kind === "plan") {
+      return [
+        draftTemplateLabels.planTitle,
+        "",
+        `${draftTemplateLabels.situation}\n${trimmedSummary || "-"}`,
+        "",
+        `${draftTemplateLabels.nextSteps}\n${trimmedPlan || "-"}`,
+        "",
+        trimmedQuestions ? `${draftTemplateLabels.questions}\n${trimmedQuestions}` : "",
+        "",
+        `${draftTemplateLabels.materials}\n${materialsText || "-"}`,
+      ].filter(Boolean).join("\n");
+    }
+
+    return [
+      draftTemplateLabels.consultTitle,
+      "",
+      `${draftTemplateLabels.consultationGoal}\n${trimmedQuestions || "-"}`,
+      "",
+      `${draftTemplateLabels.situation}\n${trimmedSummary || "-"}`,
+      "",
+      `${draftTemplateLabels.consultantRequest}\n${trimmedPlan || "-"}`,
+      "",
+      `${draftTemplateLabels.materials}\n${materialsText || "-"}`,
+    ].filter(Boolean).join("\n");
+  }
+
+  function openDraftInTextTool(kind: DraftActionKind) {
+    const content = buildDraftDocument(kind);
+    queueCaseSessionTransfer({
+      target: "text_tool",
+      content,
+      toolKey: "fix",
+    });
     setOpen(false);
     if (pathname !== "/") {
       router.push("/");
@@ -341,6 +475,43 @@ export default function CaseSessionDock() {
                       className="h-28 w-full resize-none rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-400"
                     />
                   </label>
+                </div>
+              </section>
+
+              <section className="mb-4 rounded-2xl border border-slate-200 bg-white p-4">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">{copy.draftActionsTitle}</h3>
+                  <p className="mt-1 text-xs leading-relaxed text-slate-500">{copy.draftActionsHint}</p>
+                </div>
+
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => openDraftInTextTool("summary")}
+                    disabled={!materialsText && !draft.summary.trim() && !draft.plan.trim() && !draft.questions.trim()}
+                    className="inline-flex items-center gap-2 rounded-md border border-blue-200 bg-white px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-50 disabled:opacity-40"
+                  >
+                    <FilePlus2 size={14} />
+                    {copy.draftSummary}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openDraftInTextTool("plan")}
+                    disabled={!materialsText && !draft.summary.trim() && !draft.plan.trim() && !draft.questions.trim()}
+                    className="inline-flex items-center gap-2 rounded-md border border-blue-200 bg-white px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-50 disabled:opacity-40"
+                  >
+                    <ListTodo size={14} />
+                    {copy.draftPlan}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openDraftInTextTool("consult")}
+                    disabled={!materialsText && !draft.summary.trim() && !draft.plan.trim() && !draft.questions.trim()}
+                    className="inline-flex items-center gap-2 rounded-md border border-blue-200 bg-white px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-50 disabled:opacity-40"
+                  >
+                    <MessageSquareShare size={14} />
+                    {copy.draftConsult}
+                  </button>
                 </div>
               </section>
 
