@@ -94,7 +94,7 @@ export default function CoreUiI18nEnhancer() {
   const { language } = useI18n();
 
   useEffect(() => {
-    const applies = pathname === "/login" || pathname.startsWith("/profile/security");
+    const applies = pathname.startsWith("/profile/security");
     if (!applies) return;
 
     const apply = () => {

@@ -13,7 +13,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const isLogin = pathname === "/login";
 
   if (isLogin) {
-    return <>{children}</>;
+    return <Providers>{children}</Providers>;
   }
 
   return (
