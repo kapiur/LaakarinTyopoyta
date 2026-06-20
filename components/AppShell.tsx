@@ -49,7 +49,7 @@ function WorkspaceShell({ children }: { children: React.ReactNode }) {
           </div>
         </header>
         <main className="relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-slate-50 scroll-smooth">
-          <div className="mx-auto max-w-[1600px] p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-4 md:p-6 lg:p-8">{children}</div>
+          <div className="mx-auto flex h-full min-h-0 max-w-[1600px] flex-col p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-4 md:p-6 lg:p-8">{children}</div>
         </main>
       </div>
 

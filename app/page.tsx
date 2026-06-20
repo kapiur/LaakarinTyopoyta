@@ -42,6 +42,11 @@ import {
 import type { TranslationKey } from "../lib/i18n";
 import { useI18n } from "../lib/useI18n";
 import { useCaseSession } from "../components/workspace/CaseSessionProvider";
+import {
+  CASE_SESSION_TRANSFER_EVENT,
+  consumeQueuedCaseSessionTransfer,
+  type CaseSessionTransferPayload,
+} from "../lib/workspace/caseSessionTransfer";
 
 type PrivacyInfo = { anonymized?: boolean; findingTypes?: string[] } | null;
 
@@ -99,6 +104,13 @@ const workspaceActionCopy = {
   ru: { saveToSession: "Добавить в сессию случая" },
   en: { saveToSession: "Add to case session" },
   de: { saveToSession: "Zur Fallsitzung hinzufuegen" },
+} as const;
+
+const caseSessionLabelByLanguage = {
+  fi: "Tapaussessio",
+  ru: "Сессия случая",
+  en: "Case session",
+  de: "Fallsitzung",
 } as const;
 
 function PrivacyStatus({ privacy, label }: { privacy: PrivacyInfo; label: string }) {
@@ -304,6 +316,55 @@ export default function Dashboard() {
       ? t(defaultToolLabelKeys[attachmentTool.key])
       : attachmentTool.label
     : activeToolLabel);
+  const caseSessionLabel = caseSessionLabelByLanguage[language as keyof typeof caseSessionLabelByLanguage] ?? caseSessionLabelByLanguage.en;
+
+  useEffect(() => {
+    function applyCaseSessionTransfer(payload: CaseSessionTransferPayload) {
+      if (!payload.content.trim()) return;
+
+      setActiveWorkspaceModule("text");
+
+      if (payload.target === "text_tool") {
+        clearAttachedContext();
+        setToolText(payload.content);
+        setToolResult("");
+        setPreviousToolResult("");
+        setRefinementInstruction("");
+        setToolPrivacy(null);
+        window.requestAnimationFrame(() => toolTextAreaRef.current?.focus());
+        return;
+      }
+
+      setAgentAttachment({
+        type: "sourceText",
+        content: payload.content,
+        toolKey: toolMode,
+        label: caseSessionLabel,
+      });
+      setMessages([{ role: "assistant", content: t("dashboard.assistantGreeting") }]);
+      setChatInput("");
+      setChatPrivacy(null);
+      setAssistantVisibility(true);
+      window.requestAnimationFrame(() => chatInputRef.current?.focus());
+    }
+
+    const pendingPayload = consumeQueuedCaseSessionTransfer();
+    if (pendingPayload) {
+      applyCaseSessionTransfer(pendingPayload);
+    }
+
+    const handleTransfer = (event: Event) => {
+      const customEvent = event as CustomEvent<CaseSessionTransferPayload>;
+      if (customEvent.detail) {
+        applyCaseSessionTransfer(customEvent.detail);
+      }
+    };
+
+    window.addEventListener(CASE_SESSION_TRANSFER_EVENT, handleTransfer as EventListener);
+    return () => {
+      window.removeEventListener(CASE_SESSION_TRANSFER_EVENT, handleTransfer as EventListener);
+    };
+  }, [caseSessionLabel, t, toolMode]);
 
   function setAssistantVisibility(nextValue: boolean) {
     setAssistantOpen(nextValue);
@@ -540,8 +601,8 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="min-h-full animate-in fade-in duration-300">
-      <section className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden animate-in fade-in duration-300">
+      <section className="mb-4 shrink-0 flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4">
         <Link
           href="/settings?section=workspace"
           className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 text-sm text-slate-600 transition-colors hover:text-blue-700"
@@ -569,17 +630,23 @@ export default function Dashboard() {
         )}
       </section>
 
-      <GuidelineUpdatesNotice />
-      <QuickActionsBar activeAiToolKey={toolMode} onSelectAiTool={selectQuickAiTool} onOpenInlineAction={openInlineWorkspaceAction} />
-      <RecentActionsBar
-        onSelectAiTool={selectQuickAiTool}
-        onRestoreAiTool={setToolMode}
-        onOpenInlineAction={openInlineWorkspaceAction}
-      />
+      <div className="shrink-0">
+        <GuidelineUpdatesNotice />
+      </div>
+      <div className="shrink-0">
+        <QuickActionsBar activeAiToolKey={toolMode} onSelectAiTool={selectQuickAiTool} onOpenInlineAction={openInlineWorkspaceAction} />
+      </div>
+      <div className="shrink-0">
+        <RecentActionsBar
+          onSelectAiTool={selectQuickAiTool}
+          onRestoreAiTool={setToolMode}
+          onOpenInlineAction={openInlineWorkspaceAction}
+        />
+      </div>
 
-      <div className={`grid min-w-0 gap-4 ${assistantOpen ? "xl:grid-cols-[minmax(0,1fr)_360px]" : "grid-cols-1"}`}>
+      <div className={`grid min-h-0 min-w-0 flex-1 gap-4 ${assistantOpen ? "xl:grid-cols-[minmax(0,1fr)_360px]" : "grid-cols-1"}`}>
         {activeWorkspaceModule === "text" ? (
-        <section className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+        <section className="min-h-0 min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm xl:flex xl:h-full xl:flex-col">
           <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-3 py-3 sm:px-4">
             <div className="flex min-w-0 items-center gap-3">
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-blue-50 text-blue-600">
@@ -612,143 +679,145 @@ export default function Dashboard() {
             </div>
           </header>
 
-          <div className="p-3 sm:p-4">
-            <textarea
-              ref={toolTextAreaRef}
-              value={toolText}
-              onChange={(event) => setToolText(event.target.value)}
-              placeholder={t("dashboard.textAreaPlaceholder")}
-              className="min-h-[220px] w-full resize-y rounded-lg border border-slate-200 bg-slate-50/40 p-3 text-sm font-medium outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-500/10 sm:min-h-[270px] sm:p-4"
-            />
+          <div className="min-h-0 xl:flex-1 xl:overflow-y-auto">
+            <div className="p-3 sm:p-4">
+              <textarea
+                ref={toolTextAreaRef}
+                value={toolText}
+                onChange={(event) => setToolText(event.target.value)}
+                placeholder={t("dashboard.textAreaPlaceholder")}
+                className="min-h-[220px] w-full resize-y rounded-lg border border-slate-200 bg-slate-50/40 p-3 text-sm font-medium outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-500/10 sm:min-h-[270px] sm:p-4"
+              />
 
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              {aiTools.length > 0 ? (
-                aiTools.map((tool) => (
-                  <button
-                    key={tool.key}
-                    type="button"
-                    onClick={() => processToolText(tool.key)}
-                    disabled={isToolLoading || isRefiningToolResult || !toolText.trim()}
-                    title={defaultToolDescriptionKeys[tool.key] ? t(defaultToolDescriptionKeys[tool.key]) : tool.description}
-                    className={`flex h-9 items-center gap-2 rounded-md border px-3 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-45 ${
-                      toolMode === tool.key
-                        ? "border-blue-600 bg-blue-600 text-white"
-                        : "border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:text-blue-700"
-                    }`}
-                  >
-                    {isToolLoading && toolMode === tool.key ? <Loader2 size={15} className="animate-spin" /> : aiToolIcons[tool.icon]}
-                    {defaultToolLabelKeys[tool.key] ? t(defaultToolLabelKeys[tool.key]) : tool.label}
-                  </button>
-                ))
-              ) : (
-                <div className="text-xs text-slate-500">{t("dashboard.noVisibleAiTools")}</div>
-              )}
-              {!toolResult && (
-                <>
-                  <button
-                    type="button"
-                    onClick={addCurrentToolTextToSession}
-                    disabled={!toolText.trim()}
-                    className="flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 hover:border-blue-300 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-40 sm:ml-auto"
-                  >
-                    <BookmarkPlus size={15} /> {sessionCopy.saveToSession}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => attachToAgent("sourceText")}
-                    disabled={!toolText.trim()}
-                    className="flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 hover:border-blue-300 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    <MessageSquareShare size={15} /> {t("dashboard.attachSourceToAgent")}
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-
-          {toolResult && (
-            <div id="text-tool-result" className="scroll-mt-4 border-t border-blue-100 bg-blue-50/40 px-4 py-5 animate-in fade-in duration-200">
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-                <h2 className="text-xs font-black uppercase text-slate-500">{t("dashboard.resultTitle")}</h2>
-                <div className="flex flex-wrap items-center justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={addCurrentToolResultToSession}
-                    className="flex items-center gap-2 rounded-md border border-blue-200 bg-white px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-50"
-                  >
-                    <BookmarkPlus size={15} /> {sessionCopy.saveToSession}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={moveResultToChat}
-                    className="flex items-center gap-2 rounded-md border border-blue-200 bg-white px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-600 hover:text-white"
-                  >
-                    <MessageSquareShare size={15} /> {t("dashboard.attachResultToAgent")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => navigator.clipboard.writeText(toolResult)}
-                    title={t("common.copy")}
-                    aria-label={t("common.copy")}
-                    className="rounded-md border border-blue-200 bg-white p-2 text-blue-700 hover:bg-blue-600 hover:text-white"
-                  >
-                    <Copy size={16} />
-                  </button>
-                </div>
-              </div>
-              <ReactMarkdown className={markdownContentClassName}>{toolResult}</ReactMarkdown>
-              {evidenceSummary && (
-                <div className="mt-4">
-                  <EvidenceSummaryCard summary={evidenceSummary} />
-                </div>
-              )}
-              <div className="mt-4 flex flex-wrap gap-2">
-                <FeedbackReportButton
-                  surface="home_text_tool"
-                  contextType={toolMode}
-                  title={activeToolLabel}
-                  clinicalCountry={workspaceContext?.clinicalCountry}
-                  metadata={{ privacyFindingCount: toolPrivacy?.findingTypes?.length ?? 0 }}
-                />
-              </div>
-
-              <div className="mt-5 border-t border-blue-100 pt-4">
-                <label className="text-xs font-bold text-slate-600" htmlFor="refinement-instruction">
-                  {t("dashboard.refineResultTitle")}
-                </label>
-                <div className="mt-2 flex flex-col gap-2 sm:flex-row">
-                  <textarea
-                    id="refinement-instruction"
-                    value={refinementInstruction}
-                    onChange={(event) => setRefinementInstruction(event.target.value)}
-                    placeholder={t("dashboard.refineResultPlaceholder")}
-                    className="min-h-20 flex-1 resize-y rounded-lg border border-blue-100 bg-white p-3 text-xs outline-none focus:border-blue-400"
-                  />
-                  <div className="flex items-end gap-2">
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                {aiTools.length > 0 ? (
+                  aiTools.map((tool) => (
+                    <button
+                      key={tool.key}
+                      type="button"
+                      onClick={() => processToolText(tool.key)}
+                      disabled={isToolLoading || isRefiningToolResult || !toolText.trim()}
+                      title={defaultToolDescriptionKeys[tool.key] ? t(defaultToolDescriptionKeys[tool.key]) : tool.description}
+                      className={`flex h-9 items-center gap-2 rounded-md border px-3 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-45 ${
+                        toolMode === tool.key
+                          ? "border-blue-600 bg-blue-600 text-white"
+                          : "border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:text-blue-700"
+                      }`}
+                    >
+                      {isToolLoading && toolMode === tool.key ? <Loader2 size={15} className="animate-spin" /> : aiToolIcons[tool.icon]}
+                      {defaultToolLabelKeys[tool.key] ? t(defaultToolLabelKeys[tool.key]) : tool.label}
+                    </button>
+                  ))
+                ) : (
+                  <div className="text-xs text-slate-500">{t("dashboard.noVisibleAiTools")}</div>
+                )}
+                {!toolResult && (
+                  <>
                     <button
                       type="button"
-                      onClick={restorePreviousToolResult}
-                      disabled={!previousToolResult || isToolLoading || isRefiningToolResult}
-                      title={t("dashboard.restorePreviousResult")}
-                      aria-label={t("dashboard.restorePreviousResult")}
-                      className="rounded-md border border-slate-200 bg-white p-2.5 text-slate-500 disabled:opacity-40"
+                      onClick={addCurrentToolTextToSession}
+                      disabled={!toolText.trim()}
+                      className="flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 hover:border-blue-300 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-40 sm:ml-auto"
                     >
-                      <RotateCcw size={15} />
+                      <BookmarkPlus size={15} /> {sessionCopy.saveToSession}
                     </button>
                     <button
                       type="button"
-                      onClick={refineToolResult}
-                      disabled={!refinementInstruction.trim() || isToolLoading || isRefiningToolResult}
-                      className="flex h-10 items-center gap-2 rounded-md bg-blue-600 px-4 text-xs font-bold text-white hover:bg-blue-700 disabled:bg-slate-300"
+                      onClick={() => attachToAgent("sourceText")}
+                      disabled={!toolText.trim()}
+                      className="flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 hover:border-blue-300 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
                     >
-                      {isRefiningToolResult && <Loader2 size={14} className="animate-spin" />}
-                      {t("dashboard.refineResultButton")}
+                      <MessageSquareShare size={15} /> {t("dashboard.attachSourceToAgent")}
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {toolResult && (
+              <div id="text-tool-result" className="scroll-mt-4 border-t border-blue-100 bg-blue-50/40 px-4 py-5 animate-in fade-in duration-200">
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                  <h2 className="text-xs font-black uppercase text-slate-500">{t("dashboard.resultTitle")}</h2>
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={addCurrentToolResultToSession}
+                      className="flex items-center gap-2 rounded-md border border-blue-200 bg-white px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-50"
+                    >
+                      <BookmarkPlus size={15} /> {sessionCopy.saveToSession}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={moveResultToChat}
+                      className="flex items-center gap-2 rounded-md border border-blue-200 bg-white px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-600 hover:text-white"
+                    >
+                      <MessageSquareShare size={15} /> {t("dashboard.attachResultToAgent")}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => navigator.clipboard.writeText(toolResult)}
+                      title={t("common.copy")}
+                      aria-label={t("common.copy")}
+                      className="rounded-md border border-blue-200 bg-white p-2 text-blue-700 hover:bg-blue-600 hover:text-white"
+                    >
+                      <Copy size={16} />
                     </button>
                   </div>
                 </div>
+                <ReactMarkdown className={markdownContentClassName}>{toolResult}</ReactMarkdown>
+                {evidenceSummary && (
+                  <div className="mt-4">
+                    <EvidenceSummaryCard summary={evidenceSummary} />
+                  </div>
+                )}
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <FeedbackReportButton
+                    surface="home_text_tool"
+                    contextType={toolMode}
+                    title={activeToolLabel}
+                    clinicalCountry={workspaceContext?.clinicalCountry}
+                    metadata={{ privacyFindingCount: toolPrivacy?.findingTypes?.length ?? 0 }}
+                  />
+                </div>
+
+                <div className="mt-5 border-t border-blue-100 pt-4">
+                  <label className="text-xs font-bold text-slate-600" htmlFor="refinement-instruction">
+                    {t("dashboard.refineResultTitle")}
+                  </label>
+                  <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                    <textarea
+                      id="refinement-instruction"
+                      value={refinementInstruction}
+                      onChange={(event) => setRefinementInstruction(event.target.value)}
+                      placeholder={t("dashboard.refineResultPlaceholder")}
+                      className="min-h-20 flex-1 resize-y rounded-lg border border-blue-100 bg-white p-3 text-xs outline-none focus:border-blue-400"
+                    />
+                    <div className="flex items-end gap-2">
+                      <button
+                        type="button"
+                        onClick={restorePreviousToolResult}
+                        disabled={!previousToolResult || isToolLoading || isRefiningToolResult}
+                        title={t("dashboard.restorePreviousResult")}
+                        aria-label={t("dashboard.restorePreviousResult")}
+                        className="rounded-md border border-slate-200 bg-white p-2.5 text-slate-500 disabled:opacity-40"
+                      >
+                        <RotateCcw size={15} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={refineToolResult}
+                        disabled={!refinementInstruction.trim() || isToolLoading || isRefiningToolResult}
+                        className="flex h-10 items-center gap-2 rounded-md bg-blue-600 px-4 text-xs font-bold text-white hover:bg-blue-700 disabled:bg-slate-300"
+                      >
+                        {isRefiningToolResult && <Loader2 size={14} className="animate-spin" />}
+                        {t("dashboard.refineResultButton")}
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </section>
         ) : (
           <WorkspaceModuleHost
@@ -768,7 +837,7 @@ export default function Dashboard() {
         )}
 
         {assistantOpen && (
-          <aside className="fixed inset-y-0 right-0 z-[90] flex h-[100dvh] w-full max-w-lg flex-col overflow-hidden border-l border-slate-200 bg-white shadow-2xl xl:sticky xl:top-0 xl:z-auto xl:h-[calc(100vh-12rem)] xl:min-h-[560px] xl:w-auto xl:max-w-none xl:rounded-lg xl:border xl:shadow-sm">
+          <aside className="fixed inset-y-0 right-0 z-[90] flex h-[100dvh] w-full max-w-lg flex-col overflow-hidden border-l border-slate-200 bg-white shadow-2xl xl:sticky xl:top-0 xl:z-auto xl:h-full xl:min-h-0 xl:w-auto xl:max-w-none xl:rounded-lg xl:border xl:shadow-sm">
             <header className="flex items-center justify-between border-b border-slate-100 px-3 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))] sm:px-4 xl:pt-3">
               <div className="flex min-w-0 items-center gap-3">
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-blue-600 text-white">
