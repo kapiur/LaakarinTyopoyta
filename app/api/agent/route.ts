@@ -714,6 +714,8 @@ export async function POST(req: Request) {
       buildWorkspaceContextInstruction(workspaceContext, {
         contentLabel: 'clinician-facing agent output',
       }),
+      `Final user-facing answer language for this response: ${uiLanguage}.`,
+      'Use other languages only for source names, very short quoted terms, or unavoidable original terminology.',
       buildEvidenceModeInstruction(clinicalConfig),
       buildEvidenceAvailabilityInstruction({
         taskType: plan.taskType,

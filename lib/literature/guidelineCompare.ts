@@ -490,6 +490,110 @@ async function fetchHtml(url: string) {
   return typeof response.data === "string" ? response.data : "";
 }
 
+function normalizeDuckDuckGoHref(rawHref: string) {
+  try {
+    const url = new URL(rawHref, "https://duckduckgo.com");
+    const uddg = url.searchParams.get("uddg");
+    if (uddg) {
+      return decodeURIComponent(uddg);
+    }
+    return url.toString();
+  } catch {
+    return rawHref;
+  }
+}
+
+function hostnameMatchesAllowedDomains(href: string, allowedDomains: string[]) {
+  try {
+    const hostname = new URL(href).hostname.toLowerCase();
+    return allowedDomains.some((domain) => {
+      const normalized = domain.toLowerCase();
+      return hostname === normalized || hostname.endsWith(`.${normalized}`);
+    });
+  } catch {
+    return false;
+  }
+}
+
+async function searchOfficialSourceViaDuckDuckGo(
+  source: UserClinicalEvidenceConfig["allowedSources"][number],
+  query: string,
+) {
+  const domain = source.allowedDomains[0];
+  if (!domain) return [] as ComparisonSourceCandidate[];
+
+  const searchUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(`site:${domain} ${query}`)}`;
+  const html = await fetchHtml(searchUrl);
+  const anchors = parseHtmlAnchors(html, "https://duckduckgo.com");
+  const terms = extractQueryTerms(query);
+  const seen = new Set<string>();
+
+  return anchors
+    .map((anchor) => {
+      const href = normalizeDuckDuckGoHref(anchor.href);
+      return {
+        ...anchor,
+        href,
+      };
+    })
+    .filter((anchor) => /^https?:\/\//i.test(anchor.href))
+    .filter((anchor) => hostnameMatchesAllowedDomains(anchor.href, source.allowedDomains))
+    .filter((anchor) => anchor.text.length >= 8 && anchor.text.length <= 260)
+    .filter((anchor) => !anchor.href.includes("/tag/") && !anchor.href.includes("/category/"))
+    .map((anchor) => {
+      let score = countTermMatches(anchor.text, terms);
+      score += countTermMatches(anchor.href, terms);
+      if (source.sourceType === "national_guideline" && /guid|suosit|hoito|recommend|leitlinie/i.test(anchor.text)) score += 2;
+      if (source.sourceType === "medical_reference" && /lääkärikirja|terveyskirjasto|duodecim/i.test(anchor.text)) score += 2;
+      if (source.sourceType === "public_health_authority" && /thl|authority|ohje|screen|rokot|vacc/i.test(anchor.text)) score += 2;
+
+      return {
+        ...anchor,
+        score,
+      };
+    })
+    .filter((anchor) => anchor.score > 0)
+    .sort((left, right) => right.score - left.score)
+    .filter((anchor) => {
+      if (seen.has(anchor.href)) return false;
+      seen.add(anchor.href);
+      return true;
+    })
+    .slice(0, 2)
+    .map((anchor) => ({
+      sourceId: source.id,
+      country: source.country,
+      sourceName: source.name,
+      sourceUrl: anchor.href,
+      sourceTitle: anchor.text,
+      matchReason: `DuckDuckGo site search for ${source.name}`,
+      retrievedText: false,
+    }));
+}
+
+async function searchConfiguredOfficialSourcesFallback(
+  clinicalConfig: UserClinicalEvidenceConfig,
+  query: string,
+) {
+  const officialSources = clinicalConfig.allowedSources.filter((source) => source.isOfficial).slice(0, 4);
+  const resultGroups = await Promise.all(
+    officialSources.map(async (source) => {
+      try {
+        return await searchOfficialSourceViaDuckDuckGo(source, query);
+      } catch (error) {
+        console.error("Official-source fallback search failed:", {
+          sourceId: source.id,
+          query,
+          error,
+        });
+        return [] as ComparisonSourceCandidate[];
+      }
+    }),
+  );
+
+  return mergeCandidates(...resultGroups).slice(0, 6);
+}
+
 async function fetchAwmfGuidelineDetail(associationNumber: string, guidelineNumber: string) {
   try {
     const response = await fetchAwmfJson<AwmfDetailResponse>(
@@ -830,6 +934,11 @@ async function fetchGuidelineTextBySource(candidate: Pick<ComparisonSourceCandid
     return normalizeExcerptText(extractReadableHtmlText(pageHtml));
   }
 
+  if (/^https?:\/\//i.test(candidate.sourceUrl)) {
+    const pageHtml = await fetchHtml(candidate.sourceUrl);
+    return normalizeExcerptText(extractReadableHtmlText(pageHtml));
+  }
+
   return "";
 }
 
@@ -1028,9 +1137,11 @@ async function retrieveGuidelineCandidates(
         : clinicalConfig.clinicalCountry === "DE"
           ? await searchAwmfGuidelines(searchQuery)
           : [];
+    const fallbackCandidates = await searchConfiguredOfficialSourcesFallback(clinicalConfig, searchQuery);
+    const mergedLiveCandidates = mergeCandidates(liveCandidates, fallbackCandidates).slice(0, 6);
 
-    await persistGuidelineCandidates(liveCandidates, searchQuery);
-    return mergeCandidates(cachedCandidates, liveCandidates).slice(0, 6);
+    await persistGuidelineCandidates(mergedLiveCandidates, searchQuery);
+    return mergeCandidates(cachedCandidates, mergedLiveCandidates).slice(0, 6);
   } catch (error) {
     console.error("Live guideline retrieval failed, using cached data if available:", error);
     return cachedCandidates;
