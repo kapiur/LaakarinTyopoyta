@@ -312,6 +312,44 @@ function buildGroundingRetryInstruction(unsupportedClaims: string[]) {
   ].join('\n\n');
 }
 
+function buildEvidenceAvailabilityInstruction(params: {
+  status: string;
+  registryOnlyReference: boolean;
+  hasExcerpts: boolean;
+}) {
+  if (params.registryOnlyReference) {
+    return [
+      'Evidence communication rule:',
+      'Exact official source passages are not currently available inside the provided material.',
+      'Do not write long technical explanations about missing retrieval, backend limits, or pipeline behavior.',
+      'Give either a compact comparison/checklist framework or one short sentence saying that exact official passages still need manual checking in the configured sources.',
+    ].join('\n');
+  }
+
+  if (params.status === 'partial' && params.hasExcerpts) {
+    return [
+      'Evidence communication rule:',
+      'Use the supported points from the available excerpts.',
+      'Do not enumerate every missing detail or describe system limitations at length.',
+      'If something important remains uncertain, mention it in one brief final note only.',
+    ].join('\n');
+  }
+
+  if (params.status === 'found' && params.hasExcerpts) {
+    return [
+      'Evidence communication rule:',
+      'Answer from the available excerpts directly and confidently, but do not add claims that extend beyond them.',
+      'Avoid commentary about the evidence retrieval process unless the user explicitly asks.',
+    ].join('\n');
+  }
+
+  return [
+    'Evidence communication rule:',
+    'Keep any limitation note short, practical, and clinician-facing.',
+    'Do not describe internal system behavior.',
+  ].join('\n');
+}
+
 export async function POST(req: Request) {
   const { session, error } = await requireAuthenticatedUser();
   if (error) return error;
@@ -486,6 +524,11 @@ export async function POST(req: Request) {
         contentLabel: 'clinician-facing agent output',
       }),
       buildEvidenceModeInstruction(clinicalConfig),
+      buildEvidenceAvailabilityInstruction({
+        status: evidence.status,
+        registryOnlyReference: isRegistryOnlyReference,
+        hasExcerpts: evidence.excerpts.length > 0,
+      }),
       `Evidence status: ${evidence.status}`,
       `Registry-only reference mode: ${isRegistryOnlyReference ? 'yes' : 'no'}`,
       `Used sources: ${evidence.sources.map((source) => `${source.name} (${source.trustLevel})`).join(', ') || 'none'}`,
