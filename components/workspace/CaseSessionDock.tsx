@@ -211,7 +211,7 @@ export default function CaseSessionDock() {
         onClick={() => setOpen(true)}
         title={copy.open}
         aria-label={copy.open}
-        className="fixed bottom-4 right-4 z-[85] flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 shadow-lg hover:bg-slate-50"
+        className="fixed bottom-4 left-4 z-[92] flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 shadow-lg hover:bg-slate-50 md:left-6 xl:left-24"
       >
         <Briefcase size={18} className="text-blue-600" />
         <span>{copy.title}</span>

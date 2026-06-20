@@ -100,10 +100,10 @@ const markdownUserContentClassName =
   "prose prose-sm max-w-none break-words text-white prose-p:my-2 prose-p:leading-relaxed prose-p:text-white prose-strong:text-white prose-li:text-white";
 
 const workspaceActionCopy = {
-  fi: { saveToSession: "Lisää tapaussessioon" },
-  ru: { saveToSession: "Добавить в сессию случая" },
-  en: { saveToSession: "Add to case session" },
-  de: { saveToSession: "Zur Fallsitzung hinzufuegen" },
+  fi: { saveToSession: "Lisää tapaussessioon", saveShort: "Sessioon" },
+  ru: { saveToSession: "Добавить в сессию случая", saveShort: "В сессию" },
+  en: { saveToSession: "Add to case session", saveShort: "To session" },
+  de: { saveToSession: "Zur Fallsitzung hinzufuegen", saveShort: "Zur Sitzung" },
 } as const;
 
 const caseSessionLabelByLanguage = {
@@ -644,9 +644,9 @@ export default function Dashboard() {
         />
       </div>
 
-      <div className={`grid min-h-0 min-w-0 flex-1 gap-4 ${assistantOpen ? "xl:grid-cols-[minmax(0,1fr)_360px]" : "grid-cols-1"}`}>
+      <div className={`grid min-h-0 min-w-0 flex-1 overflow-hidden gap-4 ${assistantOpen ? "xl:grid-cols-[minmax(0,1fr)_360px]" : "grid-cols-1"}`}>
         {activeWorkspaceModule === "text" ? (
-        <section className="min-h-0 min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm xl:flex xl:h-full xl:flex-col">
+        <section className="min-h-0 min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm xl:flex xl:h-full xl:flex-col xl:overflow-hidden">
           <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-3 py-3 sm:px-4">
             <div className="flex min-w-0 items-center gap-3">
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-blue-50 text-blue-600">
@@ -679,7 +679,7 @@ export default function Dashboard() {
             </div>
           </header>
 
-          <div className="min-h-0 xl:flex-1 xl:overflow-y-auto">
+          <div className="min-h-0 xl:flex-1 xl:overflow-y-auto xl:overscroll-contain">
             <div className="p-3 sm:p-4">
               <textarea
                 ref={toolTextAreaRef}
@@ -717,9 +717,10 @@ export default function Dashboard() {
                       type="button"
                       onClick={addCurrentToolTextToSession}
                       disabled={!toolText.trim()}
-                      className="flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 hover:border-blue-300 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-40 sm:ml-auto"
+                      title={sessionCopy.saveToSession}
+                      className="flex h-9 items-center gap-2 rounded-md border border-blue-200 bg-white px-3 text-xs font-bold text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-40 sm:ml-auto"
                     >
-                      <BookmarkPlus size={15} /> {sessionCopy.saveToSession}
+                      <BookmarkPlus size={15} /> {sessionCopy.saveShort}
                     </button>
                     <button
                       type="button"
@@ -742,9 +743,10 @@ export default function Dashboard() {
                     <button
                       type="button"
                       onClick={addCurrentToolResultToSession}
+                      title={sessionCopy.saveToSession}
                       className="flex items-center gap-2 rounded-md border border-blue-200 bg-white px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-50"
                     >
-                      <BookmarkPlus size={15} /> {sessionCopy.saveToSession}
+                      <BookmarkPlus size={15} /> {sessionCopy.saveShort}
                     </button>
                     <button
                       type="button"
@@ -910,9 +912,10 @@ export default function Dashboard() {
                         <button
                           type="button"
                           onClick={() => addAssistantMessageToSession(message.content)}
+                          title={sessionCopy.saveToSession}
                           className="flex items-center gap-2 text-[11px] font-bold text-slate-600 hover:text-slate-900"
                         >
-                          <BookmarkPlus size={13} /> {sessionCopy.saveToSession}
+                          <BookmarkPlus size={13} /> {sessionCopy.saveShort}
                         </button>
                         <FeedbackReportButton
                           surface="home_assistant"
