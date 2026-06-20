@@ -143,34 +143,34 @@ function inferTaskType(contextType: AgentContextType, userMessage: string): AiTa
 function actionsForTask(taskType: AiTaskType): AgentSuggestedAction[] {
   if (taskType === 'template_generation' || taskType === 'template_polish') {
     return [
-      { type: 'use_as_template_draft', label: 'Käytä malliluonnoksena' },
-      { type: 'open_template_editor', label: 'Avaa mallieditorissa' },
-      { type: 'copy_draft', label: 'Kopioi luonnos' },
+      { type: 'use_as_template_draft' },
+      { type: 'open_template_editor' },
+      { type: 'copy_draft' },
     ];
   }
 
   if (taskType === 'pikaohje_generation' || taskType === 'pikaohje_review') {
     return [
-      { type: 'use_as_pikaohje_draft', label: 'Käytä pikaohje-luonnoksena' },
-      { type: 'copy_draft', label: 'Kopioi luonnos' },
+      { type: 'use_as_pikaohje_draft' },
+      { type: 'copy_draft' },
     ];
   }
 
   if (taskType === 'tool_design') {
     return [
-      { type: 'use_as_ai_tool_prompt', label: 'Käytä AI-työkalun promptina' },
-      { type: 'copy_draft', label: 'Kopioi luonnos' },
+      { type: 'use_as_ai_tool_prompt' },
+      { type: 'copy_draft' },
     ];
   }
 
   if (taskType === 'clinical_review') {
     return [
-      { type: 'review_again', label: 'Tarkista uudelleen' },
-      { type: 'copy_draft', label: 'Kopioi ehdotukset' },
+      { type: 'review_again' },
+      { type: 'copy_draft' },
     ];
   }
 
-  return [{ type: 'copy_draft', label: 'Kopioi luonnos' }];
+  return [{ type: 'copy_draft' }];
 }
 
 function clinicalSafetyInstruction() {

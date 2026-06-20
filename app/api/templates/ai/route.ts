@@ -441,8 +441,10 @@ export async function POST(req: Request) {
     const clinicalConfig = await getUserClinicalEvidenceConfig(userId);
     const workspaceContext: AiWorkspaceContext = {
       uiLanguage: normalizeTemplateAiLanguage(body.uiLanguage),
+      practiceCountry: clinicalConfig.practiceCountry,
       clinicalCountry: clinicalConfig.clinicalCountry,
       clinicalOutputLanguage: clinicalConfig.clinicalOutputLanguage,
+      evidenceStrictness: clinicalConfig.evidenceStrictness,
     };
     const profile = await getUserAiProfile(userId);
     const profileInstruction = buildUserAiProfileInstruction(profile, 'styleOnly', workspaceContext);

@@ -16,6 +16,8 @@ export type UserClinicalEvidenceSource = {
   language: string[];
 };
 
+export type ClinicalEvidenceSurface = 'general' | 'agent' | 'pikaohjeet' | 'patientInstructions';
+
 export type UserClinicalEvidenceConfig = {
   practiceCountry: PracticeCountryCode;
   usePracticeCountryDefaults: boolean;
@@ -55,7 +57,27 @@ function seedToEvidenceSource(source: (typeof CLINICAL_SOURCE_SEEDS)[number]): U
   };
 }
 
-export async function getUserClinicalEvidenceConfig(userId: number): Promise<UserClinicalEvidenceConfig> {
+function sourceEnabledForSurface(
+  surface: ClinicalEvidenceSurface,
+  preference: {
+    userEnabled: boolean | null;
+    useForAgent: boolean | null;
+    useForPikaohjeet: boolean | null;
+    useForPatientInstructions: boolean | null;
+  },
+) {
+  if (preference.userEnabled === false) return false;
+  if (surface === 'agent') return preference.useForAgent !== false;
+  if (surface === 'pikaohjeet') return preference.useForPikaohjeet !== false;
+  if (surface === 'patientInstructions') return preference.useForPatientInstructions !== false;
+  return true;
+}
+
+export async function getUserClinicalEvidenceConfig(
+  userId: number,
+  options?: { surface?: ClinicalEvidenceSurface },
+): Promise<UserClinicalEvidenceConfig> {
+  const surface = options?.surface ?? 'general';
   let practiceCountry: PracticeCountryCode = DEFAULT_PRACTICE_COUNTRY;
   let usePracticeCountryDefaults = true;
   let clinicalCountry: ClinicalCountryCode = 'FI';
@@ -114,10 +136,16 @@ export async function getUserClinicalEvidenceConfig(userId: number): Promise<Use
       isOfficial: boolean;
       isEnabled: boolean;
       userEnabled: boolean | null;
+      useForAgent: boolean | null;
+      useForPikaohjeet: boolean | null;
+      useForPatientInstructions: boolean | null;
     }>>`
       SELECT
         s."id", s."country", s."name", s."sourceType", s."trustLevel", s."priority", s."baseUrl", s."allowedDomains", s."language", s."isOfficial", s."isEnabled",
-        p."isEnabled" AS "userEnabled"
+        p."isEnabled" AS "userEnabled",
+        p."useForAgent" AS "useForAgent",
+        p."useForPikaohjeet" AS "useForPikaohjeet",
+        p."useForPatientInstructions" AS "useForPatientInstructions"
       FROM "ClinicalSource" s
       LEFT JOIN "UserClinicalSourcePreference" p ON p."sourceId" = s."id" AND p."userId" = ${userId}
       WHERE s."country" = ${clinicalCountry} AND s."isEnabled" = true
@@ -125,7 +153,7 @@ export async function getUserClinicalEvidenceConfig(userId: number): Promise<Use
     `;
 
     const mapped: UserClinicalEvidenceSource[] = rows
-      .filter((row) => row.userEnabled !== false)
+      .filter((row) => sourceEnabledForSurface(surface, row))
       .filter((row) => allowLocalSources || (row.trustLevel !== 'local_instruction' && row.sourceType !== 'local_instruction' && row.sourceType !== 'hospital_instruction'))
       .filter((row) => allowSupplementarySources || row.trustLevel !== 'supplementary')
       .map((row) => ({

@@ -1,5 +1,6 @@
 import type { AiTaskType } from '../../ai/taskTypes';
 import type { UserClinicalEvidenceConfig } from './userClinicalSettings';
+import { findCachedGuidelineDocuments, scoreCachedGuidelineDocuments } from '../../literature/guidelineCache';
 
 export type RetrievedEvidenceSource = {
   id: string;
@@ -54,13 +55,63 @@ const SOURCE_MARKERS = [
   'инструкция',
   'официальн',
 ];
+const QUERY_STOP_WORDS = new Set([
+  'and', 'the', 'for', 'with', 'from', 'into', 'this', 'that', 'what', 'which', 'about',
+  'guideline', 'guidelines', 'recommendation', 'recommendations', 'clinical', 'patient', 'patients',
+  'yleinen', 'yleiskuva', 'suositus', 'suositukset', 'kliininen', 'potilas', 'potilaat',
+  'общая', 'общие', 'рекомендация', 'рекомендации', 'клинический', 'пациент', 'пациенты',
+]);
 
 function uniqueStrings(values: string[]) {
   return Array.from(new Set(values.filter(Boolean)));
 }
 
+function normalizeForQuery(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/\[[^\]]+\]/g, ' ')
+    .replace(/[^a-z0-9а-яёäöå\s]+/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function extractQueryTerms(...inputs: string[]) {
+  return uniqueStrings(
+    inputs
+      .flatMap((input) => normalizeForQuery(input).split(' '))
+      .map((term) => term.trim())
+      .filter((term) => term.length >= 3 && !QUERY_STOP_WORDS.has(term)),
+  ).slice(0, 16);
+}
+
 function normalizeWhitespace(text: string) {
   return text.replace(/\r\n/g, '\n').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+function excerptFromCachedDocument(
+  document: Awaited<ReturnType<typeof findCachedGuidelineDocuments>>[number],
+  config: UserClinicalEvidenceConfig,
+) {
+  const source = config.allowedSources.find((item) => item.id === document.sourceId);
+  const text = normalizeWhitespace(document.normalizedText ?? document.rawText ?? '').slice(0, MAX_FETCHED_TEXT_CHARS);
+  if (!source || !text) return null;
+
+  return {
+    source: {
+      id: source.id,
+      name: source.name,
+      sourceType: source.sourceType,
+      trustLevel: source.trustLevel,
+      baseUrl: source.baseUrl,
+    },
+    excerpt: {
+      sourceId: source.id,
+      title: document.title,
+      url: document.sourceUrl,
+      text,
+      retrievedAt: document.lastSyncedAt.toISOString(),
+    },
+  };
 }
 
 function stripHtml(raw: string) {
@@ -211,6 +262,30 @@ export async function retrieveClinicalEvidence(input: {
       text: normalizeWhitespace(input.currentText).slice(0, MAX_FETCHED_TEXT_CHARS),
       retrievedAt: new Date().toISOString(),
     });
+  }
+
+  if (excerpts.length < MAX_EXCERPTS && input.config.hasOfficialSources) {
+    try {
+      const queryTerms = extractQueryTerms(input.userMessage, input.currentText, input.currentTemplate || '');
+      const cachedDocuments = await findCachedGuidelineDocuments({
+        country: input.config.clinicalCountry,
+        sourceIds: input.config.allowedSources.map((source) => source.id),
+        limit: 40,
+      });
+      const scoredDocuments = scoreCachedGuidelineDocuments(cachedDocuments, queryTerms);
+
+      for (const document of scoredDocuments) {
+        if (excerpts.length >= MAX_EXCERPTS) break;
+        if (document.syncStatus !== 'ready') continue;
+        const cached = excerptFromCachedDocument(document, input.config);
+        if (!cached) continue;
+        if (excerpts.some((excerpt) => excerpt.url && excerpt.url === cached.excerpt.url)) continue;
+        excerptSources.set(cached.source.id, cached.source);
+        excerpts.push(cached.excerpt);
+      }
+    } catch (error: any) {
+      warnings.push(`Could not load cached guideline evidence: ${error?.message || 'Unknown error'}`);
+    }
   }
 
   const urls = extractUrls(input.userMessage, input.currentText, input.currentTemplate || '').slice(0, MAX_EXCERPTS);

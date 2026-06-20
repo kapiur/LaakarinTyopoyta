@@ -11,12 +11,12 @@ export type AgentContextType =
 export type AgentUiLanguage = UiLanguage;
 
 export type AgentSuggestedAction =
-  | { type: 'copy_draft'; label: string }
-  | { type: 'use_as_template_draft'; label: string }
-  | { type: 'open_template_editor'; label: string }
-  | { type: 'use_as_ai_tool_prompt'; label: string }
-  | { type: 'use_as_pikaohje_draft'; label: string }
-  | { type: 'review_again'; label: string };
+  | { type: 'copy_draft' }
+  | { type: 'use_as_template_draft' }
+  | { type: 'open_template_editor' }
+  | { type: 'use_as_ai_tool_prompt' }
+  | { type: 'use_as_pikaohje_draft' }
+  | { type: 'review_again' };
 
 export type AgentConversationTurn = {
   userMessage: string;
