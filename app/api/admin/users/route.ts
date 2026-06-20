@@ -70,7 +70,8 @@ export async function POST(req: Request) {
         password: credentialHash,
         role: "USER",
         isActive: true,
-        mustChangePassword: mustChangePassword !== false
+        mustChangePassword: mustChangePassword !== false,
+        onboardingCompletedAt: null,
       },
       select: {
         id: true,

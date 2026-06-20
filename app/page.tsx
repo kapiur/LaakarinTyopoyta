@@ -8,6 +8,7 @@ import {
 import Link from 'next/link';
 import ReactMarkdown from 'react-markdown';
 import PrivacyNotice from '../components/PrivacyNotice';
+import FirstRunOnboarding, { type OnboardingSnapshot } from '../components/FirstRunOnboarding';
 import { DEFAULT_AI_TOOL_METADATA, type DefaultAiToolMetadata } from '../lib/ai/toolMetadata';
 import { useI18n } from '../lib/useI18n';
 
@@ -25,6 +26,8 @@ const markdownContentClassName = "prose prose-sm max-w-none break-words text-sla
 
 export default function Dashboard() {
   const { t } = useI18n();
+  const [onboardingLoading, setOnboardingLoading] = useState(true);
+  const [onboardingSnapshot, setOnboardingSnapshot] = useState<OnboardingSnapshot | null>(null);
   const [chatInput, setChatInput] = useState('');
   const [messages, setMessages] = useState([
     { role: 'assistant', content: t('dashboard.assistantGreeting') }
@@ -43,6 +46,27 @@ export default function Dashboard() {
   const [aiTools, setAiTools] = useState<DefaultAiToolMetadata[]>(DEFAULT_AI_TOOL_METADATA);
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
+
+  useEffect(() => {
+    const loadOnboarding = async () => {
+      try {
+        const response = await fetch('/api/profile/onboarding', { cache: 'no-store' });
+        const data = await response.json();
+        if (!response.ok) return;
+        setOnboardingSnapshot(data.completed ? null : {
+          settings: data.settings,
+          countries: data.countries,
+          interfaceLanguages: data.interfaceLanguages,
+        });
+      } catch (error) {
+        console.error('Onboarding status loading failed:', error);
+      } finally {
+        setOnboardingLoading(false);
+      }
+    };
+
+    loadOnboarding();
+  }, []);
 
   useEffect(() => {
     const loadAiTools = async () => {
@@ -139,6 +163,28 @@ export default function Dashboard() {
   };
 
   const moveResultToChat = () => { if (toolResult) sendMessage(`${t('dashboard.processedTextIntro')}\n\n${toolResult}`); };
+
+  if (onboardingLoading) {
+    return (
+      <div className="flex min-h-[70vh] items-center justify-center">
+        <div className="flex items-center gap-3 rounded-[2rem] border border-slate-200 bg-white px-6 py-5 text-sm font-semibold text-slate-500 shadow-sm">
+          <Loader2 size={18} className="animate-spin" />
+          {t('onboarding.loading')}
+        </div>
+      </div>
+    );
+  }
+
+  if (onboardingSnapshot) {
+    return (
+      <FirstRunOnboarding
+        snapshot={onboardingSnapshot}
+        onCompleted={(redirectPath) => {
+          window.location.assign(redirectPath || '/');
+        }}
+      />
+    );
+  }
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 h-full animate-in fade-in duration-700">
