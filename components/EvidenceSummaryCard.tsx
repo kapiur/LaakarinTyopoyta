@@ -1,6 +1,7 @@
 "use client";
 
-import { CalendarClock, ShieldCheck, Tag } from "lucide-react";
+import { useState } from "react";
+import { CalendarClock, ChevronDown, ChevronUp, ShieldCheck, Tag } from "lucide-react";
 import { useI18n } from "../lib/useI18n";
 
 export type EvidenceSummaryData = {
@@ -24,6 +25,8 @@ export type EvidenceSummaryData = {
 const copy = {
   fi: {
     title: "Johtopäätöksen perusta",
+    show: "Näytä johtopäätöksen perusta",
+    hide: "Piilota johtopäätöksen perusta",
     source: "Lähteet",
     updated: "Ajantasaisuus",
     confidence: "Varmuustaso",
@@ -38,6 +41,8 @@ const copy = {
   },
   ru: {
     title: "Основание вывода",
+    show: "Показать основание вывода",
+    hide: "Скрыть основание вывода",
     source: "Источники",
     updated: "Актуально на",
     confidence: "Уровень уверенности",
@@ -52,6 +57,8 @@ const copy = {
   },
   en: {
     title: "Basis of the conclusion",
+    show: "Show basis of the conclusion",
+    hide: "Hide basis of the conclusion",
     source: "Sources",
     updated: "Current as of",
     confidence: "Confidence",
@@ -66,6 +73,8 @@ const copy = {
   },
   de: {
     title: "Grundlage der Schlussfolgerung",
+    show: "Grundlage der Schlussfolgerung anzeigen",
+    hide: "Grundlage der Schlussfolgerung ausblenden",
     source: "Quellen",
     updated: "Stand",
     confidence: "Sicherheitsniveau",
@@ -91,8 +100,15 @@ function formatDate(value: string | undefined, locale: string) {
   }).format(date);
 }
 
-export default function EvidenceSummaryCard({ summary }: { summary: EvidenceSummaryData }) {
+export default function EvidenceSummaryCard({
+  summary,
+  defaultExpanded = false,
+}: {
+  summary: EvidenceSummaryData;
+  defaultExpanded?: boolean;
+}) {
   const { language } = useI18n();
+  const [expanded, setExpanded] = useState(defaultExpanded);
   const l = copy[language as keyof typeof copy] ?? copy.en;
   const latestDate = formatDate(summary.latestSourceSyncAt, language);
   const confidenceLabel =
@@ -109,44 +125,57 @@ export default function EvidenceSummaryCard({ summary }: { summary: EvidenceSumm
         : l.modeLocal;
 
   return (
-    <section className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
-      <div className="text-[11px] font-black uppercase tracking-wider text-slate-500">{l.title}</div>
-      <div className="mt-3 grid gap-3 md:grid-cols-3">
-        <div className="rounded-xl border border-slate-200 bg-white p-3">
-          <div className="inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-slate-500">
-            <Tag size={12} />
-            {l.source}
-          </div>
-          <div className="mt-2 text-sm font-bold text-slate-900">{summary.officialSourceCount} {l.officialCount}</div>
-          <div className="mt-1 text-xs text-slate-500">{summary.clinicalCountry} · {modeLabel}</div>
-        </div>
-        <div className="rounded-xl border border-slate-200 bg-white p-3">
-          <div className="inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-slate-500">
-            <CalendarClock size={12} />
-            {l.updated}
-          </div>
-          <div className="mt-2 text-sm font-bold text-slate-900">{latestDate || l.noDate}</div>
-          <div className="mt-1 text-xs text-slate-500">{summary.clinicalOutputLanguage}</div>
-        </div>
-        <div className="rounded-xl border border-slate-200 bg-white p-3">
-          <div className="inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-slate-500">
-            <ShieldCheck size={12} />
-            {l.confidence}
-          </div>
-          <div className="mt-2 text-sm font-bold text-slate-900">{confidenceLabel}</div>
-          <div className="mt-1 text-xs text-slate-500">{modeLabel}</div>
-        </div>
-      </div>
+    <div>
+      <button
+        type="button"
+        onClick={() => setExpanded((current) => !current)}
+        className="inline-flex items-center gap-2 rounded-md px-1 py-1 text-xs font-bold text-slate-500 hover:text-slate-800"
+      >
+        {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+        {expanded ? l.hide : l.show}
+      </button>
 
-      {summary.sources.length > 0 && (
-        <div className="mt-3 flex flex-wrap gap-2">
-          {summary.sources.slice(0, 4).map((source) => (
-            <span key={source.id} className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">
-              {source.name}
-            </span>
-          ))}
-        </div>
+      {expanded && (
+        <section className="mt-2 rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+          <div className="text-[11px] font-black uppercase tracking-wider text-slate-500">{l.title}</div>
+          <div className="mt-3 grid gap-3 md:grid-cols-3">
+            <div className="rounded-xl border border-slate-200 bg-white p-3">
+              <div className="inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                <Tag size={12} />
+                {l.source}
+              </div>
+              <div className="mt-2 text-sm font-bold text-slate-900">{summary.officialSourceCount} {l.officialCount}</div>
+              <div className="mt-1 text-xs text-slate-500">{summary.clinicalCountry} · {modeLabel}</div>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white p-3">
+              <div className="inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                <CalendarClock size={12} />
+                {l.updated}
+              </div>
+              <div className="mt-2 text-sm font-bold text-slate-900">{latestDate || l.noDate}</div>
+              <div className="mt-1 text-xs text-slate-500">{summary.clinicalOutputLanguage}</div>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white p-3">
+              <div className="inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                <ShieldCheck size={12} />
+                {l.confidence}
+              </div>
+              <div className="mt-2 text-sm font-bold text-slate-900">{confidenceLabel}</div>
+              <div className="mt-1 text-xs text-slate-500">{modeLabel}</div>
+            </div>
+          </div>
+
+          {summary.sources.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {summary.sources.slice(0, 4).map((source) => (
+                <span key={source.id} className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">
+                  {source.name}
+                </span>
+              ))}
+            </div>
+          )}
+        </section>
       )}
-    </section>
+    </div>
   );
 }
