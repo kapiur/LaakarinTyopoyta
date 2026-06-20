@@ -263,6 +263,8 @@ const localLabels = {
   },
 } as const;
 
+type AgentLocalLabels = typeof localLabels[keyof typeof localLabels];
+
 async function copyToClipboard(text: string) {
   await navigator.clipboard.writeText(text);
 }
@@ -286,7 +288,7 @@ function stripServiceScaffolding(value?: string) {
   return normalized;
 }
 
-function humanizeTaskType(taskType: string | undefined, l: typeof localLabels.fi) {
+function humanizeTaskType(taskType: string | undefined, l: AgentLocalLabels) {
   if (!taskType) return "";
 
   const map: Record<string, string> = {
@@ -303,7 +305,7 @@ function humanizeTaskType(taskType: string | undefined, l: typeof localLabels.fi
   return map[taskType] ?? taskType;
 }
 
-function humanizeEvidenceStatus(status: AgentEvidence["status"], l: typeof localLabels.fi) {
+function humanizeEvidenceStatus(status: AgentEvidence["status"], l: AgentLocalLabels) {
   const map: Record<AgentEvidence["status"], string> = {
     found: l.statusFound,
     partial: l.statusPartial,
@@ -314,7 +316,7 @@ function humanizeEvidenceStatus(status: AgentEvidence["status"], l: typeof local
   return map[status] ?? status;
 }
 
-function humanizeTrustLevel(trustLevel: string, l: typeof localLabels.fi) {
+function humanizeTrustLevel(trustLevel: string, l: AgentLocalLabels) {
   const map: Record<string, string> = {
     primary_guideline: l.trustPrimaryGuideline,
     official_reference: l.trustOfficialReference,
