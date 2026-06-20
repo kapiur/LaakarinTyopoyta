@@ -20,6 +20,12 @@ export type CaseSessionItem = {
   createdAt: string;
 };
 
+export type CaseSessionDraft = {
+  summary: string;
+  plan: string;
+  questions: string;
+};
+
 type AddCaseSessionItemInput = {
   type: CaseSessionItemType;
   title: string;
@@ -28,17 +34,28 @@ type AddCaseSessionItemInput = {
   sourceUrl?: string;
 };
 
+type CaseSessionDraftField = keyof CaseSessionDraft;
+
 type CaseSessionContextValue = {
   items: CaseSessionItem[];
+  draft: CaseSessionDraft;
   isReady: boolean;
   addItem: (input: AddCaseSessionItemInput) => void;
   removeItem: (id: string) => void;
+  updateDraft: (field: CaseSessionDraftField, value: string) => void;
+  resetDraft: () => void;
   clearSession: () => void;
 };
 
 const STORAGE_KEY = "laakarin-tyopoyta:case-session";
 const MAX_ITEMS = 24;
 const MAX_CONTENT_LENGTH = 12000;
+const MAX_DRAFT_LENGTH = 4000;
+const EMPTY_DRAFT: CaseSessionDraft = {
+  summary: "",
+  plan: "",
+  questions: "",
+};
 
 const CaseSessionContext = createContext<CaseSessionContextValue | null>(null);
 
@@ -59,15 +76,36 @@ function normalizeStoredItems(value: unknown): CaseSessionItem[] {
     .slice(0, MAX_ITEMS);
 }
 
+function normalizeStoredDraft(value: unknown): CaseSessionDraft {
+  if (!value || typeof value !== "object") return EMPTY_DRAFT;
+
+  const draft = value as Partial<Record<CaseSessionDraftField, unknown>>;
+  return {
+    summary: typeof draft.summary === "string" ? draft.summary.slice(0, MAX_DRAFT_LENGTH) : "",
+    plan: typeof draft.plan === "string" ? draft.plan.slice(0, MAX_DRAFT_LENGTH) : "",
+    questions: typeof draft.questions === "string" ? draft.questions.slice(0, MAX_DRAFT_LENGTH) : "",
+  };
+}
+
 export function CaseSessionProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<CaseSessionItem[]>([]);
+  const [draft, setDraft] = useState<CaseSessionDraft>(EMPTY_DRAFT);
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
     try {
       const raw = window.sessionStorage.getItem(STORAGE_KEY);
       if (raw) {
-        setItems(normalizeStoredItems(JSON.parse(raw)));
+        const parsed = JSON.parse(raw) as unknown;
+
+        if (Array.isArray(parsed)) {
+          setItems(normalizeStoredItems(parsed));
+          setDraft(EMPTY_DRAFT);
+        } else {
+          const storedState = parsed as { items?: unknown; draft?: unknown };
+          setItems(normalizeStoredItems(storedState.items));
+          setDraft(normalizeStoredDraft(storedState.draft));
+        }
       }
     } catch (error) {
       console.error("Case session loading failed", error);
@@ -79,11 +117,17 @@ export function CaseSessionProvider({ children }: { children: React.ReactNode })
   useEffect(() => {
     if (!isReady) return;
     try {
-      window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+      window.sessionStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({
+          items,
+          draft,
+        }),
+      );
     } catch (error) {
       console.error("Case session saving failed", error);
     }
-  }, [isReady, items]);
+  }, [draft, isReady, items]);
 
   const addItem = useCallback((input: AddCaseSessionItemInput) => {
     const title = input.title.trim().slice(0, 180);
@@ -108,17 +152,32 @@ export function CaseSessionProvider({ children }: { children: React.ReactNode })
     setItems((current) => current.filter((item) => item.id !== id));
   }, []);
 
+  const updateDraft = useCallback((field: CaseSessionDraftField, value: string) => {
+    setDraft((current) => ({
+      ...current,
+      [field]: value.slice(0, MAX_DRAFT_LENGTH),
+    }));
+  }, []);
+
+  const resetDraft = useCallback(() => {
+    setDraft(EMPTY_DRAFT);
+  }, []);
+
   const clearSession = useCallback(() => {
     setItems([]);
+    setDraft(EMPTY_DRAFT);
   }, []);
 
   const value = useMemo<CaseSessionContextValue>(() => ({
     items,
+    draft,
     isReady,
     addItem,
     removeItem,
+    updateDraft,
+    resetDraft,
     clearSession,
-  }), [addItem, clearSession, isReady, items, removeItem]);
+  }), [addItem, clearSession, draft, isReady, items, removeItem, resetDraft, updateDraft]);
 
   return <CaseSessionContext.Provider value={value}>{children}</CaseSessionContext.Provider>;
 }
