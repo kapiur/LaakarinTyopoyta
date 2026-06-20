@@ -445,6 +445,100 @@ function shouldCompactReferenceEvidenceUi(params: {
   );
 }
 
+function compactRegistryOnlyBullet(line: string) {
+  const raw = line.replace(/^\s*[-*•]\s+/, '').trim();
+  if (!raw) return '';
+
+  const primary = raw.split(/[:;]\s+/)[0]?.trim() ?? raw;
+  const compact = primary
+    .replace(/[.。]+$/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return compact ? `- ${compact}.` : '';
+}
+
+function buildCompactRegistryOnlyLead(language: AgentUiLanguage, taskType: AiTaskType) {
+  if (language === 'ru') {
+    if (taskType === 'clinical_guideline_comparison') {
+      return 'Кратко: в официальных источниках по этой теме вручную стоит сверить:';
+    }
+
+    return 'Кратко: в официальных источниках по этой теме вручную стоит проверить:';
+  }
+
+  if (language === 'fi') {
+    if (taskType === 'clinical_guideline_comparison') {
+      return 'Lyhyesti: virallisista lähteistä kannattaa tarkistaa käsin ainakin nämä vertailukohdat:';
+    }
+
+    return 'Lyhyesti: virallisista lähteistä kannattaa tarkistaa käsin ainakin nämä kohdat:';
+  }
+
+  if (language === 'de') {
+    if (taskType === 'clinical_guideline_comparison') {
+      return 'Kurz: In den offiziellen Quellen sollten dazu mindestens diese Vergleichspunkte manuell geprüft werden:';
+    }
+
+    return 'Kurz: In den offiziellen Quellen sollten dazu mindestens diese Punkte manuell geprüft werden:';
+  }
+
+  if (taskType === 'clinical_guideline_comparison') {
+    return 'Briefly: in the official sources for this topic, these comparison points should be checked manually:';
+  }
+
+  return 'Briefly: in the official sources for this topic, these points should be checked manually:';
+}
+
+function buildCompactRegistryOnlyNote(
+  language: AgentUiLanguage,
+  sources: Array<{ name: string }>,
+) {
+  const sourceList = sources.slice(0, 3).map((source) => source.name).join(' / ') || 'official sources';
+
+  if (language === 'ru') {
+    return `Точные критерии, пороги и последовательность действий лучше сверить напрямую в ${sourceList}.`;
+  }
+
+  if (language === 'fi') {
+    return `Tarkat kriteerit, raja-arvot ja etenemisjärjestys kannattaa varmistaa suoraan lähteistä ${sourceList}.`;
+  }
+
+  if (language === 'de') {
+    return `Genaue Kriterien, Grenzwerte und Abläufe sollten direkt in ${sourceList} geprüft werden.`;
+  }
+
+  return `Exact criteria, thresholds, and step order should be verified directly in ${sourceList}.`;
+}
+
+function compactRegistryOnlyReply(input: {
+  content: string;
+  taskType: AiTaskType;
+  language: AgentUiLanguage;
+  sources: Array<{ name: string }>;
+}) {
+  const lines = input.content.replace(/\r/g, '').split('\n');
+  const bulletLines = lines.filter((line) => /^\s*[-*•]\s+/.test(line));
+  if (bulletLines.length === 0) return input.content.trim();
+
+  const maxItems = input.taskType === 'clinical_guideline_comparison' ? 5 : 4;
+  const compactBullets = uniqueStrings(
+    bulletLines
+      .map(compactRegistryOnlyBullet)
+      .filter(Boolean)
+  ).slice(0, maxItems);
+
+  if (compactBullets.length === 0) return input.content.trim();
+
+  return [
+    buildCompactRegistryOnlyLead(input.language, input.taskType),
+    '',
+    ...compactBullets,
+    '',
+    buildCompactRegistryOnlyNote(input.language, input.sources),
+  ].join('\n');
+}
+
 export async function POST(req: Request) {
   const { session, error } = await requireAuthenticatedUser();
   if (error) return error;
@@ -801,7 +895,15 @@ export async function POST(req: Request) {
       success: true,
     });
 
-    const displayContent = normalizeReplyForDisplay(safeOutputContent);
+    const normalizedDisplayContent = normalizeReplyForDisplay(safeOutputContent);
+    const displayContent = compactReferenceEvidenceUi
+      ? compactRegistryOnlyReply({
+          content: normalizedDisplayContent,
+          taskType: plan.taskType,
+          language: uiLanguage,
+          sources: finalEvidence.sources,
+        })
+      : normalizedDisplayContent;
     const displayDraft = parseDraftFromContent(displayContent);
 
     return NextResponse.json({
