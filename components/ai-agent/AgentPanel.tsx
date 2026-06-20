@@ -321,6 +321,9 @@ export default function AgentPanel({ defaultContextType = "general", initialText
     response.evidence.status !== "found"
   );
   const blockedByEvidenceGate = response?.route?.blockedByEvidenceGate === true;
+  const evidenceWarnings = response?.evidence?.warnings ?? [];
+  const visibleEvidenceWarnings = limitedReferenceMode ? [] : evidenceWarnings;
+  const visibleUnsupportedClaims = limitedReferenceMode ? [] : (response?.evidence?.unsupportedClaims ?? []);
 
   return (
     <section className="bg-white border border-slate-200 rounded-[2rem] shadow-sm overflow-hidden">
@@ -480,16 +483,16 @@ export default function AgentPanel({ defaultContextType = "general", initialText
                         </ul>
                       </div>
                     )}
-                    {response.evidence.warnings && response.evidence.warnings.length > 0 && (
+                    {visibleEvidenceWarnings.length > 0 && (
                       <div className="rounded-xl bg-amber-50 border border-amber-100 text-amber-800 p-3 font-semibold">
-                        {response.evidence.warnings.join(" ")}
+                        {visibleEvidenceWarnings.join(" ")}
                       </div>
                     )}
-                    {response.evidence.unsupportedClaims && response.evidence.unsupportedClaims.length > 0 && (
+                    {visibleUnsupportedClaims.length > 0 && (
                       <div>
                         <div className="font-bold text-slate-700 mb-1">{l.unsupportedClaimsLabel}</div>
                         <ul className="list-disc pl-5 space-y-1 text-rose-700">
-                          {response.evidence.unsupportedClaims.map((claim, index) => (
+                          {visibleUnsupportedClaims.map((claim, index) => (
                             <li key={`${index}-${claim.slice(0, 20)}`}>{claim}</li>
                           ))}
                         </ul>

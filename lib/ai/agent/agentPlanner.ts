@@ -210,7 +210,8 @@ function clinicalReferenceInstruction() {
     'The user is asking for general clinical reference information, education, or guideline comparison, not patient-specific advice.',
     'Do not provide individual patient recommendations.',
     'If the backend provides only a source registry without retrieved evidence excerpts, say that official sources are configured but concrete passages have not yet been automatically retrieved.',
-    'In registry-only mode, you may provide a safe structure, comparison framework, and explain what should be compared.',
+    'In registry-only mode, provide only a safe structure, comparison framework, or manual verification checklist.',
+    'Do not expand into a disease mini-review, differential-diagnosis note, workup algorithm, or treatment summary when exact excerpts are unavailable.',
     'Do not claim exact guideline differences, target values, doses, durations, referral thresholds, contraindications, or red flags unless they are present in provided evidence excerpts.',
   ].join('\n');
 }
@@ -248,7 +249,9 @@ function outputContractInstruction(taskType: AiTaskType, contextType: AgentConte
       'Output contract:',
       'Return a short reference note for a clinician, not patient-specific advice.',
       'Prefer one direct answer followed by a compact bullet list only if it improves clarity.',
-      'If source passages are missing, say that exact official passages are not available here yet and limit yourself to a comparison or verification framework.',
+      'If source passages are missing, limit the answer to at most five short bullets and one brief lead-in sentence.',
+      'In that mode, every bullet must be a manual verification point, not a disease overview or treatment explanation.',
+      'Do not use nested bullets.',
       'Do not mention backend, registry mode, retrieval layer, or system internals.',
     ].join('\n');
   }
@@ -258,7 +261,8 @@ function outputContractInstruction(taskType: AiTaskType, contextType: AgentConte
       'Output contract:',
       'Return a comparison-oriented answer.',
       'If exact excerpts are available, compare only those supported points.',
-      'If exact excerpts are not available, provide only a checklist of what the clinician should compare manually in the official sources.',
+      'If exact excerpts are not available, provide only a manual comparison checklist of three to six short bullets.',
+      'Do not use nested bullets or long explanatory paragraphs.',
       'Do not invent differences between guidelines.',
       'Do not mention backend, registry mode, retrieval layer, or system internals.',
     ].join('\n');

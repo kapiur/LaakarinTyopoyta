@@ -379,6 +379,8 @@ function buildEvidenceAvailabilityInstruction(params: {
         'Evidence communication rule:',
         'Exact official source passages are not currently available inside the provided material.',
         'Keep the answer high-level and verification-oriented.',
+        'Use at most five short bullets and no nested lists.',
+        'Do not turn the answer into a disease overview, workup algorithm, or treatment explainer.',
         'Do not present disease-specific diagnostic or treatment details as settled official facts.',
         'Do not write long technical explanations about missing retrieval, backend limits, or pipeline behavior.',
       ].join('\n');
@@ -389,6 +391,7 @@ function buildEvidenceAvailabilityInstruction(params: {
         'Evidence communication rule:',
         'Exact official source passages are not currently available inside the provided material.',
         'Return only a manual comparison checklist of what the clinician should verify in the configured official sources.',
+        'Use three to six short bullets and no nested lists.',
         'Do not invent exact differences between recommendations.',
         'Do not write long technical explanations about missing retrieval, backend limits, or pipeline behavior.',
       ].join('\n');
@@ -424,6 +427,20 @@ function buildEvidenceAvailabilityInstruction(params: {
     'Keep any limitation note short, practical, and clinician-facing.',
     'Do not describe internal system behavior.',
   ].join('\n');
+}
+
+function shouldCompactReferenceEvidenceUi(params: {
+  taskType: AiTaskType;
+  status: string;
+  hasExcerpts: boolean;
+}) {
+  return (
+    (params.taskType === 'clinical_reference' ||
+      params.taskType === 'clinical_guideline_comparison' ||
+      params.taskType === 'clinical_source_check') &&
+    params.status !== 'found' &&
+    !params.hasExcerpts
+  );
 }
 
 export async function POST(req: Request) {
@@ -748,10 +765,17 @@ export async function POST(req: Request) {
       }
     }
 
+    const compactReferenceEvidenceUi = shouldCompactReferenceEvidenceUi({
+      taskType: plan.taskType,
+      status: localizedEvidence.status,
+      hasExcerpts: localizedEvidence.excerpts.length > 0,
+    });
+    const finalEvidenceWarnings = uniqueStrings([...localizedEvidence.warnings, ...consistencyCheck.warnings]);
+
     const finalEvidence = {
       ...localizedEvidence,
-      warnings: [...localizedEvidence.warnings, ...consistencyCheck.warnings],
-      unsupportedClaims: consistencyCheck.unsupportedClaims,
+      warnings: compactReferenceEvidenceUi ? finalEvidenceWarnings.slice(0, 1) : finalEvidenceWarnings,
+      unsupportedClaims: compactReferenceEvidenceUi ? [] : consistencyCheck.unsupportedClaims,
     };
 
     await logAiRunAudit({
