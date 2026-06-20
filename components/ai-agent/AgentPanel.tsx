@@ -63,10 +63,12 @@ const localLabels = {
     contextClinicalReference: "Kliininen viite",
     contextClinicalReferenceDescription: "Turvallinen kliininen yleiskatsaus tai suositusvertailu ilman potilaskohtaisia ohjeita",
     evidenceTitle: "Näyttö",
+    evidenceStatusLabel: "Lähdetilanne",
     clinicalCountry: "Kliininen maa",
     clinicalLanguage: "Kliininen kieli",
     sources: "Lähteet",
     modeLabel: "Tila",
+    taskLabel: "Tehtävä",
     latestDraftLabel: "Viimeisin luonnos",
     limitedReferenceNotice: "Vastaus on rajattu turvalliseen viite-/vertailutilaan. Tarkkoja kliinisiä väitteitä ei anneta ilman haettua lähdekatkelmaa.",
     evidenceGateNotice: "Kysymys vaatii vahvistettua kliinistä evidenssiä. Agentti ei anna potilaskohtaisia suosituksia ilman lähdetukea.",
@@ -88,6 +90,23 @@ const localLabels = {
     turnUser: "Käyttäjä",
     turnAssistant: "Agentti",
     reviewAgainDraft: "Tarkista luonnos uudelleen ja keskity riskikohtiin, puuttuviin lähdetukiin ja parannusehdotuksiin.",
+    statusFound: "Lähdekatkelmia haettu",
+    statusPartial: "Vain lähderekisteri saatavilla",
+    statusNotFound: "Virallisia lähteitä ei löytynyt",
+    statusNotRequired: "Lähdehakua ei tarvittu",
+    taskClinicalDocument: "Kliininen teksti",
+    taskClinicalReference: "Kliininen viite",
+    taskGuidelineComparison: "Suositusvertailu",
+    taskClinicalSourceCheck: "Lähdevertailu",
+    taskClinicalReview: "Kliininen tarkistus",
+    taskTextFix: "Tekstin korjaus",
+    taskTranslation: "Käännös",
+    taskGeneralChat: "Yleinen työtila-apu",
+    trustPrimaryGuideline: "Pääsuositus",
+    trustOfficialReference: "Virallinen viitelähde",
+    trustAuthorityInstruction: "Viranomaisohje",
+    trustLocalInstruction: "Paikallinen ohje",
+    trustUnknown: "Muu lähde",
   },
   ru: {
     contextPikaohje: "Быстрая инструкция",
@@ -95,13 +114,15 @@ const localLabels = {
     contextClinicalReference: "Клиническая справка",
     contextClinicalReferenceDescription: "Безопасная клиническая справка или сравнение рекомендаций без patient-specific советов",
     evidenceTitle: "Источники",
+    evidenceStatusLabel: "Состояние источников",
     clinicalCountry: "Страна рекомендаций",
     clinicalLanguage: "Клинический язык",
     sources: "Источники",
     modeLabel: "Режим",
-    latestDraftLabel: "Последний draft",
+    taskLabel: "Задача",
+    latestDraftLabel: "Последний черновик",
     limitedReferenceNotice: "Ответ ограничен безопасным справочным/сравнительным режимом. Точные клинические утверждения не даются без извлечённого фрагмента источника.",
-    evidenceGateNotice: "Запрос требует подтверждённой клинической evidence. Агент не даёт patient-specific рекомендации без источниковой поддержки.",
+    evidenceGateNotice: "Запрос требует подтверждённой клинической опоры на источники. Агент не даёт персонализированные рекомендации без подтверждения из источников.",
     noAutoSaveNotice: "Черновик не сохраняется автоматически.",
     transientHistoryNotice: "История диалога хранится только пока открыто это окно.",
     unsupportedClaimsLabel: "Утверждения для проверки",
@@ -120,6 +141,23 @@ const localLabels = {
     turnUser: "Пользователь",
     turnAssistant: "Агент",
     reviewAgainDraft: "Проверь черновик ещё раз и сфокусируйся на рискованных местах, нехватке опоры на источники и точках для улучшения.",
+    statusFound: "Есть извлечённые фрагменты источников",
+    statusPartial: "Доступен только реестр источников",
+    statusNotFound: "Официальные источники не найдены",
+    statusNotRequired: "Поиск источников не требовался",
+    taskClinicalDocument: "Клинический текст",
+    taskClinicalReference: "Клиническая справка",
+    taskGuidelineComparison: "Сравнение рекомендаций",
+    taskClinicalSourceCheck: "Проверка по источникам",
+    taskClinicalReview: "Клиническая проверка",
+    taskTextFix: "Исправление текста",
+    taskTranslation: "Перевод",
+    taskGeneralChat: "Общая помощь в рабочем пространстве",
+    trustPrimaryGuideline: "Основная клиническая рекомендация",
+    trustOfficialReference: "Официальный справочный источник",
+    trustAuthorityInstruction: "Официальная инструкция ведомства",
+    trustLocalInstruction: "Локальная инструкция",
+    trustUnknown: "Другой источник",
   },
   en: {
     contextPikaohje: "Quick guide",
@@ -127,10 +165,12 @@ const localLabels = {
     contextClinicalReference: "Clinical reference",
     contextClinicalReferenceDescription: "Safe clinical overview or guideline comparison without patient-specific advice",
     evidenceTitle: "Evidence",
+    evidenceStatusLabel: "Source status",
     clinicalCountry: "Clinical country",
     clinicalLanguage: "Clinical language",
     sources: "Sources",
     modeLabel: "Mode",
+    taskLabel: "Task",
     latestDraftLabel: "Latest draft",
     limitedReferenceNotice: "This answer is limited to a safe reference/comparison mode. Exact clinical claims are withheld until a source excerpt is retrieved.",
     evidenceGateNotice: "This request requires confirmed clinical evidence. The agent will not provide patient-specific recommendations without source support.",
@@ -152,6 +192,74 @@ const localLabels = {
     turnUser: "User",
     turnAssistant: "Agent",
     reviewAgainDraft: "Review the draft again and focus on risky areas, missing source support, and concrete improvements.",
+    statusFound: "Source excerpts retrieved",
+    statusPartial: "Source registry only",
+    statusNotFound: "No official sources found",
+    statusNotRequired: "No source lookup needed",
+    taskClinicalDocument: "Clinical text",
+    taskClinicalReference: "Clinical reference",
+    taskGuidelineComparison: "Guideline comparison",
+    taskClinicalSourceCheck: "Source check",
+    taskClinicalReview: "Clinical review",
+    taskTextFix: "Text cleanup",
+    taskTranslation: "Translation",
+    taskGeneralChat: "General workspace help",
+    trustPrimaryGuideline: "Primary guideline",
+    trustOfficialReference: "Official reference",
+    trustAuthorityInstruction: "Authority instruction",
+    trustLocalInstruction: "Local instruction",
+    trustUnknown: "Other source",
+  },
+  de: {
+    contextPikaohje: "Kurzanleitung",
+    contextPikaohjeDescription: "Klinische Kurzanleitung erstellen oder prüfen",
+    contextClinicalReference: "Klinische Referenz",
+    contextClinicalReferenceDescription: "Sichere klinische Übersicht oder Leitlinienvergleich ohne patientenspezifische Empfehlung",
+    evidenceTitle: "Evidenz",
+    evidenceStatusLabel: "Quellenstatus",
+    clinicalCountry: "Klinisches Land",
+    clinicalLanguage: "Klinische Sprache",
+    sources: "Quellen",
+    modeLabel: "Modus",
+    taskLabel: "Aufgabe",
+    latestDraftLabel: "Letzter Entwurf",
+    limitedReferenceNotice: "Diese Antwort bleibt im sicheren Referenz-/Vergleichsmodus. Genaue klinische Aussagen werden ohne extrahierten Quellenabschnitt nicht gegeben.",
+    evidenceGateNotice: "Für diese Anfrage ist bestätigte klinische Evidenz nötig. Der Agent gibt ohne Quellenbasis keine patientenspezifischen Empfehlungen.",
+    noAutoSaveNotice: "Entwürfe werden nicht automatisch gespeichert.",
+    transientHistoryNotice: "Der Verlauf bleibt nur offen, solange dieses Fenster geöffnet ist.",
+    unsupportedClaimsLabel: "Zu prüfende Aussagen",
+    applyDraft: "Entwurf im Editor verwenden",
+    appliedDraft: "Entwurf in den Editor übernommen",
+    actionCopyDraft: "Entwurf kopieren",
+    actionUseTemplateDraft: "Als Vorlage verwenden",
+    actionOpenTemplateEditor: "Im Vorlageneditor öffnen",
+    actionUseAiToolPrompt: "Als AI-Tool-Prompt verwenden",
+    actionUsePikaohjeDraft: "Als Kurzanleitung verwenden",
+    actionReviewAgain: "Erneut prüfen",
+    followUpLabel: "Dieses Ergebnis verfeinern",
+    followUpPlaceholder: "Zum Beispiel: kürzer machen, Variablen behalten, Struktur ergänzen...",
+    sendFollowUp: "Verfeinerung senden",
+    conversationTitle: "Verlauf",
+    turnUser: "Nutzer",
+    turnAssistant: "Agent",
+    reviewAgainDraft: "Prüfe den Entwurf erneut und achte auf Risiken, fehlende Quellenstützung und konkrete Verbesserungen.",
+    statusFound: "Quellenabschnitte verfügbar",
+    statusPartial: "Nur Quellenregister verfügbar",
+    statusNotFound: "Keine offiziellen Quellen gefunden",
+    statusNotRequired: "Keine Quellensuche nötig",
+    taskClinicalDocument: "Klinischer Text",
+    taskClinicalReference: "Klinische Referenz",
+    taskGuidelineComparison: "Leitlinienvergleich",
+    taskClinicalSourceCheck: "Quellenprüfung",
+    taskClinicalReview: "Klinische Prüfung",
+    taskTextFix: "Textkorrektur",
+    taskTranslation: "Übersetzung",
+    taskGeneralChat: "Allgemeine Hilfe im Arbeitsbereich",
+    trustPrimaryGuideline: "Primäre Leitlinie",
+    trustOfficialReference: "Offizielle Referenzquelle",
+    trustAuthorityInstruction: "Behördliche Anweisung",
+    trustLocalInstruction: "Lokale Anweisung",
+    trustUnknown: "Andere Quelle",
   },
 } as const;
 
@@ -176,6 +284,45 @@ function stripServiceScaffolding(value?: string) {
   }
 
   return normalized;
+}
+
+function humanizeTaskType(taskType: string | undefined, l: typeof localLabels.fi) {
+  if (!taskType) return "";
+
+  const map: Record<string, string> = {
+    clinical_document: l.taskClinicalDocument,
+    clinical_reference: l.taskClinicalReference,
+    clinical_guideline_comparison: l.taskGuidelineComparison,
+    clinical_source_check: l.taskClinicalSourceCheck,
+    clinical_review: l.taskClinicalReview,
+    text_fix: l.taskTextFix,
+    translation: l.taskTranslation,
+    general_chat: l.taskGeneralChat,
+  };
+
+  return map[taskType] ?? taskType;
+}
+
+function humanizeEvidenceStatus(status: AgentEvidence["status"], l: typeof localLabels.fi) {
+  const map: Record<AgentEvidence["status"], string> = {
+    found: l.statusFound,
+    partial: l.statusPartial,
+    not_found: l.statusNotFound,
+    not_required: l.statusNotRequired,
+  };
+
+  return map[status] ?? status;
+}
+
+function humanizeTrustLevel(trustLevel: string, l: typeof localLabels.fi) {
+  const map: Record<string, string> = {
+    primary_guideline: l.trustPrimaryGuideline,
+    official_reference: l.trustOfficialReference,
+    authority_instruction: l.trustAuthorityInstruction,
+    local_instruction: l.trustLocalInstruction,
+  };
+
+  return map[trustLevel] ?? l.trustUnknown;
 }
 
 export default function AgentPanel({ defaultContextType = "general", initialText = "", initialTemplate = "", compact = false, onApplyDraft }: AgentPanelProps) {
@@ -324,6 +471,7 @@ export default function AgentPanel({ defaultContextType = "general", initialText
   const evidenceWarnings = response?.evidence?.warnings ?? [];
   const visibleEvidenceWarnings = limitedReferenceMode ? [] : evidenceWarnings;
   const visibleUnsupportedClaims = limitedReferenceMode ? [] : (response?.evidence?.unsupportedClaims ?? []);
+  const humanTaskType = humanizeTaskType(response?.taskType, l);
 
   return (
     <section className="bg-white border border-slate-200 rounded-[2rem] shadow-sm overflow-hidden">
@@ -444,7 +592,11 @@ export default function AgentPanel({ defaultContextType = "general", initialText
                       {l.modeLabel}: {contextLabelMap.get(response.contextType) ?? response.contextType}
                     </span>
                   )}
-                  {response.taskType && <span className="px-2 py-1 rounded-full bg-white border border-slate-200">{response.taskType}</span>}
+                  {response.taskType && (
+                    <span className="px-2 py-1 rounded-full bg-white border border-slate-200">
+                      {l.taskLabel}: {humanTaskType}
+                    </span>
+                  )}
                   {response.provider && <span className="px-2 py-1 rounded-full bg-white border border-slate-200">{response.provider}</span>}
                   {response.model && <span className="px-2 py-1 rounded-full bg-white border border-slate-200">{response.model}</span>}
                   {response.privacy && (
@@ -469,7 +621,7 @@ export default function AgentPanel({ defaultContextType = "general", initialText
                 {response.evidence && (
                   <div className="rounded-2xl bg-white border border-slate-200 p-4 space-y-2 text-xs text-slate-600">
                     <div className="flex flex-wrap gap-2 font-bold">
-                      <span>{l.evidenceTitle}: {response.evidence.status}</span>
+                      <span>{l.evidenceStatusLabel}: {humanizeEvidenceStatus(response.evidence.status, l)}</span>
                       <span>{l.clinicalCountry}: {response.evidence.clinicalCountry}</span>
                       <span>{l.clinicalLanguage}: {response.evidence.clinicalOutputLanguage}</span>
                     </div>
@@ -478,7 +630,7 @@ export default function AgentPanel({ defaultContextType = "general", initialText
                         <div className="font-bold text-slate-700 mb-1">{l.sources}</div>
                         <ul className="list-disc pl-5 space-y-1">
                           {response.evidence.sources.map((source) => (
-                            <li key={source.id}>{source.name} · {source.trustLevel}</li>
+                            <li key={source.id}>{source.name} · {humanizeTrustLevel(source.trustLevel, l)}</li>
                           ))}
                         </ul>
                       </div>
