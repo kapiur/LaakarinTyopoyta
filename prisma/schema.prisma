@@ -49,6 +49,7 @@ model User {
   aiProfile       UserAiProfile?
   clinicalSettings UserClinicalSettings?
   clinicalSourcePreferences UserClinicalSourcePreference[]
+  feedbackReports FeedbackReport[]
   substanceNotes  Substance[]      // Связь для Wiki-заметок
   
   // Новые связи для каталога ссылок
@@ -359,11 +360,35 @@ model UserClinicalSettings {
   evidenceStrictness        String   @default("strict")
   allowLocalSources         Boolean  @default(true)
   allowSupplementarySources Boolean  @default(false)
+  guidelineUpdatesSeenAt    DateTime @default(now())
   createdAt                DateTime @default(now())
   updatedAt                DateTime @updatedAt
 
   @@index([clinicalCountry])
   @@index([practiceCountry])
+}
+
+model FeedbackReport {
+  id            String   @id @default(cuid())
+  userId        Int
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  surface       String
+  contextType   String?
+  feedbackType  String
+  title         String?
+  comment       String   @db.Text
+  pagePath      String?
+  sourceLabel   String?
+  sourceUrl     String?
+  clinicalCountry String?
+  uiLanguage    String?
+  metadata      Json?
+  status        String   @default("new")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([userId, createdAt])
+  @@index([surface, status, createdAt])
 }
 
 model ClinicalSource {

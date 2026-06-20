@@ -13,6 +13,7 @@ import MalliTemplateAiAssistantEnhancer from "./MalliTemplateAiAssistantEnhancer
 import { homeActionIdForPath, recordWorkspaceActivity } from "../lib/dashboard/workspaceActivityClient";
 import PwaRegistration from "./PwaRegistration";
 import InstallPwaButton from "./InstallPwaButton";
+import CaseSessionDock from "./workspace/CaseSessionDock";
 
 function WorkspaceShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -85,6 +86,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <MalliTemplateValidatorEnhancer />
       <MalliTemplateAiAssistantEnhancer />
       <WorkspaceShell>{children}</WorkspaceShell>
+      <CaseSessionDock />
     </Providers>
   );
 }

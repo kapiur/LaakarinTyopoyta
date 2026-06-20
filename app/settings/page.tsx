@@ -12,6 +12,7 @@ import {
   KeyRound,
   KeySquare,
   LayoutPanelTop,
+  MessageSquareWarning,
   Settings,
   Shield,
   Users,
@@ -336,6 +337,21 @@ function SettingsPageContent() {
               caption={copy.adminCaption}
               icon={DatabaseZap}
               accent="bg-emerald-50 text-emerald-600"
+            />
+
+            <QuickActionCard
+              href="/admin/feedback-reports"
+              title={language === "ru" ? "Сообщения об ошибках" : language === "en" ? "Feedback reports" : "Palauteraportit"}
+              description={
+                language === "ru"
+                  ? "Просмотр пользовательских сообщений об ошибках, неточностях и плохих переводах."
+                  : language === "en"
+                    ? "Review user reports about errors, inaccuracies, and poor translations."
+                    : "Tarkastele käyttäjien ilmoituksia virheistä, epätarkkuuksista ja huonoista käännöksistä."
+              }
+              caption={copy.adminCaption}
+              icon={MessageSquareWarning}
+              accent="bg-amber-50 text-amber-600"
             />
           </div>
 

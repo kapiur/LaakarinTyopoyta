@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
+  BookmarkPlus,
   BookText,
   ExternalLink,
   FileSearch,
@@ -13,6 +14,10 @@ import {
   ShieldCheck,
   Sparkles,
 } from "lucide-react";
+import EvidenceSummaryCard, { type EvidenceSummaryData } from "../../components/EvidenceSummaryCard";
+import FeedbackReportButton from "../../components/FeedbackReportButton";
+import GuidelineUpdatesNotice from "../../components/GuidelineUpdatesNotice";
+import { useCaseSession } from "../../components/workspace/CaseSessionProvider";
 import { useI18n } from "../../lib/useI18n";
 import type { AgentConversationTurn } from "../../lib/ai/agent/types";
 import type {
@@ -79,10 +84,10 @@ type SearchOverrides = Partial<{
 const DEFAULT_VISIBLE_LIMIT = 12;
 
 const workspaceLabels = {
-  fi: { discuss: "Keskustele artikkelista AI:n kanssa" },
-  ru: { discuss: "Обсудить статью с AI" },
-  en: { discuss: "Discuss article with AI" },
-  de: { discuss: "Artikel mit AI besprechen" },
+  fi: { discuss: "Keskustele artikkelista AI:n kanssa", save: "Lisää tapaussessioon" },
+  ru: { discuss: "Обсудить статью с AI", save: "Добавить в сессию случая" },
+  en: { discuss: "Discuss article with AI", save: "Add to case session" },
+  de: { discuss: "Artikel mit AI besprechen", save: "Zur Fallsitzung hinzufuegen" },
 } as const;
 
 function buildInterpretationKey(pmid: string, mode: InterpretationMode) {
@@ -234,6 +239,7 @@ export default function LiteraturePage({
 }) {
   const { t, language } = useI18n();
   const workspaceCopy = workspaceLabels[language as keyof typeof workspaceLabels] ?? workspaceLabels.en;
+  const { addItem: addCaseSessionItem } = useCaseSession();
   const [query, setQuery] = useState("");
   const [yearsBack, setYearsBack] = useState("5");
   const [studyFilter, setStudyFilter] = useState("all");
@@ -256,8 +262,27 @@ export default function LiteraturePage({
   const [followUpHistory, setFollowUpHistory] = useState<Record<string, AgentConversationTurn[]>>({});
   const [refiningMode, setRefiningMode] = useState<InterpretationMode | null>(null);
   const [loadingGuidelineCompare, setLoadingGuidelineCompare] = useState(false);
+  const [evidenceSummary, setEvidenceSummary] = useState<EvidenceSummaryData | null>(null);
 
   const targetLanguage = language || results?.context?.targetLanguage || "fi";
+
+  useEffect(() => {
+    let mounted = true;
+    async function loadEvidenceSummary() {
+      try {
+        const response = await fetch("/api/profile/evidence-summary", { cache: "no-store" });
+        if (!response.ok) return;
+        const data = await response.json();
+        if (mounted) setEvidenceSummary(data);
+      } catch (error) {
+        console.error("Literature evidence summary loading failed", error);
+      }
+    }
+    void loadEvidenceSummary();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const trustLabels = useMemo(
     () => ({
@@ -279,6 +304,37 @@ export default function LiteraturePage({
     }),
     [t],
   );
+
+  function addSelectedArticleToSession() {
+    if (!selectedArticle) return;
+    addCaseSessionItem({
+      type: "article",
+      title: selectedArticle.title,
+      content: currentDiscussionContent || buildArticleCurrentText(selectedArticle),
+      sourceLabel: selectedArticle.journal || selectedArticle.title,
+      sourceUrl: selectedArticle.url,
+    });
+  }
+
+  function addGuidelineComparisonToSession() {
+    if (!selectedArticle || !selectedGuidelineComparison) return;
+    addCaseSessionItem({
+      type: "guideline_check",
+      title: selectedArticle.title,
+      content: [
+        selectedGuidelineComparison.verdict,
+        selectedGuidelineComparison.comparisonSummary,
+        selectedGuidelineComparison.agreementPoints.length > 0
+          ? selectedGuidelineComparison.agreementPoints.map((item) => `- ${item}`).join("\n")
+          : "",
+        selectedGuidelineComparison.cautionPoints.length > 0
+          ? selectedGuidelineComparison.cautionPoints.map((item) => `- ${item}`).join("\n")
+          : "",
+      ].filter(Boolean).join("\n\n"),
+      sourceLabel: selectedGuidelineComparison.sources[0]?.sourceTitle || selectedArticle.title,
+      sourceUrl: selectedGuidelineComparison.sources[0]?.sourceUrl,
+    });
+  }
 
   async function performSearch(overrides: SearchOverrides = {}) {
     const nextYearsBack = overrides.yearsBack ?? yearsBack;
@@ -676,6 +732,7 @@ export default function LiteraturePage({
 
   return (
     <div className={embedded ? "space-y-4 p-4" : "space-y-6"}>
+      <GuidelineUpdatesNotice />
       {!embedded && <header className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-8 lg:rounded-[2rem]">
         <div className="flex items-start gap-4">
           <div className="w-14 h-14 rounded-2xl bg-slate-900 text-white flex items-center justify-center shadow-lg">
@@ -840,6 +897,27 @@ export default function LiteraturePage({
                       ? t("literature.guidelineCompareRefresh")
                       : t("literature.guidelineCompareButton")}
                 </button>
+                {selectedGuidelineComparison && (
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={addGuidelineComparisonToSession}
+                      className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50"
+                    >
+                      <BookmarkPlus size={13} />
+                      {workspaceCopy.save}
+                    </button>
+                    <FeedbackReportButton
+                      surface="literature_guideline_compare"
+                      contextType="guideline_compare"
+                      title={selectedArticle.title}
+                      sourceLabel={selectedGuidelineComparison.sources[0]?.sourceTitle}
+                      sourceUrl={selectedGuidelineComparison.sources[0]?.sourceUrl}
+                      clinicalCountry={results?.context?.clinicalCountry}
+                      metadata={{ status: selectedGuidelineComparison.status }}
+                    />
+                  </div>
+                )}
 
                 {selectedGuidelineComparison ? (
                   <div className="space-y-4">
@@ -854,6 +932,8 @@ export default function LiteraturePage({
                         {selectedGuidelineComparison.comparisonSummary}
                       </p>
                     </div>
+
+                    {evidenceSummary && <EvidenceSummaryCard summary={evidenceSummary} />}
 
                     {selectedGuidelineComparison.agreementPoints.length > 0 && (
                       <div className="space-y-2">
@@ -1161,6 +1241,15 @@ export default function LiteraturePage({
                 )}
                 <button
                   type="button"
+                  onClick={addSelectedArticleToSession}
+                  disabled={!currentDiscussionContent}
+                  className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+                >
+                  <BookmarkPlus size={13} />
+                  {workspaceCopy.save}
+                </button>
+                <button
+                  type="button"
                   onClick={() => loadInterpretation("translation")}
                   className={`px-3 py-2 rounded-xl text-xs font-bold border inline-flex items-center gap-2 ${viewMode === "translation" ? "bg-blue-600 text-white border-blue-600" : "bg-white text-slate-600 border-slate-200"}`}
                 >
@@ -1231,6 +1320,18 @@ export default function LiteraturePage({
                     {selectedArticle.abstract || t("literature.articleMissingAbstract")}
                   </div>
                 </div>
+                {evidenceSummary && <EvidenceSummaryCard summary={evidenceSummary} />}
+                <div className="flex flex-wrap gap-2">
+                  <FeedbackReportButton
+                    surface="literature_article"
+                    contextType="original"
+                    title={selectedArticle.title}
+                    sourceLabel={selectedArticle.journal || selectedArticle.title}
+                    sourceUrl={selectedArticle.url}
+                    clinicalCountry={results?.context?.clinicalCountry}
+                    metadata={{ pmid: selectedArticle.pmid }}
+                  />
+                </div>
               </div>
             )}
 
@@ -1244,6 +1345,18 @@ export default function LiteraturePage({
                 </h3>
                 <div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm leading-relaxed text-slate-700 whitespace-pre-line">
                   {selectedTranslation?.translatedText || selectedTranslation?.translatedAbstract || t("literature.translationEmpty")}
+                </div>
+                {evidenceSummary && <EvidenceSummaryCard summary={evidenceSummary} />}
+                <div className="flex flex-wrap gap-2">
+                  <FeedbackReportButton
+                    surface="literature_article"
+                    contextType="translation"
+                    title={selectedArticle.title}
+                    sourceLabel={selectedArticle.journal || selectedArticle.title}
+                    sourceUrl={selectedArticle.url}
+                    clinicalCountry={results?.context?.clinicalCountry}
+                    metadata={{ pmid: selectedArticle.pmid }}
+                  />
                 </div>
                 {!embedded && currentInterpretationKey && currentInterpretationText && (
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3">
@@ -1341,6 +1454,18 @@ export default function LiteraturePage({
                     </p>
                   </div>
                 )}
+                {evidenceSummary && <EvidenceSummaryCard summary={evidenceSummary} />}
+                <div className="flex flex-wrap gap-2">
+                  <FeedbackReportButton
+                    surface="literature_article"
+                    contextType="summary"
+                    title={selectedArticle.title}
+                    sourceLabel={selectedArticle.journal || selectedArticle.title}
+                    sourceUrl={selectedArticle.url}
+                    clinicalCountry={results?.context?.clinicalCountry}
+                    metadata={{ pmid: selectedArticle.pmid }}
+                  />
+                </div>
 
                 {!embedded && currentInterpretationKey && currentInterpretationText && (
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3">

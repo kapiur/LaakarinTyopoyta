@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import {
+  BookmarkPlus,
   Bot,
   Copy,
   FileText,
@@ -23,6 +24,9 @@ import {
   X,
 } from "lucide-react";
 import FirstRunOnboarding, { type OnboardingSnapshot } from "../components/FirstRunOnboarding";
+import EvidenceSummaryCard, { type EvidenceSummaryData } from "../components/EvidenceSummaryCard";
+import FeedbackReportButton from "../components/FeedbackReportButton";
+import GuidelineUpdatesNotice from "../components/GuidelineUpdatesNotice";
 import PrivacyNotice from "../components/PrivacyNotice";
 import QuickActionsBar from "../components/dashboard/QuickActionsBar";
 import RecentActionsBar from "../components/dashboard/RecentActionsBar";
@@ -37,6 +41,7 @@ import {
 } from "../lib/dashboard/workspaceModuleRegistry";
 import type { TranslationKey } from "../lib/i18n";
 import { useI18n } from "../lib/useI18n";
+import { useCaseSession } from "../components/workspace/CaseSessionProvider";
 
 type PrivacyInfo = { anonymized?: boolean; findingTypes?: string[] } | null;
 
@@ -89,6 +94,13 @@ const markdownContentClassName =
 const markdownUserContentClassName =
   "prose prose-sm max-w-none break-words text-white prose-p:my-2 prose-p:leading-relaxed prose-p:text-white prose-strong:text-white prose-li:text-white";
 
+const workspaceActionCopy = {
+  fi: { saveToSession: "Lisää tapaussessioon" },
+  ru: { saveToSession: "Добавить в сессию случая" },
+  en: { saveToSession: "Add to case session" },
+  de: { saveToSession: "Zur Fallsitzung hinzufuegen" },
+} as const;
+
 function PrivacyStatus({ privacy, label }: { privacy: PrivacyInfo; label: string }) {
   const hasFindings = Boolean(privacy?.anonymized && privacy.findingTypes?.length);
 
@@ -113,6 +125,8 @@ function PrivacyStatus({ privacy, label }: { privacy: PrivacyInfo; label: string
 
 export default function Dashboard() {
   const { t, language } = useI18n();
+  const sessionCopy = workspaceActionCopy[language as keyof typeof workspaceActionCopy] ?? workspaceActionCopy.en;
+  const { addItem: addCaseSessionItem } = useCaseSession();
   const [onboardingLoading, setOnboardingLoading] = useState(true);
   const [onboardingSnapshot, setOnboardingSnapshot] = useState<OnboardingSnapshot | null>(null);
   const [chatInput, setChatInput] = useState("");
@@ -141,6 +155,7 @@ export default function Dashboard() {
   const [desktopAssistantLayout, setDesktopAssistantLayout] = useState(false);
   const [workspaceContext, setWorkspaceContext] = useState<WorkspaceContext | null>(null);
   const [countries, setCountries] = useState<CountryOption[]>([]);
+  const [evidenceSummary, setEvidenceSummary] = useState<EvidenceSummaryData | null>(null);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -222,9 +237,10 @@ export default function Dashboard() {
     let mounted = true;
 
     async function loadWorkspace() {
-      const [toolsResponse, contextResponse] = await Promise.allSettled([
+      const [toolsResponse, contextResponse, evidenceResponse] = await Promise.allSettled([
         fetch("/api/ai-tools", { cache: "no-store" }),
         fetch("/api/profile/workspace-context", { cache: "no-store" }),
+        fetch("/api/profile/evidence-summary", { cache: "no-store" }),
       ]);
 
       if (!mounted) return;
@@ -246,6 +262,15 @@ export default function Dashboard() {
         }
       } catch (error) {
         console.error("Workspace context loading failed", error);
+      }
+
+      try {
+        if (evidenceResponse.status === "fulfilled" && evidenceResponse.value.ok) {
+          const data = await evidenceResponse.value.json();
+          if (mounted) setEvidenceSummary(data);
+        }
+      } catch (error) {
+        console.error("Evidence summary loading failed", error);
       }
     }
 
@@ -312,6 +337,12 @@ export default function Dashboard() {
 
   function discussCalculatorResult(content: string, toolKey: InlineWorkspaceModuleId, label: string) {
     if (!content.trim()) return;
+    addCaseSessionItem({
+      type: "calculation",
+      title: label,
+      content,
+      sourceLabel: label,
+    });
     setAgentAttachment({ type: "toolResult", content, toolKey, label });
     setMessages([]);
     setChatInput("");
@@ -336,6 +367,36 @@ export default function Dashboard() {
     setChatPrivacy(null);
     setAssistantVisibility(true);
     window.requestAnimationFrame(() => chatInputRef.current?.focus());
+  }
+
+  function addCurrentToolTextToSession() {
+    if (!toolText.trim()) return;
+    addCaseSessionItem({
+      type: "clinical_note",
+      title: activeToolLabel,
+      content: toolText,
+      sourceLabel: activeToolLabel,
+    });
+  }
+
+  function addCurrentToolResultToSession() {
+    if (!toolResult.trim()) return;
+    addCaseSessionItem({
+      type: "result",
+      title: activeToolLabel,
+      content: toolResult,
+      sourceLabel: activeToolLabel,
+    });
+  }
+
+  function addAssistantMessageToSession(content: string) {
+    if (!content.trim()) return;
+    addCaseSessionItem({
+      type: "discussion",
+      title: t("dashboard.assistantTitle"),
+      content,
+      sourceLabel: t("dashboard.assistantTitle"),
+    });
   }
 
   function applyAgentAnswer(content: string) {
@@ -508,6 +569,7 @@ export default function Dashboard() {
         )}
       </section>
 
+      <GuidelineUpdatesNotice />
       <QuickActionsBar activeAiToolKey={toolMode} onSelectAiTool={selectQuickAiTool} onOpenInlineAction={openInlineWorkspaceAction} />
       <RecentActionsBar
         onSelectAiTool={selectQuickAiTool}
@@ -582,14 +644,24 @@ export default function Dashboard() {
                 <div className="text-xs text-slate-500">{t("dashboard.noVisibleAiTools")}</div>
               )}
               {!toolResult && (
-                <button
-                  type="button"
-                  onClick={() => attachToAgent("sourceText")}
-                  disabled={!toolText.trim()}
-                  className="flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 hover:border-blue-300 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-40 sm:ml-auto"
-                >
-                  <MessageSquareShare size={15} /> {t("dashboard.attachSourceToAgent")}
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={addCurrentToolTextToSession}
+                    disabled={!toolText.trim()}
+                    className="flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 hover:border-blue-300 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-40 sm:ml-auto"
+                  >
+                    <BookmarkPlus size={15} /> {sessionCopy.saveToSession}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => attachToAgent("sourceText")}
+                    disabled={!toolText.trim()}
+                    className="flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 hover:border-blue-300 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <MessageSquareShare size={15} /> {t("dashboard.attachSourceToAgent")}
+                  </button>
+                </>
               )}
             </div>
           </div>
@@ -599,6 +671,13 @@ export default function Dashboard() {
               <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
                 <h2 className="text-xs font-black uppercase text-slate-500">{t("dashboard.resultTitle")}</h2>
                 <div className="flex flex-wrap items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={addCurrentToolResultToSession}
+                    className="flex items-center gap-2 rounded-md border border-blue-200 bg-white px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-50"
+                  >
+                    <BookmarkPlus size={15} /> {sessionCopy.saveToSession}
+                  </button>
                   <button
                     type="button"
                     onClick={moveResultToChat}
@@ -618,6 +697,20 @@ export default function Dashboard() {
                 </div>
               </div>
               <ReactMarkdown className={markdownContentClassName}>{toolResult}</ReactMarkdown>
+              {evidenceSummary && (
+                <div className="mt-4">
+                  <EvidenceSummaryCard summary={evidenceSummary} />
+                </div>
+              )}
+              <div className="mt-4 flex flex-wrap gap-2">
+                <FeedbackReportButton
+                  surface="home_text_tool"
+                  contextType={toolMode}
+                  title={activeToolLabel}
+                  clinicalCountry={workspaceContext?.clinicalCountry}
+                  metadata={{ privacyFindingCount: toolPrivacy?.findingTypes?.length ?? 0 }}
+                />
+              </div>
 
               <div className="mt-5 border-t border-blue-100 pt-4">
                 <label className="text-xs font-bold text-slate-600" htmlFor="refinement-instruction">
@@ -737,13 +830,30 @@ export default function Dashboard() {
                       {message.content}
                     </ReactMarkdown>
                     {message.role === "assistant" && index === messages.length - 1 && index > 0 && agentAttachment && (
-                      <button
-                        type="button"
-                        onClick={() => applyAgentAnswer(message.content)}
-                        className="mt-3 flex items-center gap-2 border-t border-slate-100 pt-2 text-[11px] font-bold text-blue-700 hover:text-blue-900"
-                      >
-                        <FileText size={13} /> {t("dashboard.useAgentAnswerAsResult")}
-                      </button>
+                      <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => applyAgentAnswer(message.content)}
+                          className="flex items-center gap-2 text-[11px] font-bold text-blue-700 hover:text-blue-900"
+                        >
+                          <FileText size={13} /> {t("dashboard.useAgentAnswerAsResult")}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => addAssistantMessageToSession(message.content)}
+                          className="flex items-center gap-2 text-[11px] font-bold text-slate-600 hover:text-slate-900"
+                        >
+                          <BookmarkPlus size={13} /> {sessionCopy.saveToSession}
+                        </button>
+                        <FeedbackReportButton
+                          surface="home_assistant"
+                          contextType="assistant_reply"
+                          title={t("dashboard.assistantTitle")}
+                          clinicalCountry={workspaceContext?.clinicalCountry}
+                          metadata={{ attachedType: agentAttachment.type }}
+                          variant="ghost"
+                        />
+                      </div>
                     )}
                   </div>
                 </div>
