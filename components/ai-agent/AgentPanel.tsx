@@ -3,8 +3,9 @@
 import { useMemo, useState } from "react";
 import { Bot, Clipboard, Loader2, Send, ShieldCheck, Sparkles } from "lucide-react";
 import { useI18n } from "../../lib/useI18n";
+import { CLINICAL_COUNTRIES, type ClinicalCountryCode } from "../../lib/clinical/countries/countryRegistry";
 
-type AgentContextType = "general" | "clinicalReference" | "malli" | "aiTool" | "clinicalText" | "pikaohje";
+type AgentContextType = "general" | "clinicalReference" | "clinicalResearch" | "malli" | "aiTool" | "clinicalText" | "pikaohje";
 
 type AgentSuggestedAction = {
   type: string;
@@ -62,6 +63,10 @@ const localLabels = {
     contextPikaohjeDescription: "Luo tai tarkista kliinistä pikaohjetta",
     contextClinicalReference: "Kliininen viite",
     contextClinicalReferenceDescription: "Turvallinen kliininen yleiskatsaus tai suositusvertailu ilman potilaskohtaisia ohjeita",
+    contextClinicalResearch: "Suositusten tutkiminen",
+    contextClinicalResearchDescription: "Vertaile tai tutki usean maan virallisia suosituksia koulutus- ja tutkimuskaytossa",
+    researchCountriesLabel: "Vertailumaat",
+    researchCountriesHint: "Valitse maat tähän, jos haluat lukita vertailun. Muuten agentti yrittää tunnistaa maat pyynnöstä.",
     evidenceTitle: "Näyttö",
     evidenceStatusLabel: "Lähdetilanne",
     clinicalCountry: "Kliininen maa",
@@ -113,6 +118,10 @@ const localLabels = {
     contextPikaohjeDescription: "Создать или проверить клиническую карточку",
     contextClinicalReference: "Клиническая справка",
     contextClinicalReferenceDescription: "Безопасная клиническая справка или сравнение рекомендаций без patient-specific советов",
+    contextClinicalResearch: "Исследование рекомендаций",
+    contextClinicalResearchDescription: "Сравнение и изучение официальных рекомендаций разных стран для обучения и исследовательской работы",
+    researchCountriesLabel: "Страны для сравнения",
+    researchCountriesHint: "Если выбрать страны здесь, агент зафиксирует сравнение по ним. Иначе он попытается определить страны из самого запроса.",
     evidenceTitle: "Источники",
     evidenceStatusLabel: "Состояние источников",
     clinicalCountry: "Страна рекомендаций",
@@ -164,6 +173,10 @@ const localLabels = {
     contextPikaohjeDescription: "Create or review a clinical quick guide",
     contextClinicalReference: "Clinical reference",
     contextClinicalReferenceDescription: "Safe clinical overview or guideline comparison without patient-specific advice",
+    contextClinicalResearch: "Guideline research",
+    contextClinicalResearchDescription: "Compare or study official guidance across countries for learning and research work",
+    researchCountriesLabel: "Comparison countries",
+    researchCountriesHint: "Select countries here to lock the comparison. Otherwise the agent will try to detect them from the request.",
     evidenceTitle: "Evidence",
     evidenceStatusLabel: "Source status",
     clinicalCountry: "Clinical country",
@@ -215,6 +228,10 @@ const localLabels = {
     contextPikaohjeDescription: "Klinische Kurzanleitung erstellen oder prüfen",
     contextClinicalReference: "Klinische Referenz",
     contextClinicalReferenceDescription: "Sichere klinische Übersicht oder Leitlinienvergleich ohne patientenspezifische Empfehlung",
+    contextClinicalResearch: "Leitlinienforschung",
+    contextClinicalResearchDescription: "Offizielle Empfehlungen mehrerer Laender fuer Lern- und Forschungszwecke vergleichen oder untersuchen",
+    researchCountriesLabel: "Vergleichslaender",
+    researchCountriesHint: "Wenn du hier Laender auswaehlst, wird der Vergleich darauf festgelegt. Sonst versucht der Agent, sie aus der Anfrage zu erkennen.",
     evidenceTitle: "Evidenz",
     evidenceStatusLabel: "Quellenstatus",
     clinicalCountry: "Klinisches Land",
@@ -331,6 +348,7 @@ export default function AgentPanel({ defaultContextType = "general", initialText
   const { t, language } = useI18n();
   const l = localLabels[language] || localLabels.fi;
   const [contextType, setContextType] = useState<AgentContextType>(defaultContextType);
+  const [researchCountries, setResearchCountries] = useState<ClinicalCountryCode[]>([]);
   const [userMessage, setUserMessage] = useState("");
   const [followUpMessage, setFollowUpMessage] = useState("");
   const [currentText, setCurrentText] = useState(initialText);
@@ -344,6 +362,7 @@ export default function AgentPanel({ defaultContextType = "general", initialText
   const contextOptions = useMemo<Array<{ value: AgentContextType; label: string; description: string }>>(() => [
     { value: "general", label: t("agent.contextGeneral"), description: t("agent.contextGeneralDescription") },
     { value: "clinicalReference", label: l.contextClinicalReference, description: l.contextClinicalReferenceDescription },
+    { value: "clinicalResearch", label: l.contextClinicalResearch, description: l.contextClinicalResearchDescription },
     { value: "clinicalText", label: t("agent.contextClinicalText"), description: t("agent.contextClinicalTextDescription") },
     { value: "malli", label: t("agent.contextMalli"), description: t("agent.contextMalliDescription") },
     { value: "aiTool", label: t("agent.contextAiTool"), description: t("agent.contextAiToolDescription") },
@@ -368,6 +387,14 @@ export default function AgentPanel({ defaultContextType = "general", initialText
     return suggestedActionLabelMap[type] ?? type;
   }
 
+  function toggleResearchCountry(countryCode: ClinicalCountryCode) {
+    setResearchCountries((current) =>
+      current.includes(countryCode)
+        ? current.filter((item) => item !== countryCode)
+        : [...current, countryCode]
+    );
+  }
+
   async function callAgent(message: string, previousTurns: AgentTurn[]) {
     setLoading(true);
     setError(null);
@@ -380,6 +407,7 @@ export default function AgentPanel({ defaultContextType = "general", initialText
         body: JSON.stringify({
           contextType,
           uiLanguage: language,
+          researchCountries: contextType === "clinicalResearch" ? researchCountries : [],
           userMessage: message,
           currentText,
           currentTemplate,
@@ -500,13 +528,54 @@ export default function AgentPanel({ defaultContextType = "general", initialText
             <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{t("agent.contextLabel")}</span>
             <select
               value={contextType}
-              onChange={(event) => setContextType(event.target.value as AgentContextType)}
+              onChange={(event) => {
+                const nextContextType = event.target.value as AgentContextType;
+                setContextType(nextContextType);
+                if (nextContextType !== "clinicalResearch") {
+                  setResearchCountries([]);
+                }
+              }}
               className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-purple-100"
             >
               {contextOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
             {selectedContext && <p className="text-xs text-slate-400">{selectedContext.description}</p>}
           </label>
+
+          {contextType === "clinicalResearch" && (
+            <div className="space-y-2">
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{l.researchCountriesLabel}</span>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 space-y-2">
+                <div className="flex flex-wrap gap-2">
+                  {CLINICAL_COUNTRIES.map((country) => {
+                    const checked = researchCountries.includes(country.code);
+                    const countryLabel = country.name[language] ?? country.name.en ?? country.code;
+
+                    return (
+                      <label
+                        key={country.code}
+                        className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium cursor-pointer transition ${
+                          checked
+                            ? "border-purple-200 bg-purple-50 text-purple-700"
+                            : "border-slate-200 bg-white text-slate-700 hover:bg-slate-100"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleResearchCountry(country.code)}
+                          className="rounded border-slate-300 text-purple-600 focus:ring-purple-200"
+                        />
+                        <span>{countryLabel}</span>
+                        <span className="text-xs text-slate-400">{country.code}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-slate-400">{l.researchCountriesHint}</p>
+              </div>
+            </div>
+          )}
 
           <label className="space-y-1 block">
             <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{t("agent.requestLabel")}</span>

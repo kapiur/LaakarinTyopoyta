@@ -4,6 +4,7 @@ import type { UiLanguage } from '../../i18n/config';
 export type AgentContextType =
   | 'general'
   | 'clinicalReference'
+  | 'clinicalResearch'
   | 'malli'
   | 'aiTool'
   | 'clinicalText'
@@ -33,6 +34,7 @@ export type AgentConversationContext = {
 export type AgentRequestBody = {
   contextType?: AgentContextType;
   uiLanguage?: AgentUiLanguage;
+  researchCountries?: string[];
   userMessage?: string;
   currentText?: string;
   currentTextKind?: 'clinicalText' | 'profileSample' | 'storedInstruction' | 'publicSourceText' | 'templateSyntax' | 'general';

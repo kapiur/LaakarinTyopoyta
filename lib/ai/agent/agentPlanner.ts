@@ -112,6 +112,11 @@ function inferTaskType(contextType: AgentContextType, userMessage: string, curre
 
   if (currentTextTask) return currentTextTask;
 
+  if (contextType === 'clinicalResearch') {
+    if (includesAny(text, comparisonTerms)) return 'clinical_guideline_comparison';
+    return 'clinical_reference';
+  }
+
   if (contextType === 'clinicalReference') {
     if (riskTask) return riskTask;
     if (includesAny(text, comparisonTerms)) return 'clinical_guideline_comparison';

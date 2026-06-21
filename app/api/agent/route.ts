@@ -14,13 +14,20 @@ import { normalizeUiLanguage as normalizeSharedUiLanguage } from '../../../lib/i
 import {
   buildEvidencePackageFromRetrieved,
   buildNoEvidenceReply,
+  type EvidencePackage,
 } from '../../../lib/clinical/evidence/evidencePackage';
 import { checkEvidenceConsistency } from '../../../lib/clinical/evidence/checkEvidenceConsistency';
-import { retrieveClinicalEvidence } from '../../../lib/clinical/evidence/retrieveClinicalEvidence';
+import { retrieveClinicalEvidence, type RetrievedEvidence } from '../../../lib/clinical/evidence/retrieveClinicalEvidence';
 import {
   getUserClinicalEvidenceConfig,
   type UserClinicalEvidenceConfig,
 } from '../../../lib/clinical/evidence/userClinicalSettings';
+import {
+  CLINICAL_COUNTRIES,
+  getClinicalCountryConfig,
+  normalizeClinicalCountry,
+  type ClinicalCountryCode,
+} from '../../../lib/clinical/countries/countryRegistry';
 import {
   buildWorkspaceContextInstruction,
   getUserAiWorkspaceContext,
@@ -33,6 +40,7 @@ function normalizeContextType(value: unknown): AgentContextType {
   if (
     value === 'general' ||
     value === 'clinicalReference' ||
+    value === 'clinicalResearch' ||
     value === 'malli' ||
     value === 'aiTool' ||
     value === 'clinicalText' ||
@@ -50,6 +58,323 @@ function normalizeUiLanguage(value: unknown): AgentUiLanguage {
 
 function optionalString(value: unknown) {
   return typeof value === 'string' ? value : '';
+}
+
+type RequestedResearchCountry = {
+  code: string;
+  supportedCode?: ClinicalCountryCode;
+  label: string;
+};
+
+type ResearchCountryResolution = {
+  requested: RequestedResearchCountry[];
+  supported: ClinicalCountryCode[];
+  unsupported: string[];
+};
+
+const RESEARCH_COUNTRY_ALIAS_MAP: Array<{
+  code: string;
+  aliases: string[];
+  supportedCode?: ClinicalCountryCode;
+}> = [
+  {
+    code: 'FI',
+    supportedCode: 'FI',
+    aliases: ['fi', 'finland', 'suomi', 'финляндия'],
+  },
+  {
+    code: 'RU',
+    supportedCode: 'RU',
+    aliases: ['ru', 'russia', 'rossiya', 'россия', 'россий', 'venäjä', 'venaja'],
+  },
+  {
+    code: 'DE',
+    supportedCode: 'DE',
+    aliases: ['de', 'germany', 'deutschland', 'saksa', 'германия'],
+  },
+  {
+    code: 'US',
+    aliases: ['us', 'usa', 'u.s.', 'u.s.a.', 'united states', 'america', 'америка', 'сша', 'соединенные штаты', 'соединённые штаты'],
+  },
+  {
+    code: 'EU',
+    aliases: ['eu', 'europe', 'european union', 'европа', 'евросоюз', 'европейский союз'],
+  },
+];
+
+function normalizeCountrySearchText(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[.,!?;:()[\]{}"'`]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function escapeRegex(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function countryAliasMatched(haystack: string, alias: string) {
+  const normalizedAlias = normalizeCountrySearchText(alias);
+  if (!normalizedAlias) return false;
+
+  const pattern = new RegExp(`(^|\\s)${escapeRegex(normalizedAlias)}(?=\\s|$)`, 'i');
+  return pattern.test(haystack);
+}
+
+function normalizeResearchCountryCode(value: unknown): ClinicalCountryCode | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().toUpperCase();
+  if (normalized === 'FI' || normalized === 'RU' || normalized === 'DE') {
+    return normalizeClinicalCountry(normalized);
+  }
+  return null;
+}
+
+function titleCaseCountryCode(code: string) {
+  return code.toUpperCase();
+}
+
+function uniqueCountryCodes(values: ClinicalCountryCode[]) {
+  return Array.from(new Set(values));
+}
+
+function resolveResearchCountries(input: {
+  selectedCountries?: unknown;
+  userMessage: string;
+  currentText: string;
+  currentTemplate: string;
+  fallbackCountry: ClinicalCountryCode;
+}) : ResearchCountryResolution {
+  const requested: RequestedResearchCountry[] = [];
+  const requestedCodes = new Set<string>();
+
+  const pushRequested = (code: string, supportedCode?: ClinicalCountryCode) => {
+    const normalizedCode = titleCaseCountryCode(code);
+    if (requestedCodes.has(normalizedCode)) return;
+    requestedCodes.add(normalizedCode);
+    requested.push({
+      code: normalizedCode,
+      supportedCode,
+      label: normalizedCode,
+    });
+  };
+
+  if (Array.isArray(input.selectedCountries)) {
+    for (const item of input.selectedCountries) {
+      const supportedCode = normalizeResearchCountryCode(item);
+      if (supportedCode) {
+        pushRequested(supportedCode, supportedCode);
+      }
+    }
+  }
+
+  const haystack = normalizeCountrySearchText([
+    input.userMessage,
+    input.currentText,
+    input.currentTemplate,
+  ].filter(Boolean).join(' '));
+
+  for (const candidate of RESEARCH_COUNTRY_ALIAS_MAP) {
+    const matched = candidate.aliases.some((alias) => countryAliasMatched(haystack, alias));
+    if (matched) {
+      pushRequested(candidate.code, candidate.supportedCode);
+    }
+  }
+
+  const supported = uniqueCountryCodes(
+    requested
+      .map((item) => item.supportedCode)
+      .filter((item): item is ClinicalCountryCode => Boolean(item))
+  );
+
+  if (requested.length === 0) {
+    return {
+      requested: [{
+        code: input.fallbackCountry,
+        supportedCode: input.fallbackCountry,
+        label: input.fallbackCountry,
+      }],
+      supported: [input.fallbackCountry],
+      unsupported: [],
+    };
+  }
+
+  return {
+    requested,
+    supported,
+    unsupported: requested
+      .filter((item) => !item.supportedCode)
+      .map((item) => item.label),
+  };
+}
+
+function supportedResearchCountryLabels(countries: ClinicalCountryCode[]) {
+  return countries.map((country) => {
+    const config = getClinicalCountryConfig(country);
+    return `${country} (${config.name.en ?? country})`;
+  });
+}
+
+function localizeUnsupportedResearchCountriesWarning(language: AgentUiLanguage, countries: string[]) {
+  const labels = countries.join(', ');
+
+  if (language === 'ru') {
+    return `Запрошенные страны пока не подключены к официальному research-режиму агента: ${labels}. Сейчас доступны только ${supportedResearchCountryLabels(CLINICAL_COUNTRIES.map((country) => country.code)).join(', ')}.`;
+  }
+
+  if (language === 'fi') {
+    return `Pyydettyjä maita ei ole vielä liitetty agentin viralliseen tutkimustilaan: ${labels}. Tällä hetkellä käytettävissä ovat vain ${supportedResearchCountryLabels(CLINICAL_COUNTRIES.map((country) => country.code)).join(', ')}.`;
+  }
+
+  if (language === 'de') {
+    return `Die angefragten Länder sind im offiziellen Recherchemodus des Agenten noch nicht angebunden: ${labels}. Aktuell verfügbar sind nur ${supportedResearchCountryLabels(CLINICAL_COUNTRIES.map((country) => country.code)).join(', ')}.`;
+  }
+
+  return `The requested countries are not yet connected in the agent's official research mode: ${labels}. Currently available countries are only ${supportedResearchCountryLabels(CLINICAL_COUNTRIES.map((country) => country.code)).join(', ')}.`;
+}
+
+function localizeNoSupportedResearchCountryReply(language: AgentUiLanguage, countries: string[]) {
+  const warning = localizeUnsupportedResearchCountriesWarning(language, countries);
+
+  if (language === 'ru') {
+    return [
+      warning,
+      '',
+      'Для содержательного сравнения нужны подключённые официальные источники по каждой выбранной стране.',
+    ].join('\n');
+  }
+
+  if (language === 'fi') {
+    return [
+      warning,
+      '',
+      'Sisällöllinen vertailu edellyttää, että jokaiselle valitulle maalle on liitetty viralliset lähteet.',
+    ].join('\n');
+  }
+
+  if (language === 'de') {
+    return [
+      warning,
+      '',
+      'Für einen inhaltlichen Vergleich müssen für jedes gewählte Land offizielle Quellen angebunden sein.',
+    ].join('\n');
+  }
+
+  return [
+    warning,
+    '',
+    'A meaningful comparison requires connected official sources for each requested country.',
+  ].join('\n');
+}
+
+function buildResearchModeInstruction(input: {
+  language: AgentUiLanguage;
+  supportedCountries: ClinicalCountryCode[];
+  unsupportedCountries: string[];
+  taskType: AiTaskType;
+}) {
+  const supportedCountries = supportedResearchCountryLabels(input.supportedCountries).join(', ');
+  const unsupportedCountries = input.unsupportedCountries.join(', ');
+
+  return [
+    'Research comparison mode:',
+    `The clinician explicitly wants cross-country research or guideline study for: ${supportedCountries || 'no connected countries resolved'}.`,
+    unsupportedCountries ? `Requested but unsupported countries: ${unsupportedCountries}. State clearly that they are not connected yet and do not infer their recommendations.` : '',
+    'Do not silently fall back to the workspace clinical country when the user asked about other countries.',
+    'Compare only countries that are explicitly requested or selected for this research mode.',
+    'If only one connected country is available, do not pretend a comparison exists; provide only a cautious source-backed note for that one country and say what is missing for the rest.',
+    'If exact excerpts exist, compare only the supported points from those excerpts.',
+    'If only registry-level source availability exists, keep the answer at checklist level and do not invent exact differences.',
+    input.taskType === 'clinical_guideline_comparison'
+      ? 'The output should be framed as a comparison between official sources, not as patient care advice.'
+      : 'The output should be framed as a clinician research note, not as patient care advice.',
+  ].filter(Boolean).join('\n');
+}
+
+function mergeResearchEvidence(input: {
+  language: AgentUiLanguage;
+  countryEvidence: Array<{
+    country: ClinicalCountryCode;
+    config: UserClinicalEvidenceConfig;
+    evidence: EvidencePackage;
+  }>;
+  unsupportedCountries: string[];
+}) : EvidencePackage {
+  const sources = new Map<string, EvidencePackage['sources'][number]>();
+  const excerpts: EvidencePackage['excerpts'] = [];
+  const warnings: string[] = [];
+  let status: EvidencePackage['status'] = 'not_found';
+  let level: EvidencePackage['level'] = 'insufficient_evidence';
+  let requiresEvidence = false;
+
+  for (const item of input.countryEvidence) {
+    requiresEvidence = requiresEvidence || item.evidence.requiresEvidence;
+
+    if (item.evidence.status === 'found') {
+      status = 'found';
+    } else if (status !== 'found' && item.evidence.status === 'partial') {
+      status = 'partial';
+    } else if (status === 'not_found' && item.evidence.status === 'not_required') {
+      status = 'not_required';
+    }
+
+    if (level !== 'official_guideline' && item.evidence.level === 'official_guideline') {
+      level = 'official_guideline';
+    } else if (
+      level !== 'official_guideline' &&
+      level !== 'official_reference' &&
+      item.evidence.level === 'official_reference'
+    ) {
+      level = 'official_reference';
+    }
+
+    for (const source of item.evidence.sources) {
+      sources.set(source.id, source);
+    }
+
+    for (const excerpt of item.evidence.excerpts) {
+      excerpts.push({
+        ...excerpt,
+        title: excerpt.title ? `[${item.country}] ${excerpt.title}` : `[${item.country}]`,
+      });
+    }
+
+    const localizedWarnings = localizeEvidenceWarningList(
+      input.language,
+      item.evidence.warnings,
+      {
+        status: item.evidence.status,
+        registryOnlyReference: item.evidence.status !== 'found',
+      },
+    );
+
+    for (const warning of localizedWarnings) {
+      warnings.push(`[${item.country}] ${warning}`);
+    }
+  }
+
+  if (input.unsupportedCountries.length > 0) {
+    warnings.unshift(localizeUnsupportedResearchCountriesWarning(input.language, input.unsupportedCountries));
+  }
+
+  const supportedCountries = input.countryEvidence.map((item) => item.country);
+  const clinicalOutputLanguages = uniqueStrings(
+    input.countryEvidence.map((item) => item.config.clinicalOutputLanguage)
+  );
+
+  return {
+    status,
+    level,
+    clinicalCountry: supportedCountries.join(' + '),
+    clinicalOutputLanguage: clinicalOutputLanguages.join(', '),
+    evidenceStrictness: input.countryEvidence[0]?.config.evidenceStrictness ?? 'strict',
+    requiresEvidence,
+    sources: Array.from(sources.values()),
+    excerpts,
+    warnings: uniqueStrings(warnings),
+    unsupportedClaims: [],
+  };
 }
 
 function truncate(value: string, maxLength: number) {
@@ -684,49 +1009,159 @@ export async function POST(req: Request) {
     const clinicalConfigPromise = getUserClinicalEvidenceConfig(userId, { surface: 'agent' });
     const userAiProfilePromise = getUserAiProfile(userId);
     const clinicalConfig = await clinicalConfigPromise;
+    const isClinicalResearchMode = contextType === 'clinicalResearch';
+    const researchCountryResolution = isClinicalResearchMode
+      ? resolveResearchCountries({
+          selectedCountries: body.researchCountries,
+          userMessage: privacyResult.sanitized.userMessage,
+          currentText: privacyResult.sanitized.currentText,
+          currentTemplate: privacyResult.sanitized.currentTemplate,
+          fallbackCountry: clinicalConfig.clinicalCountry,
+        })
+      : null;
+
+    if (isClinicalResearchMode && researchCountryResolution && researchCountryResolution.supported.length === 0) {
+      const reply = localizeNoSupportedResearchCountryReply(uiLanguage, researchCountryResolution.unsupported);
+      const evidence = {
+        status: 'not_found' as const,
+        level: 'insufficient_evidence' as const,
+        clinicalCountry: researchCountryResolution.requested.map((country) => country.label).join(' + '),
+        clinicalOutputLanguage: clinicalConfig.clinicalOutputLanguage,
+        evidenceStrictness: clinicalConfig.evidenceStrictness,
+        requiresEvidence: true,
+        sources: [],
+        excerpts: [],
+        warnings: [localizeUnsupportedResearchCountriesWarning(uiLanguage, researchCountryResolution.unsupported)],
+        unsupportedClaims: [],
+      };
+
+      await logAiRunAudit({
+        userId,
+        surface: 'agent',
+        taskType: plan.taskType,
+        contextType,
+        clinicalCountry: evidence.clinicalCountry,
+        evidenceStatus: evidence.status,
+        privacyFindingTypes: Array.from(new Set([
+          ...privacyResult.privacy.findingTypes,
+          ...privacyResult.privacy.residualFindingTypes,
+        ])),
+        blockedByEvidenceGate: false,
+        latencyMs: Date.now() - startedAt,
+        success: true,
+      });
+
+      return NextResponse.json({
+        reply,
+        draft: reply,
+        suggestedActions: plan.suggestedActions,
+        taskType: plan.taskType,
+        provider: null,
+        model: null,
+        route: {
+          taskType: plan.taskType,
+          requiresEvidence: true,
+          blockedByEvidenceGate: false,
+        },
+        privacy: privacyResult.privacy,
+        evidence,
+      });
+    }
+
     const [workspaceContext, userAiProfile] = await Promise.all([
       getUserAiWorkspaceContext(userId, { clinicalConfig }),
       userAiProfilePromise,
     ]);
     const requiresEvidence = taskRequiresEvidence(plan.taskType);
     const allowsRegistryOnlyReference = taskAllowsRegistryOnlyReference(plan.taskType);
-    const retrievedEvidence = await retrieveClinicalEvidence({
-      userId,
-      taskType: plan.taskType,
-      requiresEvidence: requiresEvidence || allowsRegistryOnlyReference,
-      config: clinicalConfig,
-      userMessage: privacyResult.sanitized.userMessage,
-      currentText: privacyResult.sanitized.currentText,
-      currentTemplate: privacyResult.sanitized.currentTemplate,
-    });
-    const evidence = buildEvidencePackageFromRetrieved({
-      taskType: plan.taskType,
-      requiresEvidence: requiresEvidence || allowsRegistryOnlyReference,
-      config: clinicalConfig,
-      retrieved: retrievedEvidence,
-    });
+    let evidence: EvidencePackage;
+    let localizedEvidence: EvidencePackage;
+
+    if (isClinicalResearchMode && researchCountryResolution) {
+      const researchConfigs = await Promise.all(
+        researchCountryResolution.supported.map((countryCode) =>
+          getUserClinicalEvidenceConfig(userId, {
+            surface: 'agent',
+            countryOverride: countryCode,
+          })
+        )
+      );
+
+      const retrievedEvidenceByCountry = await Promise.all(
+        researchConfigs.map((config) =>
+          retrieveClinicalEvidence({
+            userId,
+            taskType: plan.taskType,
+            requiresEvidence: requiresEvidence || allowsRegistryOnlyReference,
+            config,
+            userMessage: privacyResult.sanitized.userMessage,
+            currentText: privacyResult.sanitized.currentText,
+            currentTemplate: privacyResult.sanitized.currentTemplate,
+          })
+        )
+      );
+
+      const countryEvidence = researchConfigs.map((config, index) => ({
+        country: config.clinicalCountry,
+        config,
+        retrieved: retrievedEvidenceByCountry[index] as RetrievedEvidence,
+        evidence: buildEvidencePackageFromRetrieved({
+          taskType: plan.taskType,
+          requiresEvidence: requiresEvidence || allowsRegistryOnlyReference,
+          config,
+          retrieved: retrievedEvidenceByCountry[index],
+        }),
+      }));
+
+      evidence = mergeResearchEvidence({
+        language: uiLanguage,
+        countryEvidence: countryEvidence.map((item) => ({
+          country: item.country,
+          config: item.config,
+          evidence: item.evidence,
+        })),
+        unsupportedCountries: researchCountryResolution.unsupported,
+      });
+      localizedEvidence = evidence;
+    } else {
+      const retrievedEvidence = await retrieveClinicalEvidence({
+        userId,
+        taskType: plan.taskType,
+        requiresEvidence: requiresEvidence || allowsRegistryOnlyReference,
+        config: clinicalConfig,
+        userMessage: privacyResult.sanitized.userMessage,
+        currentText: privacyResult.sanitized.currentText,
+        currentTemplate: privacyResult.sanitized.currentTemplate,
+      });
+      evidence = buildEvidencePackageFromRetrieved({
+        taskType: plan.taskType,
+        requiresEvidence: requiresEvidence || allowsRegistryOnlyReference,
+        config: clinicalConfig,
+        retrieved: retrievedEvidence,
+      });
+      localizedEvidence = {
+        ...evidence,
+        warnings: localizeEvidenceWarningList(uiLanguage, evidence.warnings, {
+          status: evidence.status,
+          registryOnlyReference: allowsRegistryOnlyReference &&
+            (evidence.status === 'partial' || evidence.status === 'not_found'),
+        }),
+      };
+    }
 
     const isRegistryOnlyReference =
       allowsRegistryOnlyReference &&
-      (evidence.status === 'partial' || evidence.status === 'not_found');
-
-    const localizedEvidence = {
-      ...evidence,
-      warnings: localizeEvidenceWarningList(uiLanguage, evidence.warnings, {
-        status: evidence.status,
-        registryOnlyReference: isRegistryOnlyReference,
-      }),
-    };
+      (localizedEvidence.status === 'partial' || localizedEvidence.status === 'not_found');
 
     if (
       requiresEvidence &&
       !allowsRegistryOnlyReference &&
-      (evidence.status === 'not_found' || evidence.status === 'partial')
+      (localizedEvidence.status === 'not_found' || localizedEvidence.status === 'partial')
     ) {
       const reply = buildNoEvidenceReply({
-        clinicalCountry: evidence.clinicalCountry,
+        clinicalCountry: localizedEvidence.clinicalCountry,
         language: uiLanguage,
-        sources: evidence.sources,
+        sources: localizedEvidence.sources,
       });
 
       await logAiRunAudit({
@@ -734,7 +1169,7 @@ export async function POST(req: Request) {
         surface: 'agent',
         taskType: plan.taskType,
         contextType,
-        clinicalCountry: clinicalConfig.clinicalCountry,
+        clinicalCountry: localizedEvidence.clinicalCountry,
         evidenceStatus: localizedEvidence.status,
         privacyFindingTypes: Array.from(new Set([
           ...privacyResult.privacy.findingTypes,
@@ -762,6 +1197,7 @@ export async function POST(req: Request) {
       });
     }
 
+    const auditClinicalCountry = localizedEvidence.clinicalCountry || clinicalConfig.clinicalCountry;
     const profileInstruction = buildUserAiProfileInstruction(
       userAiProfile,
       profileModeForTask(plan.taskType),
@@ -770,23 +1206,38 @@ export async function POST(req: Request) {
     const evidenceContext = [
       buildWorkspaceContextInstruction(workspaceContext, {
         contentLabel: 'clinician-facing agent output',
+        mentionCountryAdaptation: !isClinicalResearchMode,
       }),
+      isClinicalResearchMode && researchCountryResolution
+        ? buildResearchModeInstruction({
+            language: uiLanguage,
+            supportedCountries: researchCountryResolution.supported,
+            unsupportedCountries: researchCountryResolution.unsupported,
+            taskType: plan.taskType,
+          })
+        : '',
       `Final user-facing answer language for this response: ${uiLanguage}.`,
       'Use other languages only for source names, very short quoted terms, or unavoidable original terminology.',
-      buildEvidenceModeInstruction(clinicalConfig),
+      isClinicalResearchMode
+        ? [
+            'Evidence operating mode: cross-country research.',
+            'Workspace defaults still define UI and safety context, but do not replace explicitly requested research countries.',
+            'Use only enabled official sources from each connected requested country when making claims about that country.',
+          ].join('\n')
+        : buildEvidenceModeInstruction(clinicalConfig),
       buildEvidenceAvailabilityInstruction({
         taskType: plan.taskType,
-        status: evidence.status,
+        status: localizedEvidence.status,
         registryOnlyReference: isRegistryOnlyReference,
-        hasExcerpts: evidence.excerpts.length > 0,
+        hasExcerpts: localizedEvidence.excerpts.length > 0,
       }),
-      `Evidence status: ${evidence.status}`,
+      `Evidence status: ${localizedEvidence.status}`,
       `Registry-only reference mode: ${isRegistryOnlyReference ? 'yes' : 'no'}`,
-      `Used sources: ${evidence.sources.map((source) => `${source.name} (${source.trustLevel})`).join(', ') || 'none'}`,
-      evidence.excerpts.length > 0
+      `Used sources: ${localizedEvidence.sources.map((source) => `${source.name} (${source.trustLevel})`).join(', ') || 'none'}`,
+      localizedEvidence.excerpts.length > 0
         ? [
             'Retrieved evidence excerpts:',
-            ...evidence.excerpts.map((excerpt, index) => [
+            ...localizedEvidence.excerpts.map((excerpt, index) => [
               `Excerpt ${index + 1}: ${excerpt.title || excerpt.sourceId}`,
               excerpt.url ? `URL: ${excerpt.url}` : '',
               excerpt.text,
@@ -874,7 +1325,7 @@ export async function POST(req: Request) {
         contextType,
         provider: result.provider,
         model: result.model,
-        clinicalCountry: clinicalConfig.clinicalCountry,
+        clinicalCountry: auditClinicalCountry,
         evidenceStatus: localizedEvidence.status,
         privacyFindingTypes: Array.from(new Set([
           ...privacyResult.privacy.findingTypes,
@@ -980,7 +1431,7 @@ export async function POST(req: Request) {
       contextType,
       provider: result.provider,
       model: result.model,
-      clinicalCountry: clinicalConfig.clinicalCountry,
+      clinicalCountry: auditClinicalCountry,
       evidenceStatus: finalEvidence.status,
       privacyFindingTypes: Array.from(new Set([
         ...privacyResult.privacy.findingTypes,

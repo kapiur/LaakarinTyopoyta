@@ -75,12 +75,13 @@ function sourceEnabledForSurface(
 
 export async function getUserClinicalEvidenceConfig(
   userId: number,
-  options?: { surface?: ClinicalEvidenceSurface },
+  options?: { surface?: ClinicalEvidenceSurface; countryOverride?: ClinicalCountryCode },
 ): Promise<UserClinicalEvidenceConfig> {
   const surface = options?.surface ?? 'general';
+  const countryOverride = options?.countryOverride;
   let practiceCountry: PracticeCountryCode = DEFAULT_PRACTICE_COUNTRY;
   let usePracticeCountryDefaults = true;
-  let clinicalCountry: ClinicalCountryCode = 'FI';
+  let clinicalCountry: ClinicalCountryCode = countryOverride ?? 'FI';
   let clinicalOutputLanguage = 'fi';
   let evidenceStrictness: 'strict' | 'balanced' | 'local-aware' = 'strict';
   let allowLocalSources = true;
@@ -106,8 +107,10 @@ export async function getUserClinicalEvidenceConfig(
     if (row) {
       practiceCountry = normalizePracticeCountry(row.practiceCountry);
       usePracticeCountryDefaults = row.usePracticeCountryDefaults !== false;
-      clinicalCountry = normalizeClinicalCountry(row.clinicalCountry);
-      clinicalOutputLanguage = normalizeClinicalOutputLanguage(clinicalCountry, row.clinicalOutputLanguage);
+      clinicalCountry = countryOverride ?? normalizeClinicalCountry(row.clinicalCountry);
+      clinicalOutputLanguage = countryOverride
+        ? getClinicalCountryConfig(countryOverride).defaultClinicalOutputLanguage
+        : normalizeClinicalOutputLanguage(clinicalCountry, row.clinicalOutputLanguage);
       evidenceStrictness = normalizeEvidenceStrictness(row.evidenceStrictness);
       allowLocalSources = row.allowLocalSources !== false;
       allowSupplementarySources = row.allowSupplementarySources === true;
@@ -115,9 +118,15 @@ export async function getUserClinicalEvidenceConfig(
   } catch (error) {
     // The settings table may not exist before the migration is deployed. Default safely to FI.
     const country = getClinicalCountryConfig('FI');
-    clinicalCountry = country.code;
+    clinicalCountry = countryOverride ?? country.code;
     clinicalOutputLanguage = country.defaultClinicalOutputLanguage;
     evidenceStrictness = country.defaultEvidenceStrictness;
+  }
+
+  if (countryOverride) {
+    const overrideConfig = getClinicalCountryConfig(countryOverride);
+    clinicalCountry = overrideConfig.code;
+    clinicalOutputLanguage = overrideConfig.defaultClinicalOutputLanguage;
   }
 
   let allowedSources: UserClinicalEvidenceSource[] = getDefaultClinicalSources(clinicalCountry).map(seedToEvidenceSource);
