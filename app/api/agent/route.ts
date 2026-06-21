@@ -405,6 +405,8 @@ function buildTranslationRefinementInstruction(input: {
     'Return only the final corrected translation in the intended target language.',
     'Preserve every source fact, negation, symptom, body location, laterality, duration, measurement, vital value, and temporal detail.',
     'Do not omit urinary symptoms, pain locations, denial/absence statements, or numeric values.',
+    'Use natural clinician-facing note language in the target language, not a word-for-word translation.',
+    'When the source says a symptom is denied or absent, keep the negation, but prefer the normal clinical note form of the target language over a literal denial verb if that reads more naturally.',
     'Do not add diagnoses, names, placeholders, demographic details, or explanatory commentary unless they are already present in the source text.',
     'If privacy placeholders such as [NAME], [DATE], [PHONE], or [EMAIL] are not present in the source text, do not introduce them.',
     'Honor any explicit user preference about note style or brevity only if all original facts remain intact.',

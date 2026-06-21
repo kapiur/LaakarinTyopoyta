@@ -368,8 +368,10 @@ function translationFidelityInstruction(taskType: AiTaskType, currentText?: stri
     'Translate the provided current text completely and conservatively.',
     'Preserve all source facts, including positive findings, negative findings, symptoms, durations, measurements, locations, laterality, and qualifiers.',
     'Preserve the clinical note style and scope; do not convert it into a summary or a polished rewrite unless the user explicitly asks for that as a separate operation.',
+    'Write as a natural clinical note in the target language, not as a word-for-word literal translation.',
     'If the source text has one sentence about a symptom, the translation must still contain that symptom.',
     'If the source text says something is absent, the translation must preserve that negation explicitly.',
+    'For denied or absent symptoms, prefer the normal negation style of the target clinical language if it is more natural than a literal denial verb.',
   ].join('\n');
 }
 
