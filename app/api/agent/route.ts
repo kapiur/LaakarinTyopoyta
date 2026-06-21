@@ -6,6 +6,7 @@ import { logAiRunAudit } from '../../../lib/ai/audit/logAiRunAudit';
 import type { AgentContextType, AgentRequestBody, AgentUiLanguage } from '../../../lib/ai/agent/types';
 import { runRoutedAiCompletion } from '../../../lib/ai/runRoutedAiCompletion';
 import { preparePrivacyPayload } from '../../../lib/privacy/gateway';
+import type { PrivacyGatewayMode } from '../../../lib/privacy/gateway';
 import { hasCriticalPrivacyFindingTypes } from '../../../lib/privacy/gateway/decision';
 import type { AiTaskType } from '../../../lib/ai/taskTypes';
 import { taskAllowsRegistryOnlyReference, taskRequiresEvidence } from '../../../lib/ai/taskTypes';
@@ -365,6 +366,55 @@ function buildGroundingRetryInstruction(unsupportedClaims: string[]) {
     'Claims flagged for revision:',
     claimsBlock,
   ].join('\n\n');
+}
+
+function outputPrivacyModeForAgentReply(
+  taskType: AiTaskType,
+  contextType: AgentContextType,
+): PrivacyGatewayMode {
+  if (
+    contextType === 'clinicalText' ||
+    contextType === 'clinicalReference' ||
+    contextType === 'pikaohje' ||
+    taskType === 'translation' ||
+    taskType === 'clinical_document' ||
+    taskType === 'clinical_review' ||
+    taskType === 'clinical_reference' ||
+    taskType === 'clinical_guideline_comparison' ||
+    taskType === 'clinical_source_check' ||
+    taskType === 'clinical_advice' ||
+    taskType === 'medication_guidance' ||
+    taskType === 'urgent_triage' ||
+    taskType === 'referral_guidance' ||
+    taskType === 'text_fix' ||
+    taskType === 'lab_format'
+  ) {
+    return 'transientClinicalChat';
+  }
+
+  return 'generalText';
+}
+
+function buildTranslationRefinementInstruction(input: {
+  userMessage: string;
+  sourceText: string;
+}) {
+  return [
+    'You are revising a clinical translation draft.',
+    'Return only the final corrected translation in the intended target language.',
+    'Preserve every source fact, negation, symptom, body location, laterality, duration, measurement, vital value, and temporal detail.',
+    'Do not omit urinary symptoms, pain locations, denial/absence statements, or numeric values.',
+    'Do not add diagnoses, names, placeholders, demographic details, or explanatory commentary unless they are already present in the source text.',
+    'If privacy placeholders such as [NAME], [DATE], [PHONE], or [EMAIL] are not present in the source text, do not introduce them.',
+    'Honor any explicit user preference about note style or brevity only if all original facts remain intact.',
+    'If the candidate translation is already correct, return it unchanged.',
+    '',
+    'Original user request:',
+    input.userMessage || '(not provided)',
+    '',
+    'Source text:',
+    input.sourceText || '(empty)',
+  ].join('\n');
 }
 
 function buildEvidenceAvailabilityInstruction(params: {
@@ -762,8 +812,42 @@ export async function POST(req: Request) {
       temperature: 0,
     });
 
+    if (plan.taskType === 'translation') {
+      const translationRefinementMessages = [
+        {
+          role: 'system' as const,
+          content: buildTranslationRefinementInstruction({
+            userMessage: privacyResult.sanitized.userMessage,
+            sourceText: privacyResult.sanitized.currentText,
+          }),
+        },
+        {
+          role: 'user' as const,
+          content: [
+            'Candidate translation:',
+            result.content.trim() || '(empty)',
+          ].join('\n'),
+        },
+      ];
+
+      const refinedTranslation = await runRoutedAiCompletion({
+        userId,
+        taskType: plan.taskType,
+        messages: translationRefinementMessages,
+        temperature: 0,
+      });
+
+      if (refinedTranslation.content.trim()) {
+        result = refinedTranslation;
+      }
+    }
+
     let outputPrivacy = preparePrivacyPayload([
-      { key: 'output', value: result.content, mode: 'persistentStorage' },
+      {
+        key: 'output',
+        value: result.content,
+        mode: outputPrivacyModeForAgentReply(plan.taskType, contextType),
+      },
     ]);
     let safeOutputContent = outputPrivacy.sanitized.output ?? result.content;
 
@@ -834,7 +918,11 @@ export async function POST(req: Request) {
       });
 
       const retryOutputPrivacy = preparePrivacyPayload([
-        { key: 'output', value: retryResult.content, mode: 'persistentStorage' },
+        {
+          key: 'output',
+          value: retryResult.content,
+          mode: outputPrivacyModeForAgentReply(plan.taskType, contextType),
+        },
       ]);
       const retrySafeOutputContent = retryOutputPrivacy.sanitized.output ?? retryResult.content;
 
