@@ -294,6 +294,7 @@ function buildResearchModeInstruction(input: {
 
 function mergeResearchEvidence(input: {
   language: AgentUiLanguage;
+  taskType: AiTaskType;
   countryEvidence: Array<{
     country: ClinicalCountryCode;
     config: UserClinicalEvidenceConfig;
@@ -304,19 +305,21 @@ function mergeResearchEvidence(input: {
   const sources = new Map<string, EvidencePackage['sources'][number]>();
   const excerpts: EvidencePackage['excerpts'] = [];
   const warnings: string[] = [];
-  let status: EvidencePackage['status'] = 'not_found';
   let level: EvidencePackage['level'] = 'insufficient_evidence';
   let requiresEvidence = false;
+  let foundCount = 0;
+  let partialCount = 0;
+  let notRequiredCount = 0;
 
   for (const item of input.countryEvidence) {
     requiresEvidence = requiresEvidence || item.evidence.requiresEvidence;
 
     if (item.evidence.status === 'found') {
-      status = 'found';
-    } else if (status !== 'found' && item.evidence.status === 'partial') {
-      status = 'partial';
-    } else if (status === 'not_found' && item.evidence.status === 'not_required') {
-      status = 'not_required';
+      foundCount += 1;
+    } else if (item.evidence.status === 'partial') {
+      partialCount += 1;
+    } else if (item.evidence.status === 'not_required') {
+      notRequiredCount += 1;
     }
 
     if (level !== 'official_guideline' && item.evidence.level === 'official_guideline') {
@@ -362,6 +365,26 @@ function mergeResearchEvidence(input: {
   const clinicalOutputLanguages = uniqueStrings(
     input.countryEvidence.map((item) => item.config.clinicalOutputLanguage)
   );
+  const isComparisonTask = input.taskType === 'clinical_guideline_comparison';
+  let status: EvidencePackage['status'] = 'not_found';
+
+  if (isComparisonTask) {
+    if (foundCount === input.countryEvidence.length && foundCount > 0) {
+      status = 'found';
+    } else if (foundCount > 0 || partialCount > 0) {
+      status = 'partial';
+    } else if (notRequiredCount === input.countryEvidence.length && notRequiredCount > 0) {
+      status = 'not_required';
+    }
+  } else {
+    if (foundCount > 0) {
+      status = 'found';
+    } else if (partialCount > 0) {
+      status = 'partial';
+    } else if (notRequiredCount === input.countryEvidence.length && notRequiredCount > 0) {
+      status = 'not_required';
+    }
+  }
 
   return {
     status,
@@ -1115,6 +1138,7 @@ export async function POST(req: Request) {
 
       evidence = mergeResearchEvidence({
         language: uiLanguage,
+        taskType: plan.taskType,
         countryEvidence: countryEvidence.map((item) => ({
           country: item.country,
           config: item.config,

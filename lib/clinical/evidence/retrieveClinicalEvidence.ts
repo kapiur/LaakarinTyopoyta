@@ -224,6 +224,7 @@ function buildRelevantExcerpt(text: string, queryTerms: string[], maxLength = MA
   const paragraphs = splitParagraphs(normalized);
   if (paragraphs.length === 0) return truncateAtBoundary(normalized, maxLength);
   if (queryTerms.length === 0) return truncateAtBoundary(normalized, maxLength);
+  const minRequiredHits = queryTerms.length >= 2 ? 2 : 1;
 
   const scored = paragraphs
     .map((paragraph, index) => ({
@@ -231,7 +232,7 @@ function buildRelevantExcerpt(text: string, queryTerms: string[], maxLength = MA
       paragraph,
       score: countTermHits(paragraph, queryTerms),
     }))
-    .filter((item) => item.score > 0)
+    .filter((item) => item.score >= minRequiredHits)
     .sort((left, right) => {
       if (right.score !== left.score) return right.score - left.score;
       return left.index - right.index;
