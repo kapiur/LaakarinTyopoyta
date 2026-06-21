@@ -14,7 +14,7 @@ export async function getOpenAiClientForUser(userId: number, fallbackModel = "gp
 
   const secret = await resolveAiCredential({
     userId,
-    provider: "openai",
+    provider,
     credentialMode: settings.credentialMode,
   });
 

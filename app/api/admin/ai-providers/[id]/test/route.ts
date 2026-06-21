@@ -2,7 +2,12 @@ import { NextResponse } from 'next/server';
 import { prisma } from '../../../../../../lib/prisma';
 import { requireAdmin } from '../../../../../../lib/admin-auth';
 import { decryptSecret } from '../../../../../../lib/security/secretCrypto';
-import { isOpenAiCompatibleProvider, normalizeModelForProvider } from '../../../../../../lib/ai/modelRegistry';
+import {
+  getProviderDefaultModel,
+  getProviderOpenAiCompatibleBaseUrl,
+  isOpenAiCompatibleProvider,
+  normalizeModelForProvider,
+} from '../../../../../../lib/ai/modelRegistry';
 import { runOpenAiCompletion } from '../../../../../../lib/ai/providers/openai';
 import type { AiProviderKey } from '../../../../../../lib/ai/providers/types';
 
@@ -33,19 +38,22 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
       return NextResponse.json({ error: 'AI-palvelua ei löytynyt' }, { status: 404 });
     }
 
-    if (!isOpenAiCompatibleProvider(credential.provider as AiProviderKey)) {
+    const provider = credential.provider as AiProviderKey;
+
+    if (!isOpenAiCompatibleProvider(provider)) {
       return NextResponse.json({ error: 'Tämän AI-palvelun yhteystestiä ei ole vielä toteutettu' }, { status: 400 });
     }
 
-    if (credential.provider === 'yandex' && !credential.projectId) {
+    if (provider === 'yandex' && !credential.projectId) {
       return NextResponse.json({ error: 'YandexGPT vaatii folder / project ID:n' }, { status: 400 });
     }
 
-    const model = normalizeModelForProvider(credential.provider as AiProviderKey, credential.defaultModel);
+    const model = normalizeModelForProvider(provider, credential.defaultModel || getProviderDefaultModel(provider));
+    const baseUrl = credential.baseUrl || getProviderOpenAiCompatibleBaseUrl(provider);
 
     await runOpenAiCompletion({
       userId: 0,
-      provider: credential.provider as AiProviderKey,
+      provider,
       model,
       messages: [
         { role: 'system', content: 'Return exactly: ok' },
@@ -53,11 +61,11 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
       ],
       temperature: 0,
       secret: {
-        provider: credential.provider as AiProviderKey,
+        provider,
         value: decryptSecret(credential.encryptedSecret),
-        baseUrl: credential.baseUrl,
+        baseUrl,
         projectId: credential.projectId,
-        defaultModel: credential.defaultModel,
+        defaultModel: credential.defaultModel || model,
         source: 'platform',
       },
     });
