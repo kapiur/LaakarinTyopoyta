@@ -102,6 +102,33 @@ export const AI_MODEL_REGISTRY: Record<AiProviderKey, AiProviderRegistryItem> = 
       },
     ],
   },
+  deepseek: {
+    label: 'DeepSeek',
+    defaultModel: 'deepseek-v4-flash',
+    openAiCompatibleBaseUrl: 'https://api.deepseek.com',
+    models: [
+      {
+        id: 'deepseek-v4-flash',
+        label: 'DeepSeek V4 Flash',
+        strengths: ['speed', 'cost_efficiency', 'summarization', 'translation'],
+        costTier: 'low',
+        speedTier: 'fast',
+        supportsJson: true,
+        supportsVision: false,
+        recommendedFor: ['general_chat', 'summarization', 'template_generation', 'clinical_document'],
+      },
+      {
+        id: 'deepseek-v4-pro',
+        label: 'DeepSeek V4 Pro',
+        strengths: ['reasoning', 'analysis', 'structured_output', 'clinical_writing'],
+        costTier: 'medium',
+        speedTier: 'medium',
+        supportsJson: true,
+        supportsVision: false,
+        recommendedFor: ['clinical_review', 'clinical_document', 'prompt_engineering', 'general_chat'],
+      },
+    ],
+  },
 };
 
 export function getProviderDefaultModel(provider: AiProviderKey): string {
@@ -113,7 +140,7 @@ export function getProviderOpenAiCompatibleBaseUrl(provider: AiProviderKey): str
 }
 
 export function isOpenAiCompatibleProvider(provider: AiProviderKey): boolean {
-  return provider === 'openai' || provider === 'google' || provider === 'yandex';
+  return provider === 'openai' || provider === 'google' || provider === 'yandex' || provider === 'deepseek';
 }
 
 export function normalizeModelForProvider(provider: AiProviderKey, requestedModel?: string | null): string {
@@ -124,7 +151,7 @@ export function normalizeModelForProvider(provider: AiProviderKey, requestedMode
     return providerDefaultModel;
   }
 
-  if (provider === 'google' && trimmed === DEFAULT_AI_MODEL) {
+  if (provider !== 'openai' && trimmed === DEFAULT_AI_MODEL) {
     return providerDefaultModel;
   }
 

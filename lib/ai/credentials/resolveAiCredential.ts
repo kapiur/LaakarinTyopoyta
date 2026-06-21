@@ -63,6 +63,19 @@ function getEnvSecret(provider: AiProviderKey): AiProviderSecret | null {
     };
   }
 
+  if (provider === 'deepseek') {
+    const value = process.env.DEEPSEEK_API_KEY;
+    if (!value) return null;
+
+    return {
+      provider,
+      value,
+      baseUrl: getProviderOpenAiCompatibleBaseUrl(provider),
+      defaultModel: getProviderDefaultModel(provider),
+      source: 'env',
+    };
+  }
+
   return null;
 }
 

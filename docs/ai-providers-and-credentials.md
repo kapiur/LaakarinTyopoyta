@@ -7,8 +7,9 @@ The AI layer now supports a small, explicit provider set instead of an open-ende
 - `OpenAI`
 - `Google Gemini`
 - `YandexGPT`
+- `DeepSeek`
 
-The project uses one OpenAI-compatible runtime path for all three providers where practical, while still preserving provider-specific settings such as base URL and Yandex project or folder ID.
+The project uses one OpenAI-compatible runtime path for all four providers where practical, while still preserving provider-specific settings such as base URL and Yandex project or folder ID.
 
 ## Supported credential sources
 
@@ -102,6 +103,13 @@ This means Yandex is not just "another API key field". It needs both:
 - API key
 - folder or project ID
 
+### DeepSeek
+
+- default models currently include `deepseek-v4-flash` and `deepseek-v4-pro`
+- runtime uses DeepSeek's OpenAI-compatible endpoint
+- no extra provider metadata is required beyond the API key
+- environment fallback uses `DEEPSEEK_API_KEY`
+
 ## Environment fallbacks
 
 The provider resolver can use environment variables as platform fallbacks:
@@ -110,6 +118,7 @@ The provider resolver can use environment variables as platform fallbacks:
 - `GEMINI_API_KEY`
 - `YANDEX_API_KEY`
 - `YANDEX_CLOUD_FOLDER_ID`
+- `DEEPSEEK_API_KEY`
 
 These are especially useful in environments where admin-managed platform credentials are not yet stored in the database.
 
@@ -126,11 +135,12 @@ The current supported providers all run through the OpenAI-compatible provider p
 
 ## Current scope
 
-This project intentionally supports only three providers in the user-facing dropdown for now:
+This project intentionally supports only four providers in the user-facing dropdown for now:
 
 - OpenAI
 - Google Gemini
 - YandexGPT
+- DeepSeek
 
 Other providers should not be reintroduced in the UI until they have:
 

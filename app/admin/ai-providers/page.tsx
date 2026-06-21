@@ -78,6 +78,19 @@ export default function AdminAiProvidersPage() {
 
   const providerOptions = useMemo(() => Object.entries(registry), [registry]);
 
+  function applyProviderDefaults(providerKey: string) {
+    const providerEntry = registry[providerKey];
+
+    setForm((current) => ({
+      ...current,
+      provider: providerKey,
+      label: providerEntry?.label || current.label,
+      defaultModel: providerEntry?.models?.[0]?.id || current.defaultModel,
+      allowedModels: providerEntry?.models?.map((model) => model.id).join(", ") || current.allowedModels,
+      projectId: providerKey === "yandex" ? current.projectId : "",
+    }));
+  }
+
   function formatDate(value: string | null) {
     if (!value) return "-";
     return new Intl.DateTimeFormat(language === "ru" ? "ru-RU" : language === "en" ? "en-GB" : "fi-FI", {
@@ -238,14 +251,14 @@ export default function AdminAiProvidersPage() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <select value={form.provider} onChange={(event) => setForm({ ...form, provider: event.target.value })} disabled={!!editingId} className="px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-blue-100 disabled:opacity-60">
+          <select value={form.provider} onChange={(event) => applyProviderDefaults(event.target.value)} disabled={!!editingId} className="px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-blue-100 disabled:opacity-60">
             {providerOptions.map(([key, value]) => <option key={key} value={key}>{value.label}</option>)}
           </select>
           <input value={form.label} onChange={(event) => setForm({ ...form, label: event.target.value })} placeholder={tt("labelPlaceholder")} className="px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-blue-100" />
           <input value={form.defaultModel} onChange={(event) => setForm({ ...form, defaultModel: event.target.value })} placeholder={tt("defaultModelPlaceholder")} className="px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-blue-100" />
           <input type="password" value={form.secret} onChange={(event) => setForm({ ...form, secret: event.target.value })} placeholder={editingId ? tt("newSecretPlaceholder") : tt("secretPlaceholder")} className="px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-blue-100" />
           <input value={form.baseUrl} onChange={(event) => setForm({ ...form, baseUrl: event.target.value })} placeholder={tt("baseUrlPlaceholder")} className="px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-blue-100" />
-          <input value={form.projectId} onChange={(event) => setForm({ ...form, projectId: event.target.value })} placeholder={tt("projectIdPlaceholder")} className="px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-blue-100" />
+          <input value={form.projectId} onChange={(event) => setForm({ ...form, projectId: event.target.value })} placeholder={form.provider === "yandex" ? tt("projectIdPlaceholder") : tt("projectIdOptionalPlaceholder")} className="px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-blue-100" />
           <input value={form.allowedModels} onChange={(event) => setForm({ ...form, allowedModels: event.target.value })} placeholder={tt("allowedModelsPlaceholder")} className="px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-blue-100" />
         </div>
 

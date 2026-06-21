@@ -77,8 +77,20 @@ const cases: TestCase[] = [
   {
     name: 'Explicit patient name is redacted',
     input: `Potilas: ${syntheticName}. Oireena huimaus.`,
-    expectedFragments: ['Potilas [NAME]'],
+    expectedFragments: ['Potilas: [NAME]'],
     forbiddenFragments: [syntheticName],
+  },
+  {
+    name: 'Patient role followed by capitalized name is redacted without removing the role word',
+    input: 'Пациент Юрий Иванов жалуется на слабость.',
+    expectedFragments: ['Пациент [NAME] жалуется на слабость.'],
+    forbiddenFragments: ['Юрий Иванов'],
+  },
+  {
+    name: 'Patient role followed by clinical verb is not treated as a name',
+    input: 'Пациент жалуется на слабость и кашель.',
+    expectedFragments: ['Пациент жалуется на слабость и кашель.'],
+    forbiddenFragments: ['[NAME]'],
   },
   {
     name: 'Bare name and bare date near identifiers are redacted',

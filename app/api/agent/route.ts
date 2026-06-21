@@ -535,6 +535,56 @@ function normalizeReplyForDisplay(content: string) {
   return trimmed;
 }
 
+const DISPLAY_PRIVACY_PLACEHOLDERS = [
+  '[NAME]',
+  '[HETU]',
+  '[DATE_OF_BIRTH]',
+  '[DATE]',
+  '[PHONE]',
+  '[EMAIL]',
+  '[ADDRESS]',
+  '[PATIENT_ID]',
+  '[PROFESSIONAL_NAME]',
+];
+
+function removeUnexpectedPrivacyPlaceholders(input: {
+  content: string;
+  sourceText: string;
+  taskType: AiTaskType;
+  contextType: AgentContextType;
+}) {
+  const shouldNormalize =
+    input.contextType === 'clinicalText' ||
+    input.contextType === 'pikaohje' ||
+    input.taskType === 'translation' ||
+    input.taskType === 'clinical_document' ||
+    input.taskType === 'clinical_review' ||
+    input.taskType === 'text_fix' ||
+    input.taskType === 'lab_format';
+
+  if (!shouldNormalize || !input.content.trim()) return input.content;
+
+  let normalized = input.content;
+
+  if (!input.sourceText.includes('[NAME]')) {
+    normalized = normalized.replace(
+      /\b(Potilas|Potilaalla|Potilaan|Пациент|Пациента|Пациентка|Пациентки|Patient|Patients?|Patientin|Patienten)\s+\[NAME\]\b/g,
+      '$1',
+    );
+  }
+
+  for (const placeholder of DISPLAY_PRIVACY_PLACEHOLDERS) {
+    if (input.sourceText.includes(placeholder)) continue;
+    normalized = normalized.split(placeholder).join('');
+  }
+
+  return normalized
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/ +([,.;:!?])/g, '$1')
+    .replace(/\(\s*\)/g, '')
+    .replace(/^\s+|\s+$/g, '');
+}
+
 function uniqueStrings(values: string[]) {
   return Array.from(new Set(values.filter(Boolean)));
 }
@@ -1324,14 +1374,21 @@ export async function POST(req: Request) {
       }
     }
 
+    const normalizedModelOutput = removeUnexpectedPrivacyPlaceholders({
+      content: result.content,
+      sourceText: privacyResult.sanitized.currentText,
+      taskType: plan.taskType,
+      contextType,
+    });
+
     let outputPrivacy = preparePrivacyPayload([
       {
         key: 'output',
-        value: result.content,
+        value: normalizedModelOutput,
         mode: outputPrivacyModeForAgentReply(plan.taskType, contextType),
       },
     ]);
-    let safeOutputContent = outputPrivacy.sanitized.output ?? result.content;
+    let safeOutputContent = outputPrivacy.sanitized.output ?? normalizedModelOutput;
 
     if (
       outputPrivacy.privacy.blocked &&

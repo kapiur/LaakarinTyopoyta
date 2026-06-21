@@ -14,7 +14,7 @@ The product should evolve as a personal physician desktop. Users should be able 
 - Prisma
 - PostgreSQL
 - NextAuth credentials authentication
-- OpenAI-compatible multi-provider AI runtime with OpenAI, Google Gemini, and YandexGPT
+- OpenAI-compatible multi-provider AI runtime with OpenAI, Google Gemini, YandexGPT, and DeepSeek
 
 ## Main product areas
 
@@ -79,11 +79,12 @@ Optional provider-specific variables used when platform credentials are configur
 - `GEMINI_API_KEY`
 - `YANDEX_API_KEY`
 - `YANDEX_CLOUD_FOLDER_ID`
+- `DEEPSEEK_API_KEY`
 
 Notes:
 
 - `OPENAI_API_KEY` is still required in current production because some routes and defaults still assume OpenAI availability.
-- `GEMINI_API_KEY` and `YANDEX_API_KEY` are optional unless those providers are used as platform-level fallbacks.
+- `GEMINI_API_KEY`, `YANDEX_API_KEY`, and `DEEPSEEK_API_KEY` are optional unless those providers are used as platform-level fallbacks.
 - `YANDEX_CLOUD_FOLDER_ID` is required when YandexGPT is used through environment-backed platform credentials.
 - `AI_CREDENTIAL_ENCRYPTION_KEY` protects stored provider credentials. Do not rotate it casually in production.
 

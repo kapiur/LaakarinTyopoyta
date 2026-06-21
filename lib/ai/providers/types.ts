@@ -1,4 +1,4 @@
-export type AiProviderKey = 'openai' | 'google' | 'yandex';
+export type AiProviderKey = 'openai' | 'google' | 'yandex' | 'deepseek';
 
 export type AiMessageRole = 'system' | 'user' | 'assistant';
 

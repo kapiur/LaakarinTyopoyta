@@ -80,14 +80,25 @@ const DATE_PATTERN = /\b\d{1,4}[.,\/-]\d{1,2}[.,\/-]\d{1,4}\b/g;
 const PHONE_PATTERN = /(?<!\d)(?:\+358|0)\s?(?:4\d|[1-9]\d?)\s?(?:\d\s?){5,8}(?!\d)/g;
 const EMAIL_PATTERN = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
 const STAFF_CONTEXT_WORDS = 'lääkäri|laakari|hoitaja|sairaanhoitaja|terveydenhoitaja|lähihoitaja|lahihoitaja|fysioterapeutti|fysioterapeuti|toimintaterapeutti|puheterapeutti|psykologi|psykiatri|sosiaalityöntekijä|sosiaalityontekija|ravitsemusterapeutti|farmaseutti|proviisori|hammaslääkäri|hammaslaakari|suuhygienisti|kätilö|katilo|ensihoitaja|laboratoriohoitaja|röntgenhoitaja|rontgenhoitaja|ammattilainen|ammattihenkilö|ammattihenkilo';
+const PATIENT_ROLE_WORDS = [
+  'potilas',
+  'patient',
+  'пациент',
+  'пациентка',
+  'patientin',
+  'patienten',
+].join('|');
 const RELATIVE_CONTEXT_WORD_PATTERN = /^(?:vaimo|puoliso|aviopuoliso|äiti|isä|tytär|veli|sisko|sisar|omainen|lähiomainen|huoltaja)$/i;
 const DEMOGRAPHIC_CONTEXT_WORD_PATTERN = /^(?:mies|nainen|tyttö|poika|lapsi)$/i;
 const STAFF_CONTEXT_WORD_PATTERN = new RegExp(`^(?:${STAFF_CONTEXT_WORDS})$`, 'i');
+const PATIENT_ROLE_CONTEXT_WORD_PATTERN = new RegExp(`^(?:${PATIENT_ROLE_WORDS})$`, 'iu');
 const STAFF_ROLE_PATTERN = new RegExp(`\\b(?:${STAFF_CONTEXT_WORDS})\\b`, 'gi');
+const PATIENT_ROLE_PATTERN = new RegExp(`\\b(?:${PATIENT_ROLE_WORDS})\\b`, 'giu');
 const UNICODE_LETTER_BOUNDARY_LEFT = '(?<![\\p{L}])';
 const UNICODE_LETTER_BOUNDARY_RIGHT = '(?![\\p{L}])';
 const NAME_TOKEN = "[\\p{Lu}][\\p{L}'’-]+";
 const NAME_SEQUENCE = `${NAME_TOKEN}(?:\\s+${NAME_TOKEN}){1,3}`;
+const SHORT_NAME_SEQUENCE = `${NAME_TOKEN}(?:\\s+${NAME_TOKEN}){0,2}`;
 const NAME_AFTER_ROLE_PATTERN = new RegExp(`^\\s+${NAME_SEQUENCE}${UNICODE_LETTER_BOUNDARY_RIGHT}`, 'u');
 const BARE_NAME_PATTERN = new RegExp(`${UNICODE_LETTER_BOUNDARY_LEFT}${NAME_SEQUENCE}${UNICODE_LETTER_BOUNDARY_RIGHT}`, 'gu');
 const STANDALONE_FULL_NAME_PATTERN = new RegExp(`^\\s*${NAME_SEQUENCE}\\s*$`, 'u');
@@ -307,6 +318,29 @@ function collectStaffNames(text: string): InternalFinding[] {
   return findings;
 }
 
+function collectPatientRoleNames(text: string): InternalFinding[] {
+  const findings: InternalFinding[] = [];
+  const roleRegex = new RegExp(PATIENT_ROLE_PATTERN.source, PATIENT_ROLE_PATTERN.flags);
+  const nameRegex = new RegExp(`^\\s+${SHORT_NAME_SEQUENCE}${UNICODE_LETTER_BOUNDARY_RIGHT}`, 'u');
+  let match: RegExpExecArray | null;
+
+  while ((match = roleRegex.exec(text)) !== null) {
+    const roleStart = match.index;
+    const roleEnd = roleStart + match[0].length;
+    const afterRole = text.slice(roleEnd);
+    const nameMatch = nameRegex.exec(afterRole);
+    if (!nameMatch) continue;
+
+    const nameValue = nameMatch[0].trim();
+    if (!nameValue) continue;
+    if (isLikelyOrganizationOrTerm(nameValue)) continue;
+
+    findings.push(createFinding('explicitName', nameValue, '[NAME]', roleEnd + nameMatch[0].indexOf(nameValue)));
+  }
+
+  return findings;
+}
+
 function collectBareDatesNearIdentifiers(text: string, mode: AnonymizationMode, personContextPattern: RegExp): InternalFinding[] {
   const findings: InternalFinding[] = [];
   const regex = new RegExp(DATE_PATTERN.source, DATE_PATTERN.flags);
@@ -344,6 +378,7 @@ function collectBareNamesNearIdentifiers(text: string, mode: AnonymizationMode, 
     const isRelativeWord = remainingWords.length > 0 && RELATIVE_CONTEXT_WORD_PATTERN.test(firstWord);
     const isDemographicWord = remainingWords.length > 0 && DEMOGRAPHIC_CONTEXT_WORD_PATTERN.test(firstWord);
     const isStaffWord = remainingWords.length > 0 && STAFF_CONTEXT_WORD_PATTERN.test(firstWord);
+    const isPatientRoleWord = remainingWords.length > 0 && PATIENT_ROLE_CONTEXT_WORD_PATTERN.test(firstWord);
 
     if (isRelativeWord) {
       findings.push(createFinding('explicitName', value, 'Omainen [NAME]', start));
@@ -356,6 +391,13 @@ function collectBareNamesNearIdentifiers(text: string, mode: AnonymizationMode, 
     }
 
     if (isDemographicWord) {
+      const nameValue = remainingWords.join(' ');
+      const nameStart = start + firstWord.length + value.slice(firstWord.length).search(/\S/);
+      findings.push(createFinding('explicitName', nameValue, '[NAME]', nameStart));
+      continue;
+    }
+
+    if (isPatientRoleWord) {
       const nameValue = remainingWords.join(' ');
       const nameStart = start + firstWord.length + value.slice(firstWord.length).search(/\S/);
       findings.push(createFinding('explicitName', nameValue, '[NAME]', nameStart));
@@ -405,6 +447,7 @@ function collectMatches(text: string, mode: AnonymizationMode, localeKeys: Priva
   const findings = [
     ...collectPatternMatches(text, patternRules),
     ...collectStaffNames(text),
+    ...collectPatientRoleNames(text),
     ...collectBareDatesNearIdentifiers(text, mode, localeRegex.personContextPattern),
     ...collectBareNamesNearIdentifiers(text, mode, localeRegex.personContextPattern),
     ...collectStrictDates(text, mode, localeRegex.personContextPattern),
