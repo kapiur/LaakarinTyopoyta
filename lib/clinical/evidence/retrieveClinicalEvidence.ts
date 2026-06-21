@@ -61,8 +61,12 @@ const SOURCE_MARKERS = [
 const QUERY_STOP_WORDS = new Set([
   'and', 'the', 'for', 'with', 'from', 'into', 'this', 'that', 'what', 'which', 'about',
   'guideline', 'guidelines', 'recommendation', 'recommendations', 'clinical', 'patient', 'patients',
+  'compare', 'comparison', 'research', 'study',
   'yleinen', 'yleiskuva', 'suositus', 'suositukset', 'kliininen', 'potilas', 'potilaat',
+  'vertaa', 'vertailu', 'tutkimus',
   'общая', 'общие', 'рекомендация', 'рекомендации', 'клинический', 'пациент', 'пациенты',
+  'сравни', 'сравнение', 'исследование',
+  'vergleich', 'vergleiche', 'forschung',
 ]);
 
 function uniqueStrings(values: string[]) {
@@ -201,6 +205,18 @@ function countTermHits(text: string, queryTerms: string[]) {
   return queryTerms.reduce((score, term) => (haystack.includes(term.toLowerCase()) ? score + 1 : score), 0);
 }
 
+function buildExpandedQueryTerms(input: {
+  userMessage: string;
+  currentText: string;
+  currentTemplate?: string;
+  searchQueries: string[];
+}) {
+  return uniqueStrings([
+    ...extractQueryTerms(input.userMessage, input.currentText, input.currentTemplate || ''),
+    ...extractQueryTerms(...input.searchQueries),
+  ]).slice(0, 20);
+}
+
 function buildRelevantExcerpt(text: string, queryTerms: string[], maxLength = MAX_FETCHED_TEXT_CHARS) {
   const normalized = normalizeWhitespace(text);
   if (!normalized) return '';
@@ -222,7 +238,7 @@ function buildRelevantExcerpt(text: string, queryTerms: string[], maxLength = MA
     });
 
   if (scored.length === 0) {
-    return truncateAtBoundary(normalized, maxLength);
+    return '';
   }
 
   const selectedIndexes = new Set<number>();
@@ -442,8 +458,21 @@ export async function retrieveClinicalEvidence(input: {
   const warnings: string[] = [];
   const excerpts: RetrievedEvidenceExcerpt[] = [];
   const excerptSources = new Map<string, RetrievedEvidenceSource>();
-  const queryTerms = extractQueryTerms(input.userMessage, input.currentText, input.currentTemplate || '');
   const searchQuery = deriveEvidenceSearchQuery(input);
+  const localizedSearchQuery =
+    input.config.hasOfficialSources && searchQuery
+      ? await maybeRewriteOfficialSearchQuery({
+          userId: input.userId,
+          searchQuery,
+          config: input.config,
+        })
+      : searchQuery;
+  const queryTerms = buildExpandedQueryTerms({
+    userMessage: input.userMessage,
+    currentText: input.currentText,
+    currentTemplate: input.currentTemplate,
+    searchQueries: [searchQuery, localizedSearchQuery].filter(Boolean),
+  });
 
   if (looksLikeUserProvidedExcerpt(input.currentText)) {
     excerptSources.set('user-provided-source-excerpt', {
@@ -504,16 +533,11 @@ export async function retrieveClinicalEvidence(input: {
     }
   }
 
-  if (excerpts.length < MAX_EXCERPTS && input.config.hasOfficialSources && searchQuery) {
+  if (excerpts.length < MAX_EXCERPTS && input.config.hasOfficialSources && localizedSearchQuery) {
     try {
-      const liveSearchQuery = await maybeRewriteOfficialSearchQuery({
-        userId: input.userId,
-        searchQuery,
-        config: input.config,
-      });
       const liveCandidates = await retrieveOfficialGuidelineEvidenceCandidates(
         input.config,
-        liveSearchQuery,
+        localizedSearchQuery,
         { limit: MAX_EXCERPTS - excerpts.length },
       );
 
@@ -556,9 +580,11 @@ export async function retrieveClinicalEvidence(input: {
       }
 
       excerptSources.set(fetched.source.id, fetched.source);
+      const focusedText = buildRelevantExcerpt(fetched.rawText, queryTerms);
+      if (!focusedText) continue;
       excerpts.push({
         ...fetched.excerpt,
-        text: buildRelevantExcerpt(fetched.rawText, queryTerms),
+        text: focusedText,
       });
       if (excerpts.length >= MAX_EXCERPTS) break;
     } catch (error: any) {
