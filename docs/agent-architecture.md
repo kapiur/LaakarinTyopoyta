@@ -4,6 +4,8 @@
 
 The AI agent is not meant to be an autonomous clinical actor. It is a supervised drafting and review assistant inside a physician workflow.
 
+This document is the short architectural overview. The detailed operational reference is in [agent-reference.md](agent-reference.md).
+
 Its job is to:
 
 - analyze current work context
@@ -26,6 +28,7 @@ Current agent contexts:
 
 - `general`
 - `clinicalReference`
+- `clinicalResearch`
 - `clinicalText`
 - `malli`
 - `aiTool`
@@ -165,3 +168,5 @@ Practical next steps likely include:
 - deeper evidence consistency behavior
 - better source visibility in UI
 - more complete provider abstraction cleanup
+
+For the current detailed behavior, evidence states, research mode semantics, and testing guidance, see [agent-reference.md](agent-reference.md).

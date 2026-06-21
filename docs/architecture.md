@@ -109,6 +109,7 @@ Current design goals:
 - audit logging must not store raw sensitive text
 
 See [agent-architecture.md](agent-architecture.md).
+The more detailed implementation and behavior reference is in [agent-reference.md](agent-reference.md).
 
 ### 6. Clinical evidence configuration
 
