@@ -14,6 +14,7 @@ import { hasCriticalPrivacyFindingTypes } from '../../../lib/privacy/gateway/dec
 import { runAiCompletion } from '../../../lib/ai/runAiCompletion';
 import { DEFAULT_AI_MODEL, DEFAULT_AI_PROVIDER } from '../../../lib/ai/modelRegistry';
 import { buildWorkspaceContextInstruction, getUserAiWorkspaceContext, type AiWorkspaceContext } from '../../../lib/ai/workspaceContext';
+import { getUserClinicalEvidenceConfig, type UserClinicalEvidenceConfig } from '../../../lib/clinical/evidence/userClinicalSettings';
 import {
   buildUserAiProfileInstruction,
   defaultProfileModeForTool,
@@ -49,6 +50,77 @@ Do not repeat the entire attachment unless the user explicitly asks for that.
 `;
 
 const MAX_WORKSPACE_ATTACHMENT_LENGTH = 40_000;
+const SOURCE_APPENDIX_HEADING_PATTERN = /(?:^|\n)\s*(?:Sources|Source|Источники|Lähteet|Quellen)\s*:?\s*\n[\s\S]*$/i;
+
+function normalizeConfiguredSourceName(value: string) {
+  return value
+    .toLocaleLowerCase()
+    .replace(/[\s"'`.,:;()\-_/&+!?[\]{}<>|]+/g, '');
+}
+
+function getConfiguredSourceNames(clinicalConfig: UserClinicalEvidenceConfig) {
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  for (const source of clinicalConfig.allowedSources) {
+    if (!source?.name) continue;
+    const normalized = normalizeConfiguredSourceName(source.name);
+    if (!normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+    result.push(source.name.trim());
+  }
+
+  return result;
+}
+
+function buildConfiguredSourceControlPrompt(clinicalConfig: UserClinicalEvidenceConfig) {
+  const configuredSourceNames = getConfiguredSourceNames(clinicalConfig);
+  const configuredSourcesText = configuredSourceNames.length > 0
+    ? configuredSourceNames.map((name) => `- ${name}`).join('\n')
+    : '- No configured source names are available in the workspace.';
+
+  return [
+    'Configured clinical source policy for this workspace:',
+    `- Clinical country: ${clinicalConfig.clinicalCountry}.`,
+    `- Clinical output language: ${clinicalConfig.clinicalOutputLanguage}.`,
+    `- Evidence mode: ${clinicalConfig.evidenceStrictness}.`,
+    '- Treat the configured sources below as the allowed source context for this chat unless the user explicitly provides another source text or explicitly asks for research-style cross-country comparison elsewhere in the product.',
+    '- Do not cite, name, imply or append any other guideline, society, registry, organization or website unless that exact source name is present in the configured list below or was explicitly provided by the user in source text.',
+    '- If you mention sources at all, mention only configured source names from the list below.',
+    '- Do not append a free-form "Sources", "Источники", "Lähteet" or "Quellen" section. The application layer handles source display.',
+    '',
+    'Configured source names:',
+    configuredSourcesText,
+  ].join('\n');
+}
+
+function buildStructuredSourceAppendix(uiLanguage: AiWorkspaceContext['uiLanguage'], sourceNames: string[]) {
+  if (sourceNames.length === 0) return '';
+
+  const heading = uiLanguage === 'ru'
+    ? 'Разрешённые источники'
+    : uiLanguage === 'de'
+      ? 'Zulaessige Quellen'
+      : uiLanguage === 'en'
+        ? 'Allowed sources'
+        : 'Sallitut laehteet';
+
+  return `${heading}:\n${sourceNames.map((name) => `- ${name}`).join('\n')}`;
+}
+
+function normalizeMainChatSourceAppendix(
+  content: string,
+  uiLanguage: AiWorkspaceContext['uiLanguage'],
+  sourceNames: string[],
+) {
+  const match = content.match(SOURCE_APPENDIX_HEADING_PATTERN);
+  if (!match) return content;
+
+  const stripped = content.replace(SOURCE_APPENDIX_HEADING_PATTERN, '').trimEnd();
+  const appendix = buildStructuredSourceAppendix(uiLanguage, sourceNames);
+  if (!appendix) return stripped;
+  return `${stripped}\n\n${appendix}`;
+}
 
 function withPrivacyInstruction(systemPrompt: string) {
   return `${PRIVACY_PLACEHOLDER_SYSTEM_PROMPT}\n\n${systemPrompt}`;
@@ -65,6 +137,10 @@ function withMainChatClinicalAudience(systemPrompt: string, workspaceContext: Ai
   return `${buildWorkspaceContextInstruction(workspaceContext, {
     contentLabel: 'clinician-facing chat output',
   })}\n\n${MAIN_CHAT_CLINICAL_AUDIENCE_PROMPT}\n\n${systemPrompt}`;
+}
+
+function withConfiguredClinicalSources(systemPrompt: string, clinicalConfig: UserClinicalEvidenceConfig) {
+  return `${buildConfiguredSourceControlPrompt(clinicalConfig)}\n\n${systemPrompt}`;
 }
 
 function applyProfile(
@@ -220,7 +296,8 @@ export async function POST(req: Request) {
       },
     ]);
     const userAiProfile = await getUserAiProfile(userId);
-    const workspaceContext = await getUserAiWorkspaceContext(userId);
+    const clinicalConfig = await getUserClinicalEvidenceConfig(userId, { surface: 'general' });
+    const workspaceContext = await getUserAiWorkspaceContext(userId, { clinicalConfig });
 
     const directTextMode = typeof mode === 'string' ? 'clinicalTransform' as const : 'transientClinicalChat' as const;
     const chatGateway = preparePrivacyPayload([
@@ -236,9 +313,12 @@ export async function POST(req: Request) {
         {
           role: 'system',
           content: withPrivacyInstruction(
-            withWorkspaceInstruction(
-              applyProfile(chatGateway.sanitized.customPrompt, userAiProfile, 'full', workspaceContext),
-              workspaceContext,
+            withConfiguredClinicalSources(
+              withWorkspaceInstruction(
+                applyProfile(chatGateway.sanitized.customPrompt, userAiProfile, 'full', workspaceContext),
+                workspaceContext,
+              ),
+              clinicalConfig,
             ),
           ),
         },
@@ -251,9 +331,12 @@ export async function POST(req: Request) {
         {
           role: 'system',
           content: withPrivacyInstruction(
-            withWorkspaceInstruction(
-              applyProfile(DEFAULT_AI_TOOL_PROMPTS[mode as keyof typeof DEFAULT_AI_TOOL_PROMPTS], userAiProfile, defaultMode, workspaceContext),
-              workspaceContext,
+            withConfiguredClinicalSources(
+              withWorkspaceInstruction(
+                applyProfile(DEFAULT_AI_TOOL_PROMPTS[mode as keyof typeof DEFAULT_AI_TOOL_PROMPTS], userAiProfile, defaultMode, workspaceContext),
+                workspaceContext,
+              ),
+              clinicalConfig,
             ),
           ),
         },
@@ -276,9 +359,12 @@ export async function POST(req: Request) {
         {
           role: 'system',
           content: withPrivacyInstruction(
-            withWorkspaceInstruction(
-              applyProfile(toolGateway.sanitized.userToolPrompt, userAiProfile, userTool.profileMode, workspaceContext),
-              workspaceContext,
+            withConfiguredClinicalSources(
+              withWorkspaceInstruction(
+                applyProfile(toolGateway.sanitized.userToolPrompt, userAiProfile, userTool.profileMode, workspaceContext),
+                workspaceContext,
+              ),
+              clinicalConfig,
             ),
           ),
         },
@@ -307,10 +393,13 @@ export async function POST(req: Request) {
         finalMessages = [{
           role: 'system',
           content: withPrivacyInstruction(
-            withWorkspaceInstruction(
-              applyProfile(SYSTEM_PROMPT_MALLI, userAiProfile, 'styleOnly', workspaceContext),
-              workspaceContext,
-              { preserveExistingLanguage: true },
+            withConfiguredClinicalSources(
+              withWorkspaceInstruction(
+                applyProfile(SYSTEM_PROMPT_MALLI, userAiProfile, 'styleOnly', workspaceContext),
+                workspaceContext,
+                { preserveExistingLanguage: true },
+              ),
+              clinicalConfig,
             ),
           ),
         }, ...attachmentMessages, ...sanitizedMessages];
@@ -318,7 +407,10 @@ export async function POST(req: Request) {
         finalMessages = [{
           role: 'system',
           content: withPrivacyInstruction(
-            applyProfile(withMainChatClinicalAudience(SYSTEM_PROMPT_MEDICAL, workspaceContext), userAiProfile, 'full', workspaceContext),
+            withConfiguredClinicalSources(
+              applyProfile(withMainChatClinicalAudience(SYSTEM_PROMPT_MEDICAL, workspaceContext), userAiProfile, 'full', workspaceContext),
+              clinicalConfig,
+            ),
           ),
         }, ...attachmentMessages, ...sanitizedMessages];
       }
@@ -355,10 +447,16 @@ export async function POST(req: Request) {
       temperature: 0,
     });
 
+    const normalizedResponseContent = normalizeMainChatSourceAppendix(
+      response.content,
+      workspaceContext.uiLanguage,
+      getConfiguredSourceNames(clinicalConfig),
+    );
+
     const outputPrivacy = preparePrivacyPayload([
-      { key: 'output', value: response.content, mode: 'persistentStorage' },
+      { key: 'output', value: normalizedResponseContent, mode: 'persistentStorage' },
     ]);
-    const safeOutputContent = outputPrivacy.sanitized.output ?? response.content;
+    const safeOutputContent = outputPrivacy.sanitized.output ?? normalizedResponseContent;
 
     if (
       outputPrivacy.privacy.blocked &&
