@@ -218,10 +218,22 @@ function clinicalReferenceInstruction() {
 }
 
 function outputContractInstruction(taskType: AiTaskType, contextType: AgentContextType) {
-  if (taskType === 'text_fix' || taskType === 'translation' || taskType === 'lab_format') {
+  if (taskType === 'text_fix' || taskType === 'lab_format') {
     return [
       'Output contract:',
       'Return the transformed text directly.',
+      'Do not add an introduction, explanation, conclusion, or service note unless the user explicitly asks for commentary.',
+      'Do not label the answer as draft, version, interpretation, or recommendation.',
+    ].join('\n');
+  }
+
+  if (taskType === 'translation') {
+    return [
+      'Output contract:',
+      'Return only the full translated text directly.',
+      'Translate every clinically relevant fact from the source text.',
+      'Do not omit symptoms, negations, durations, measurements, body locations, severity markers, or temporal details.',
+      'Do not summarize, simplify, shorten, clean up, or reinterpret unless the user explicitly asks for that in addition to translation.',
       'Do not add an introduction, explanation, conclusion, or service note unless the user explicitly asks for commentary.',
       'Do not label the answer as draft, version, interpretation, or recommendation.',
     ].join('\n');
@@ -348,6 +360,19 @@ function currentTextEditingInstruction(taskType: AiTaskType, currentText?: strin
   ].join('\n');
 }
 
+function translationFidelityInstruction(taskType: AiTaskType, currentText?: string) {
+  if (taskType !== 'translation' || !currentText?.trim()) return '';
+
+  return [
+    'Clinical translation fidelity rule:',
+    'Translate the provided current text completely and conservatively.',
+    'Preserve all source facts, including positive findings, negative findings, symptoms, durations, measurements, locations, laterality, and qualifiers.',
+    'Preserve the clinical note style and scope; do not convert it into a summary or a polished rewrite unless the user explicitly asks for that as a separate operation.',
+    'If the source text has one sentence about a symptom, the translation must still contain that symptom.',
+    'If the source text says something is absent, the translation must preserve that negation explicitly.',
+  ].join('\n');
+}
+
 function systemInstructionForTask(
   taskType: AiTaskType,
   contextType: AgentContextType,
@@ -368,6 +393,7 @@ function systemInstructionForTask(
     'Do not end the answer with generic offers such as "If you want, I can..." unless the user explicitly asks for alternatives, further options, or next steps.',
   ].join('\n');
   const currentTextRules = currentTextEditingInstruction(taskType, options?.currentText);
+  const translationRules = translationFidelityInstruction(taskType, options?.currentText);
 
   if (taskType === 'template_generation' || taskType === 'template_polish') {
     return `${base}\nFocus on template structure. Preserve existing template syntax when present. Do not break placeholders, field names, select options, textarea markers, or conditional showIf-like logic.\n${outputContractInstruction(taskType, contextType)}`;
@@ -395,14 +421,14 @@ function systemInstructionForTask(
   }
 
   if (taskType === 'clinical_document') {
-    return `${base}\nFocus on producing a clinically coherent medical draft based only on provided information. Do not add new recommendations unless source support is provided.\n${currentTextRules}\n${outputContractInstruction(taskType, contextType)}`;
+    return `${base}\nFocus on producing a clinically coherent medical draft based only on provided information. Do not add new recommendations unless source support is provided.\n${currentTextRules}\n${translationRules}\n${outputContractInstruction(taskType, contextType)}`;
   }
 
   if (contextType === 'general') {
-    return `${base}\nAnswer the user's workflow question directly and propose safe next steps.\n${currentTextRules}\n${outputContractInstruction(taskType, contextType)}`;
+    return `${base}\nAnswer the user's workflow question directly and propose safe next steps.\n${currentTextRules}\n${translationRules}\n${outputContractInstruction(taskType, contextType)}`;
   }
 
-  return `${base}\n${currentTextRules}\n${outputContractInstruction(taskType, contextType)}`;
+  return `${base}\n${currentTextRules}\n${translationRules}\n${outputContractInstruction(taskType, contextType)}`;
 }
 
 export function createAgentPlan(input: {
@@ -422,6 +448,12 @@ export function createAgentPlan(input: {
 
   if (input.currentText) userParts.push(`Current text:\n${input.currentText}`);
   if (input.currentTemplate) userParts.push(`Current template:\n${input.currentTemplate}`);
+
+  if (taskType === 'translation' && input.currentText) {
+    userParts.push(
+      'Important for translation: preserve every source-text fact and negation. Do not summarize or shorten unless the user explicitly asked for that too.'
+    );
+  }
 
   if (input.contextType === 'pikaohje' && input.currentTemplate) {
     userParts.push('If you produce an updated quick-guide draft, preserve the same structured format and field labels shown in Current template.');

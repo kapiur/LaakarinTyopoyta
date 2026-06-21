@@ -24,7 +24,7 @@ export type ResolveAiRouteInput = {
 export function profileModeForTask(taskType: AiTaskType): AiProfileMode {
   if (taskType === 'lab_format') return 'none';
   if (taskType === 'text_fix') return 'styleOnly';
-  if (taskType === 'translation') return 'styleOnly';
+  if (taskType === 'translation') return 'none';
   if (taskType === 'template_generation') return 'styleOnly';
   if (taskType === 'template_polish') return 'styleOnly';
   if (taskType === 'tool_design') return 'workContextOnly';
