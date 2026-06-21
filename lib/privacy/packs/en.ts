@@ -26,7 +26,7 @@ export const privacyPackEn: PrivacyLocalePack = {
     'guardian',
   ],
   dateOfBirthLabels: ['dob', 'date of birth', 'birth date'],
-  explicitNameLabels: ['patient', 'patient name', 'name'],
+  explicitNameLabels: ['patient name', 'name'],
   patientIdLabels: ['patient id', 'client id', 'case id', 'record id'],
   phoneLabels: ['phone', 'telephone', 'mobile', 'cell', 'contact number'],
   phoneValuePatterns: [

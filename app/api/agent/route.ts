@@ -25,6 +25,7 @@ import {
   buildWorkspaceContextInstruction,
   getUserAiWorkspaceContext,
 } from '../../../lib/ai/workspaceContext';
+import { profileModeForTask } from '../../../lib/ai/aiRouter';
 import { buildUserAiProfileInstruction } from '../../../lib/ai/userAiProfile';
 import { getUserAiProfile } from '../../../lib/ai/userAiProfileStore';
 
@@ -759,7 +760,11 @@ export async function POST(req: Request) {
       });
     }
 
-    const profileInstruction = buildUserAiProfileInstruction(userAiProfile, 'full', workspaceContext);
+    const profileInstruction = buildUserAiProfileInstruction(
+      userAiProfile,
+      profileModeForTask(plan.taskType),
+      workspaceContext,
+    );
     const evidenceContext = [
       buildWorkspaceContextInstruction(workspaceContext, {
         contentLabel: 'clinician-facing agent output',

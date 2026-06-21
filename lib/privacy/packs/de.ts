@@ -29,7 +29,7 @@ export const privacyPackDe: PrivacyLocalePack = {
     'betreuer',
   ],
   dateOfBirthLabels: ['geburtsdatum', 'geboren', 'geb\\.'],
-  explicitNameLabels: ['patient', 'patientin', 'name', 'vollstaendiger name', 'vollständiger name'],
+  explicitNameLabels: ['name', 'vollstaendiger name', 'vollständiger name'],
   patientIdLabels: ['patienten-id', 'patientennummer', 'fallnummer', 'aktennummer', 'versichertennummer'],
   phoneLabels: ['telefon', 'telefonnummer', 'handy', 'mobil', 'kontakt'],
   phoneValuePatterns: [

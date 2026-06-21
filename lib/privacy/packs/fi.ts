@@ -34,7 +34,7 @@ export const privacyPackFi: PrivacyLocalePack = {
     'huoltaja',
   ],
   dateOfBirthLabels: ['syntynyt', 'synt\\.', 's\\.', 'syntymäaika'],
-  explicitNameLabels: ['potilas', 'potilaan nimi', 'nimi'],
+  explicitNameLabels: ['potilaan nimi', 'nimi'],
   patientIdLabels: ['potilasnumero', 'potilasnro', 'henkilönumero', 'henkilönro', 'asiakasnumero', 'asiakasnro'],
   phoneLabels: ['puhelin', 'puhelinnumero', 'puh\\.', 'gsm'],
   phoneValuePatterns: ['(?:\\+358|0)\\s?(?:4\\d|[1-9]\\d?)\\s?(?:\\d\\s?){5,8}'],

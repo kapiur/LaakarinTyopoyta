@@ -29,8 +29,6 @@ export const privacyPackRu: PrivacyLocalePack = {
   ],
   dateOfBirthLabels: ['дата рождения', 'д\\.р\\.', 'др'],
   explicitNameLabels: [
-    'пациент',
-    'пациентка',
     'имя',
     'имя пациента',
     'имя пациентки',
