@@ -36,6 +36,24 @@ const clinicalHeadingSample = [
   'Hoitaja opastanut Tresiban annoslaskun ad 26 ky x1 aamuisin.',
 ].join('\n');
 const commaNameSample = 'Romanenko, Olga (Terveyskeskuslaakari) tarkisti laboratorion tulokset 23.02.2026.';
+const blockedLongClinicalSample = [
+  '07.05.2026VOMANYD2',
+  '',
+  'HOI',
+  'L17',
+  'Jalan/varpaan oire/vaiva',
+  'Meiseri, Heidi (Sairaanhoitaja)',
+  'Hoidon syy',
+  'L17 Jalan/varpaan oire/vaiva',
+  'Esitiedot',
+  'Ollut eilen yhteydessa kiirelinjalle.',
+  'Kts. 7.5 HOI teksti.',
+  'Nykytila',
+  'Tulee ohjatusti kiirevastaanotolle.',
+  'Suunnitelma',
+  'Laitetaan laakarin arvioon.',
+  '07.05.2026Keusote Digitiimi, Keski-Uudenmaan hyvinvointialue',
+].join('\n');
 
 const cases: TestCase[] = [
   {
@@ -225,6 +243,10 @@ const gatewayCases = [
       'Suunnitelma',
       'Tulospostia tarkistettu, potilas kaynyt verikokeissa 23.2.26.',
     ].join('\n'),
+  },
+  {
+    name: 'Clinical transform gateway does not hard-block long clinical note headings and staff signatures',
+    input: blockedLongClinicalSample,
   },
 ];
 

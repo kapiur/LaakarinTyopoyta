@@ -15,7 +15,10 @@ export function primaryModeForGatewayMode(mode: PrivacyGatewayMode): Anonymizati
 export function residualModeForGatewayMode(mode: PrivacyGatewayMode): AnonymizationMode | null {
   if (mode === 'persistentStorage' || mode === 'persistentSample') return 'strictStorage';
   if (mode === 'clinicalBuilder') return 'strictStorage';
-  if (mode === 'clinicalTransform') return 'transientClinicalChat';
+  // Clinical text transformation already goes through primary sanitization.
+  // A second residual gate on top of long clinical notes creates too many
+  // false-positive hard blocks for ordinary care documentation.
+  if (mode === 'clinicalTransform') return null;
   if (mode === 'templateSyntax') return null;
   return 'transientClinicalChat';
 }
