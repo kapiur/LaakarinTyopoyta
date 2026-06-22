@@ -15,7 +15,7 @@ export function primaryModeForGatewayMode(mode: PrivacyGatewayMode): Anonymizati
 export function residualModeForGatewayMode(mode: PrivacyGatewayMode): AnonymizationMode | null {
   if (mode === 'persistentStorage' || mode === 'persistentSample') return 'strictStorage';
   if (mode === 'clinicalBuilder') return 'strictStorage';
-  if (mode === 'clinicalTransform') return 'storage';
+  if (mode === 'clinicalTransform') return 'transientClinicalChat';
   if (mode === 'templateSyntax') return null;
   return 'transientClinicalChat';
 }

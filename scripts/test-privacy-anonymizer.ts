@@ -1,4 +1,5 @@
 import { anonymizePatientText, type AnonymizationMode } from '../lib/privacy/anonymizePatientText';
+import { preparePrivacyPayload } from '../lib/privacy/gateway';
 
 type TestCase = {
   name: string;
@@ -24,6 +25,17 @@ const syntheticPhysioName = 'Pekka' + ' ' + 'Korhonen';
 const syntheticNameFromUserExample = 'Iurii' + ' ' + 'Kapustin';
 const syntheticAddress = 'Esimerkkikatu' + ' ' + '12 A';
 const syntheticLongAddress = 'Vanha Esimerkkitie' + ' ' + '12 A as 4, 00100 Helsinki';
+const clinicalHeadingSample = [
+  'Esitiedot',
+  '',
+  'Kts. yst. kollega Emma Karstusen potilasteksti 8.10.2025 ja diabeteshoitajien edeltavat tekstit.',
+  'Potilaan HbA1c ollut viime syksyssa tasolla 99 ja Libressa TIR ollut ainoastaan 11%.',
+  '',
+  'Suunnitelma',
+  '',
+  'Hoitaja opastanut Tresiban annoslaskun ad 26 ky x1 aamuisin.',
+].join('\n');
+const commaNameSample = 'Romanenko, Olga (Terveyskeskuslaakari) tarkisti laboratorion tulokset 23.02.2026.';
 
 const cases: TestCase[] = [
   {
@@ -160,6 +172,20 @@ const cases: TestCase[] = [
     expectedFragments: ['[DATE]'],
     forbiddenFragments: ['12.3.2024', '15.4.2024'],
   },
+  {
+    name: 'Clinical headings acronyms and references are not treated as names in clinical transform mode',
+    input: clinicalHeadingSample,
+    mode: 'clinicalTransform',
+    expectedFragments: ['Kts. yst. kollega [NAME] potilasteksti [DATE]', 'Potilaan HbA1c', 'Libressa TIR', 'Suunnitelma', 'Hoitaja opastanut'],
+    forbiddenFragments: ['[NAME]1c', '[NAME] ollut ainoastaan', '[NAME]. yst.', '[NAME] opastanut'],
+  },
+  {
+    name: 'Comma separated clinician name is redacted',
+    input: commaNameSample,
+    mode: 'clinicalTransform',
+    expectedFragments: ['Ammattilainen [NAME]'],
+    forbiddenFragments: ['Romanenko, Olga'],
+  },
 ];
 
 let failed = 0;
@@ -181,6 +207,37 @@ for (const testCase of cases) {
       console.error(`FAIL ${testCase.name}: forbidden fragment still present: ${forbidden}`);
       console.error(result.sanitizedText);
     }
+  }
+}
+
+const gatewayCases = [
+  {
+    name: 'Clinical transform gateway allows sanitized long note with dates and staff names',
+    input: [
+      '03.03.2026',
+      'LAB',
+      'E87.6',
+      'Hypokalemia',
+      'Romanenko, Olga Terveyskeskuslaakari',
+      'Tutkimukset',
+      '23.02.2026 12:29 P -CRP <4',
+      '03.03.2026VOMANYD2',
+      'Suunnitelma',
+      'Tulospostia tarkistettu, potilas kaynyt verikokeissa 23.2.26.',
+    ].join('\n'),
+  },
+];
+
+for (const testCase of gatewayCases) {
+  const result = preparePrivacyPayload([
+    { key: 'content', value: testCase.input, mode: 'clinicalTransform', localeKeys: ['fi'] },
+  ]);
+
+  if (result.privacy.blocked) {
+    failed += 1;
+    console.error(`FAIL ${testCase.name}: gateway blocked sanitized clinical transform payload`);
+    console.error(JSON.stringify(result.privacy, null, 2));
+    console.error(result.sanitized.content);
   }
 }
 
