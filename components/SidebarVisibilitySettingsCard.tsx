@@ -49,7 +49,7 @@ const texts = {
       links: "Tärkeät resurssit, ohjeet ja omat suosikkilinkit.",
       medicines: "Lääketiedot ja lääkehakemisto.",
       calculators: "Kliiniset laskurit oman työn tueksi.",
-      "drug-libraries": "Pediatriset ja PCA-lääkevalikoimat.",
+      "drug-libraries": "Painoperusteisen annoslaskurin ja PCA:n lääkevalikoimat.",
     },
   },
   ru: {
@@ -73,7 +73,7 @@ const texts = {
       links: "Важные ресурсы, инструкции и личные ссылки.",
       medicines: "Лекарственная информация и справочник.",
       calculators: "Клинические калькуляторы для повседневной работы.",
-      "drug-libraries": "Педиатрические и PCA-библиотеки препаратов.",
+      "drug-libraries": "Библиотеки препаратов для калькулятора дозировок по весу и PCA.",
     },
   },
   en: {
@@ -97,7 +97,7 @@ const texts = {
       links: "Important resources, instructions, and favourite links.",
       medicines: "Medication information and reference pages.",
       calculators: "Clinical calculators for daily work.",
-      "drug-libraries": "Pediatric and PCA drug libraries.",
+      "drug-libraries": "Weight-based dosing and PCA drug libraries.",
     },
   },
 } as const;

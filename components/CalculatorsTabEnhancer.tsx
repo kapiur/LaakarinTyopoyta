@@ -14,13 +14,20 @@ export default function CalculatorsTabEnhancer() {
     if (!nav) return;
 
     const buttons = Array.from(nav.querySelectorAll('button'));
-    const pedsButton = buttons.find((button) => button.textContent?.toLowerCase().includes('peds'));
+    const isDoseCalculatorButton = (label: string | null | undefined) => {
+      const normalized = (label || '').toLowerCase();
+      return normalized.includes('peds')
+        || normalized.includes('dose/kg')
+        || normalized.includes('annos')
+        || normalized.includes('доз');
+    };
+    const pedsButton = buttons.find((button) => isDoseCalculatorButton(button.textContent));
     const pcaButton = buttons.find((button) => button.textContent?.toLowerCase().includes('pca'));
     const vteButton = buttons.find((button) => button.textContent?.toLowerCase().includes('vte'));
 
     if (pedsButton instanceof HTMLButtonElement) {
       pedsButton.style.order = '-20';
-      pedsButton.title = 'Avaa uusi PEDS-laskuri';
+      pedsButton.title = 'Avaa painoperusteinen annoslaskuri';
     }
 
     if (pcaButton instanceof HTMLButtonElement) {

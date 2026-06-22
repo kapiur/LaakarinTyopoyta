@@ -49,7 +49,7 @@ const emptyForm: DrugFormState = {
 const copy = {
   fi: {
     back: '← Takaisin lääkekirjastoihin',
-    title: 'Muokkaa PEDS-lääkettä',
+    title: 'Muokkaa annoslaskurin lääkettä',
     subtitle: 'Päivitä oletusannos, vahvuus, lääkemuoto ja indikaatiot.',
     refresh: 'Päivitä',
     invalidId: 'Virheellinen lääke-ID',
@@ -74,7 +74,7 @@ const copy = {
   },
   ru: {
     back: '← Назад к библиотекам препаратов',
-    title: 'Редактировать PEDS-препарат',
+    title: 'Редактировать препарат для калькулятора дозировок',
     subtitle: 'Обновите дозу по умолчанию, концентрацию, форму препарата и показания.',
     refresh: 'Обновить',
     invalidId: 'Некорректный ID препарата',
@@ -99,7 +99,7 @@ const copy = {
   },
   en: {
     back: '← Back to drug libraries',
-    title: 'Edit PEDS drug',
+    title: 'Edit dose-calculator drug',
     subtitle: 'Update default dose, strength, drug form and indications.',
     refresh: 'Refresh',
     invalidId: 'Invalid drug ID',
@@ -124,7 +124,7 @@ const copy = {
   },
   de: {
     back: '← Zurück zu den Arzneibibliotheken',
-    title: 'PEDS-Arzneimittel bearbeiten',
+    title: 'Arznei des Dosisrechners bearbeiten',
     subtitle: 'Standarddosis, Stärke, Darreichungsform und Indikationen aktualisieren.',
     refresh: 'Aktualisieren',
     invalidId: 'Ungültige Arzneimittel-ID',

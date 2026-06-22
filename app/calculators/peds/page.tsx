@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Baby, Copy, RefreshCw } from 'lucide-react';
+import { Calculator, Copy, RefreshCw } from 'lucide-react';
 
 type PedsIndication = {
   id: number;
@@ -241,7 +241,7 @@ export default function PedsCalculatorPage() {
     const packageLabel = peds.mode === 'LIQUID' ? 'pulloa' : 'pakkausta';
 
     const text = [
-      'PEDS-laskelma',
+      'Painoannoslaskelma',
       peds.selectedDrugName ? `Lääke: ${peds.selectedDrugName}` : null,
       `Paino: ${peds.weight} kg`,
       `Annos: ${peds.dosePerKgDay} ${unit}/kg/vrk`,
@@ -277,10 +277,10 @@ export default function PedsCalculatorPage() {
             ← Takaisin laskureihin
           </Link>
           <h1 className="mt-2 text-2xl font-black text-slate-800 flex items-center gap-2">
-            <Baby className="text-blue-600" size={26} /> PEDS-laskuri
+            <Calculator className="text-blue-600" size={26} /> Painoperusteinen annoslaskuri
           </h1>
           <p className="text-sm text-slate-500 mt-1">
-            Valitse indikaatio ja lääke omasta kirjastosta. Arvot täyttyvät automaattisesti, mutta niitä voi muokata käsin.
+            Valitse käyttöaihe ja lääke omasta kirjastosta. Arvot täyttyvät automaattisesti, mutta niitä voi muokata käsin myös muuhun kuin lasten annoslaskentaan.
           </p>
         </div>
         <div className="flex gap-2">
@@ -288,7 +288,7 @@ export default function PedsCalculatorPage() {
             href="/calculators/peds-library"
             className="px-4 py-3 bg-white border border-slate-200 rounded-2xl text-xs font-black uppercase text-blue-600 hover:bg-blue-50 transition-all"
           >
-            Lääkekirjastot
+            Lääke- ja annoskirjastot
           </Link>
           <button
             onClick={refreshLibrary}
@@ -411,7 +411,7 @@ export default function PedsCalculatorPage() {
 
           {!result.isReady ? (
             <div className="flex-1 flex flex-col items-center justify-center text-slate-200 font-black uppercase text-center">
-              <Baby size={64} className="mb-4 opacity-20" />
+              <Calculator size={64} className="mb-4 opacity-20" />
               <div className="text-4xl tracking-tighter">Syötä tiedot</div>
             </div>
           ) : (

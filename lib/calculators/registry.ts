@@ -31,14 +31,14 @@ export const CALCULATOR_DEFINITIONS: CalculatorDefinition[] = [
   },
   {
     key: 'peds',
-    title: 'PEDS',
-    description: 'Pediatric dose calculator with user-specific indications and drug library defaults.',
+    title: 'Dose/kg',
+    description: 'Weight-based dose calculator with user-specific indications and drug library defaults.',
     route: '/calculators/peds',
-    icon: 'Baby',
+    icon: 'Calculator',
     category: 'pediatrics',
     defaultEnabled: true,
     sortOrder: 20,
-    tags: ['pediatrics', 'dose'],
+    tags: ['dose', 'weight-based'],
   },
   {
     key: 'vte',

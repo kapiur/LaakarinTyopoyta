@@ -46,7 +46,7 @@ const texts = {
     moveDown: "Siirrä alemmas",
     calculatorDescriptions: {
       pca: "PCA-annostelun suunnittelu käyttäjän oman lääkevalikoiman tuella.",
-      peds: "Pediatrinen annoslaskuri käyttäjäkohtaisilla indikaatioilla ja lääkevalikoiman oletuksilla.",
+      peds: "Painoperusteinen annoslaskuri käyttäjäkohtaisilla indikaatioilla ja lääkevalikoiman oletuksilla.",
       vte: "Syvän laskimotromboosin todennäköisyyden arvio erillisellä Wells-tyylisellä laskurilla.",
       pe: "Keuhkoembolian todennäköisyyden arvio erillisellä Wells-tyylisellä laskurilla.",
       cad: "Sepelvaltimotaudin esitodennäköisyyden arvio erillisessä rakenteisessa laskurissa.",
@@ -73,7 +73,7 @@ const texts = {
     moveDown: "Опустить ниже",
     calculatorDescriptions: {
       pca: "Планирование дозировок PCA с поддержкой вашей пользовательской библиотеки препаратов.",
-      peds: "Педиатрический калькулятор дозировок с пользовательскими показаниями и настройками библиотеки препаратов.",
+      peds: "Калькулятор дозировок по весу с пользовательскими показаниями и настройками библиотеки препаратов.",
       vte: "Оценка вероятности тромбоза глубоких вен по отдельному калькулятору в стиле Wells.",
       pe: "Оценка вероятности ТЭЛА по отдельному калькулятору в стиле Wells.",
       cad: "Оценка предтестовой вероятности ишемической болезни сердца в отдельном структурированном калькуляторе.",
@@ -100,7 +100,7 @@ const texts = {
     moveDown: "Move down",
     calculatorDescriptions: {
       pca: "Patient-controlled analgesia dose planning with support for your personal drug library.",
-      peds: "Pediatric dose calculator with personal indication presets and drug-library defaults.",
+      peds: "Weight-based dose calculator with personal indication presets and drug-library defaults.",
       vte: "Deep vein thrombosis probability support in a standalone Wells-style calculator.",
       pe: "Pulmonary embolism probability support in a standalone Wells-style calculator.",
       cad: "Pre-test coronary artery disease probability support in a standalone structured calculator.",
