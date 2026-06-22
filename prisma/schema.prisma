@@ -47,6 +47,7 @@ model User {
   aiTools         AiTool[]
   aiCredentials   UserAiCredential[]
   aiProfile       UserAiProfile?
+  aiSettings      UserAiSettings?
   clinicalSettings UserClinicalSettings?
   clinicalSourcePreferences UserClinicalSourcePreference[]
   feedbackReports FeedbackReport[]
