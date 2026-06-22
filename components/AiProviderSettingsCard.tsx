@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { BrainCircuit, KeyRound, Loader2, Save, Trash2 } from "lucide-react";
 import { useI18n } from "../lib/useI18n";
+import { SUPPORTED_UI_LANGUAGES } from "../lib/i18n/config";
 import { aiAdminT } from "./ai-admin/aiAdminI18n";
 
 type Registry = Record<string, { label: string; models: Array<{ id: string; label: string }> }>;
@@ -12,6 +13,8 @@ type AiSettings = {
   defaultModel: string;
   allowAgentModelSelection: boolean;
   credentialMode: "platform" | "user" | "auto";
+  assistantResponseMode: "request" | "fixed";
+  assistantFixedLanguage: string;
 };
 
 type AiPolicy = {
@@ -37,12 +40,22 @@ const defaultSettings: AiSettings = {
   defaultModel: "gpt-5.4",
   allowAgentModelSelection: true,
   credentialMode: "platform",
+  assistantResponseMode: "request",
+  assistantFixedLanguage: "fi",
 };
 
 export default function AiProviderSettingsCard() {
   const { language } = useI18n();
   const tt = (key: string) => aiAdminT(language, "userSettings", key);
   const tc = (key: string) => aiAdminT(language, "common", key);
+  const assistantLanguageOptions = useMemo(
+    () =>
+      SUPPORTED_UI_LANGUAGES.map((option) => ({
+        value: option.code,
+        label: `${option.nativeName} (${option.code})`,
+      })),
+    []
+  );
   const [settings, setSettings] = useState<AiSettings>(defaultSettings);
   const [policy, setPolicy] = useState<AiPolicy | null>(null);
   const [registry, setRegistry] = useState<Registry>({});
@@ -86,7 +99,12 @@ export default function AiProviderSettingsCard() {
       if (!settingsResponse.ok) throw new Error(settingsData.error || tt("loadFailed"));
       if (!credentialsResponse.ok) throw new Error(credentialsData.error || tt("loadFailed"));
 
-      setSettings(settingsData.settings || defaultSettings);
+      const loadedSettings = settingsData.settings || defaultSettings;
+      setSettings({
+        ...defaultSettings,
+        ...loadedSettings,
+        assistantFixedLanguage: loadedSettings.assistantFixedLanguage || defaultSettings.assistantFixedLanguage,
+      });
       setPolicy(settingsData.policy || null);
       setRegistry(settingsData.registry || {});
       setPersonalCredentials(Array.isArray(credentialsData.credentials) ? credentialsData.credentials : []);
@@ -254,6 +272,34 @@ export default function AiProviderSettingsCard() {
               >
                 {credentialOptions.map((option) => <option key={option.value} value={option.value} disabled={!option.enabled}>{option.label}</option>)}
               </select>
+            </label>
+
+            <label className="space-y-1">
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{tt("assistantResponseMode")}</span>
+              <select
+                value={settings.assistantResponseMode}
+                onChange={(event) => setSettings({ ...settings, assistantResponseMode: event.target.value as AiSettings["assistantResponseMode"] })}
+                className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-blue-100"
+              >
+                <option value="request">{tt("assistantResponseModeRequest")}</option>
+                <option value="fixed">{tt("assistantResponseModeFixed")}</option>
+              </select>
+              <p className="text-xs text-slate-500">
+                {settings.assistantResponseMode === "fixed" ? tt("assistantResponseHelpFixed") : tt("assistantResponseHelpRequest")}
+              </p>
+            </label>
+
+            <label className="space-y-1">
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{tt("assistantFixedLanguage")}</span>
+              <select
+                value={settings.assistantFixedLanguage}
+                onChange={(event) => setSettings({ ...settings, assistantFixedLanguage: event.target.value })}
+                disabled={settings.assistantResponseMode !== "fixed"}
+                className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-blue-100 disabled:opacity-60"
+              >
+                {assistantLanguageOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
+              <p className="text-xs text-slate-500">{tt("assistantLanguageDescription")}</p>
             </label>
 
             <label className="flex items-center gap-3 p-4 rounded-xl bg-slate-50 border border-slate-200 text-sm font-semibold text-slate-600">

@@ -31,10 +31,13 @@ import {
 import {
   buildWorkspaceContextInstruction,
   getUserAiWorkspaceContext,
+  languageLabel,
+  resolveResponseLanguage,
 } from '../../../lib/ai/workspaceContext';
 import { profileModeForTask } from '../../../lib/ai/aiRouter';
 import { buildUserAiProfileInstruction } from '../../../lib/ai/userAiProfile';
 import { getUserAiProfile } from '../../../lib/ai/userAiProfileStore';
+import { getUserAiSettings } from '../../../lib/ai/userAiSettings';
 
 function normalizeContextType(value: unknown): AgentContextType {
   if (
@@ -1141,9 +1144,10 @@ export async function POST(req: Request) {
       });
     }
 
-    const [workspaceContext, userAiProfile] = await Promise.all([
+    const [workspaceContext, userAiProfile, userAiSettings] = await Promise.all([
       getUserAiWorkspaceContext(userId, { clinicalConfig }),
       userAiProfilePromise,
+      getUserAiSettings(userId),
     ]);
     const requiresEvidence = taskRequiresEvidence(plan.taskType);
     const allowsRegistryOnlyReference = taskAllowsRegistryOnlyReference(plan.taskType);
@@ -1277,6 +1281,13 @@ export async function POST(req: Request) {
       profileModeForTask(plan.taskType),
       workspaceContext,
     );
+    const resolvedResponseLanguage = resolveResponseLanguage({
+      userRequestText: privacyResult.sanitized.userMessage,
+      preferredMode: userAiSettings.assistantResponseMode,
+      preferredLanguage: userAiSettings.assistantFixedLanguage,
+      fallbackUiLanguage: uiLanguage,
+      fallbackClinicalLanguage: workspaceContext.clinicalOutputLanguage,
+    });
     const evidenceContext = [
       buildWorkspaceContextInstruction(workspaceContext, {
         contentLabel: 'clinician-facing agent output',
@@ -1290,7 +1301,8 @@ export async function POST(req: Request) {
             taskType: plan.taskType,
           })
         : '',
-      `Final user-facing answer language for this response: ${uiLanguage}.`,
+      `Final user-facing answer language for this response: ${languageLabel(resolvedResponseLanguage.language)} (${resolvedResponseLanguage.language}).`,
+      'Match the language of the current user request by default. Switch only if the user explicitly asks for another language.',
       'Use other languages only for source names, very short quoted terms, or unavoidable original terminology.',
       isClinicalResearchMode
         ? [

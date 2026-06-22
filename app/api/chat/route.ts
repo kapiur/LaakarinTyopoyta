@@ -13,8 +13,15 @@ import type { PrivacyGatewayResult } from '../../../lib/privacy/gateway';
 import { hasCriticalPrivacyFindingTypes } from '../../../lib/privacy/gateway/decision';
 import { runAiCompletion } from '../../../lib/ai/runAiCompletion';
 import { DEFAULT_AI_MODEL, DEFAULT_AI_PROVIDER } from '../../../lib/ai/modelRegistry';
-import { buildWorkspaceContextInstruction, getUserAiWorkspaceContext, type AiWorkspaceContext } from '../../../lib/ai/workspaceContext';
+import {
+  buildWorkspaceContextInstruction,
+  getUserAiWorkspaceContext,
+  languageLabel,
+  resolveResponseLanguage,
+  type AiWorkspaceContext,
+} from '../../../lib/ai/workspaceContext';
 import { getUserClinicalEvidenceConfig, type UserClinicalEvidenceConfig } from '../../../lib/clinical/evidence/userClinicalSettings';
+import { getUserAiSettings } from '../../../lib/ai/userAiSettings';
 import {
   buildUserAiProfileInstruction,
   defaultProfileModeForTool,
@@ -126,17 +133,29 @@ function withPrivacyInstruction(systemPrompt: string) {
   return `${PRIVACY_PLACEHOLDER_SYSTEM_PROMPT}\n\n${systemPrompt}`;
 }
 
-function withWorkspaceInstruction(systemPrompt: string, workspaceContext: AiWorkspaceContext, options?: { preserveExistingLanguage?: boolean }) {
+function withWorkspaceInstruction(
+  systemPrompt: string,
+  workspaceContext: AiWorkspaceContext,
+  options?: { preserveExistingLanguage?: boolean; responseLanguage?: string },
+) {
+  const responseLanguageInstruction = options?.responseLanguage
+    ? `- For this response, answer in ${languageLabel(options.responseLanguage)} (${options.responseLanguage}) unless the user explicitly asks for another language.`
+    : '';
+
   return `${buildWorkspaceContextInstruction(workspaceContext, {
     preserveExistingLanguage: options?.preserveExistingLanguage ?? false,
     contentLabel: 'clinician-facing output',
-  })}\n\n${systemPrompt}`;
+  })}${responseLanguageInstruction ? `\n${responseLanguageInstruction}` : ''}\n\n${systemPrompt}`;
 }
 
-function withMainChatClinicalAudience(systemPrompt: string, workspaceContext: AiWorkspaceContext) {
+function withMainChatClinicalAudience(
+  systemPrompt: string,
+  workspaceContext: AiWorkspaceContext,
+  responseLanguage: string,
+) {
   return `${buildWorkspaceContextInstruction(workspaceContext, {
     contentLabel: 'clinician-facing chat output',
-  })}\n\n${MAIN_CHAT_CLINICAL_AUDIENCE_PROMPT}\n\n${systemPrompt}`;
+  })}\n- For this response, answer in ${languageLabel(responseLanguage)} (${responseLanguage}) unless the user explicitly asks for another language.\n\n${MAIN_CHAT_CLINICAL_AUDIENCE_PROMPT}\n\n${systemPrompt}`;
 }
 
 function withConfiguredClinicalSources(systemPrompt: string, clinicalConfig: UserClinicalEvidenceConfig) {
@@ -298,6 +317,7 @@ export async function POST(req: Request) {
     const userAiProfile = await getUserAiProfile(userId);
     const clinicalConfig = await getUserClinicalEvidenceConfig(userId, { surface: 'general' });
     const workspaceContext = await getUserAiWorkspaceContext(userId, { clinicalConfig });
+    const userAiSettings = await getUserAiSettings(userId);
 
     const directTextMode = typeof mode === 'string' ? 'clinicalTransform' as const : 'transientClinicalChat' as const;
     const chatGateway = preparePrivacyPayload([
@@ -307,6 +327,11 @@ export async function POST(req: Request) {
 
     let finalMessages: any[] = [];
     let privacy = mergePrivacy(chatGateway.privacy, workspaceAttachmentGateway.privacy);
+    const requestedResponseLanguage = resolveResponseLanguage({
+      userRequestText: chatGateway.sanitized.text,
+      fallbackUiLanguage: workspaceContext.uiLanguage,
+      fallbackClinicalLanguage: workspaceContext.clinicalOutputLanguage,
+    });
 
     if (customPrompt && text) {
       finalMessages = [
@@ -317,6 +342,7 @@ export async function POST(req: Request) {
               withWorkspaceInstruction(
                 applyProfile(chatGateway.sanitized.customPrompt, userAiProfile, 'full', workspaceContext),
                 workspaceContext,
+                { responseLanguage: requestedResponseLanguage.language },
               ),
               clinicalConfig,
             ),
@@ -335,6 +361,7 @@ export async function POST(req: Request) {
               withWorkspaceInstruction(
                 applyProfile(DEFAULT_AI_TOOL_PROMPTS[mode as keyof typeof DEFAULT_AI_TOOL_PROMPTS], userAiProfile, defaultMode, workspaceContext),
                 workspaceContext,
+                { responseLanguage: requestedResponseLanguage.language },
               ),
               clinicalConfig,
             ),
@@ -363,6 +390,7 @@ export async function POST(req: Request) {
               withWorkspaceInstruction(
                 applyProfile(toolGateway.sanitized.userToolPrompt, userAiProfile, userTool.profileMode, workspaceContext),
                 workspaceContext,
+                { responseLanguage: requestedResponseLanguage.language },
               ),
               clinicalConfig,
             ),
@@ -374,6 +402,13 @@ export async function POST(req: Request) {
     else if (messageArray && messageArray.length > 0) {
       const { sanitizedMessages, privacy: messagePrivacy } = sanitizeMessages(messageArray);
       const lastMessage = sanitizedMessages[sanitizedMessages.length - 1].content;
+      const requestedResponseLanguage = resolveResponseLanguage({
+        userRequestText: lastMessage,
+        preferredMode: userAiSettings.assistantResponseMode,
+        preferredLanguage: userAiSettings.assistantFixedLanguage,
+        fallbackUiLanguage: workspaceContext.uiLanguage,
+        fallbackClinicalLanguage: workspaceContext.clinicalOutputLanguage,
+      });
       privacy = mergePrivacy(messagePrivacy, workspaceAttachmentGateway.privacy);
       const attachmentMessages = hasWorkspaceAttachment
         ? [
@@ -397,7 +432,10 @@ export async function POST(req: Request) {
               withWorkspaceInstruction(
                 applyProfile(SYSTEM_PROMPT_MALLI, userAiProfile, 'styleOnly', workspaceContext),
                 workspaceContext,
-                { preserveExistingLanguage: true },
+                {
+                  preserveExistingLanguage: true,
+                  responseLanguage: requestedResponseLanguage.language,
+                },
               ),
               clinicalConfig,
             ),
@@ -408,7 +446,16 @@ export async function POST(req: Request) {
           role: 'system',
           content: withPrivacyInstruction(
             withConfiguredClinicalSources(
-              applyProfile(withMainChatClinicalAudience(SYSTEM_PROMPT_MEDICAL, workspaceContext), userAiProfile, 'full', workspaceContext),
+              applyProfile(
+                withMainChatClinicalAudience(
+                  SYSTEM_PROMPT_MEDICAL,
+                  workspaceContext,
+                  requestedResponseLanguage.language,
+                ),
+                userAiProfile,
+                'full',
+                workspaceContext,
+              ),
               clinicalConfig,
             ),
           ),

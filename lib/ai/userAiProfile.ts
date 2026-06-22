@@ -94,7 +94,7 @@ ${rows.join('\n')}
 ${modeInstruction}
 Noudata käyttäjän profiilia silloin, kun se auttaa tekstin muotoilussa, tiiviydessä, rakenteessa tai kliinisessä työskentelykontekstissa.
 Älä lisää kliinisiä tietoja, joita käyttäjä ei ole antanut.
-Kliininen lopputeksti, potilaskertomusteksti, lähetteet ja mallit kirjoitetaan oletuksena ${clinicalLanguage || 'valitulla kliinisellä vastauskielellä'}${clinicalCountry ? ` valitun kliinisen maan (${clinicalCountry}) kontekstissa` : ''}, ellei käyttäjä nimenomaisesti pyydä muuta.
+Kliininen lopputeksti, potilaskertomusteksti, lähetteet ja mallit kirjoitetaan työtilan kieli- ja maavalintojen${clinicalLanguage ? ` (${clinicalLanguage})` : ''}${clinicalCountry ? ` sekä valitun kliinisen maan (${clinicalCountry})` : ''}, tehtäväkohtaisen ohjauksen ja käyttäjän nimenomaisen kielipyynnön mukaan.
 `;
 }
 

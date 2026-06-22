@@ -1,14 +1,18 @@
 import { prisma } from '../prisma';
+import { isSupportedUiLanguage } from '../i18n';
 import { DEFAULT_AI_MODEL, DEFAULT_AI_PROVIDER } from './modelRegistry';
 import type { AiProviderKey } from './providers/types';
 
 export type AiCredentialMode = 'platform' | 'user' | 'auto';
+export type AssistantResponseMode = 'request' | 'fixed';
 
 export type UserAiSettingsRecord = {
   defaultProvider: AiProviderKey;
   defaultModel: string;
   allowAgentModelSelection: boolean;
   credentialMode: AiCredentialMode;
+  assistantResponseMode: AssistantResponseMode;
+  assistantFixedLanguage: string | null;
 };
 
 export type UserAiAccessPolicyRecord = {
@@ -21,10 +25,24 @@ export type UserAiAccessPolicyRecord = {
 };
 
 const VALID_CREDENTIAL_MODES = new Set(['platform', 'user', 'auto']);
-
+const VALID_ASSISTANT_RESPONSE_MODES = new Set(['request', 'fixed']);
 export function normalizeCredentialMode(value: unknown): AiCredentialMode {
   if (typeof value === 'string' && VALID_CREDENTIAL_MODES.has(value)) return value as AiCredentialMode;
   return 'platform';
+}
+
+export function normalizeAssistantResponseMode(value: unknown): AssistantResponseMode {
+  if (typeof value === 'string' && VALID_ASSISTANT_RESPONSE_MODES.has(value)) {
+    return value as AssistantResponseMode;
+  }
+
+  return 'request';
+}
+
+export function normalizeAssistantResponseLanguage(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().toLowerCase();
+  return isSupportedUiLanguage(normalized) ? normalized : null;
 }
 
 export function normalizeProvider(value: unknown): AiProviderKey {
@@ -55,8 +73,10 @@ export async function getUserAiSettings(userId: number): Promise<UserAiSettingsR
       defaultModel: string;
       allowAgentModelSelection: boolean;
       credentialMode: string;
+      assistantResponseMode: string | null;
+      assistantFixedLanguage: string | null;
     }>>`
-      SELECT "defaultProvider", "defaultModel", "allowAgentModelSelection", "credentialMode"
+      SELECT "defaultProvider", "defaultModel", "allowAgentModelSelection", "credentialMode", "assistantResponseMode", "assistantFixedLanguage"
       FROM "UserAiSettings"
       WHERE "userId" = ${userId}
       LIMIT 1
@@ -70,6 +90,8 @@ export async function getUserAiSettings(userId: number): Promise<UserAiSettingsR
         defaultModel: DEFAULT_AI_MODEL,
         allowAgentModelSelection: true,
         credentialMode: 'platform',
+        assistantResponseMode: 'request',
+        assistantFixedLanguage: null,
       };
     }
 
@@ -78,6 +100,8 @@ export async function getUserAiSettings(userId: number): Promise<UserAiSettingsR
       defaultModel: row.defaultModel || DEFAULT_AI_MODEL,
       allowAgentModelSelection: row.allowAgentModelSelection !== false,
       credentialMode: normalizeCredentialMode(row.credentialMode),
+      assistantResponseMode: normalizeAssistantResponseMode(row.assistantResponseMode),
+      assistantFixedLanguage: normalizeAssistantResponseLanguage(row.assistantFixedLanguage),
     };
   } catch (error) {
     console.error('User AI settings loading failed, using defaults:', error);
@@ -86,6 +110,8 @@ export async function getUserAiSettings(userId: number): Promise<UserAiSettingsR
       defaultModel: DEFAULT_AI_MODEL,
       allowAgentModelSelection: true,
       credentialMode: 'platform',
+      assistantResponseMode: 'request',
+      assistantFixedLanguage: null,
     };
   }
 }

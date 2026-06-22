@@ -349,6 +349,22 @@ model UserAiCredential {
   @@index([userId])
 }
 
+model UserAiSettings {
+  id                        String   @id @default(cuid())
+  userId                    Int      @unique
+  user                      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  defaultProvider           String   @default("openai")
+  defaultModel              String   @default("gpt-5.4")
+  allowAgentModelSelection  Boolean  @default(true)
+  credentialMode            String   @default("platform")
+  assistantResponseMode     String   @default("request")
+  assistantFixedLanguage    String?
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+
+  @@index([defaultProvider])
+}
+
 model UserClinicalSettings {
   id                       String   @id @default(cuid())
   userId                   Int      @unique

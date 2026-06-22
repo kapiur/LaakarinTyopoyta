@@ -2,7 +2,14 @@ import { NextResponse } from 'next/server';
 import { requireAuthenticatedUser } from '../../../../lib/admin-auth';
 import { prisma } from '../../../../lib/prisma';
 import { AI_MODEL_REGISTRY, DEFAULT_AI_MODEL, DEFAULT_AI_PROVIDER, getProviderDefaultModel } from '../../../../lib/ai/modelRegistry';
-import { getUserAiAccessPolicy, getUserAiSettings, normalizeCredentialMode, normalizeProvider } from '../../../../lib/ai/userAiSettings';
+import {
+  getUserAiAccessPolicy,
+  getUserAiSettings,
+  normalizeAssistantResponseLanguage,
+  normalizeAssistantResponseMode,
+  normalizeCredentialMode,
+  normalizeProvider,
+} from '../../../../lib/ai/userAiSettings';
 
 function normalizeOptionalModel(value: unknown, provider: keyof typeof AI_MODEL_REGISTRY) {
   if (typeof value !== 'string') return getProviderDefaultModel(provider);
@@ -47,6 +54,10 @@ export async function PUT(req: Request) {
     const defaultModel = normalizeOptionalModel(body?.defaultModel ?? DEFAULT_AI_MODEL, defaultProvider);
     const credentialMode = normalizeCredentialMode(body?.credentialMode);
     const allowAgentModelSelection = body?.allowAgentModelSelection !== false;
+    const assistantResponseMode = normalizeAssistantResponseMode(body?.assistantResponseMode);
+    const assistantFixedLanguage = assistantResponseMode === 'fixed'
+      ? normalizeAssistantResponseLanguage(body?.assistantFixedLanguage)
+      : null;
 
     if (policy.allowedProviders.length > 0 && !policy.allowedProviders.includes(defaultProvider)) {
       return NextResponse.json({ error: 'Tämä AI-palvelu ei ole sallittu käyttäjälle' }, { status: 403 });
@@ -60,11 +71,15 @@ export async function PUT(req: Request) {
       return NextResponse.json({ error: 'Omat API-avaimet eivät ole käytössä tälle käyttäjälle' }, { status: 403 });
     }
 
+    if (assistantResponseMode === 'fixed' && !assistantFixedLanguage) {
+      return NextResponse.json({ error: 'AI-vastauskieli puuttuu' }, { status: 400 });
+    }
+
     await prisma.$executeRaw`
       INSERT INTO "UserAiSettings" (
-        "id", "userId", "defaultProvider", "defaultModel", "allowAgentModelSelection", "credentialMode", "createdAt", "updatedAt"
+        "id", "userId", "defaultProvider", "defaultModel", "allowAgentModelSelection", "credentialMode", "assistantResponseMode", "assistantFixedLanguage", "createdAt", "updatedAt"
       ) VALUES (
-        gen_random_uuid()::text, ${userId}, ${defaultProvider}, ${defaultModel}, ${allowAgentModelSelection}, ${credentialMode}, NOW(), NOW()
+        gen_random_uuid()::text, ${userId}, ${defaultProvider}, ${defaultModel}, ${allowAgentModelSelection}, ${credentialMode}, ${assistantResponseMode}, ${assistantFixedLanguage}, NOW(), NOW()
       )
       ON CONFLICT ("userId")
       DO UPDATE SET
@@ -72,6 +87,8 @@ export async function PUT(req: Request) {
         "defaultModel" = EXCLUDED."defaultModel",
         "allowAgentModelSelection" = EXCLUDED."allowAgentModelSelection",
         "credentialMode" = EXCLUDED."credentialMode",
+        "assistantResponseMode" = EXCLUDED."assistantResponseMode",
+        "assistantFixedLanguage" = EXCLUDED."assistantFixedLanguage",
         "updatedAt" = NOW()
     `;
 
