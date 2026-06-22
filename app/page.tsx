@@ -195,6 +195,7 @@ export default function Dashboard() {
             ? null
             : {
                 settings: data.settings,
+                aiProfile: data.aiProfile,
                 countries: data.countries,
                 interfaceLanguages: data.interfaceLanguages,
               },

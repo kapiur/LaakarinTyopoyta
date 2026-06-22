@@ -13,6 +13,15 @@ import { ensureClinicalSourceSeeds } from "../../../../lib/clinical/sources/ensu
 import { applyCountryDefaultSourcePreferences } from "../../../../lib/clinical/sources/applyCountryDefaultSourcePreferences";
 
 type StarterTarget = "home" | "text" | "guides" | "literature" | "calculators" | "templates";
+type OnboardingAiProfile = {
+  role?: string | null;
+  specialty?: string | null;
+  workplace?: string | null;
+  experienceLevel?: string | null;
+  defaultClinicalContext?: string | null;
+  preferredStructure?: string | null;
+  useProfileByDefault?: boolean | null;
+};
 
 const STARTER_TARGETS: Record<StarterTarget, string> = {
   home: "/",
@@ -26,6 +35,12 @@ const STARTER_TARGETS: Record<StarterTarget, string> = {
 function getUserId(session: unknown) {
   const userId = Number((session as any)?.user?.id);
   return Number.isFinite(userId) ? userId : null;
+}
+
+function cleanText(value: unknown) {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
 }
 
 export async function GET() {
@@ -47,6 +62,17 @@ export async function GET() {
           usePracticeCountryDefaults: true,
         },
       },
+      aiProfile: {
+        select: {
+          role: true,
+          specialty: true,
+          workplace: true,
+          experienceLevel: true,
+          defaultClinicalContext: true,
+          preferredStructure: true,
+          useProfileByDefault: true,
+        },
+      },
     },
   });
 
@@ -59,6 +85,15 @@ export async function GET() {
       practiceCountry,
       usePracticeCountryDefaults: user?.clinicalSettings?.usePracticeCountryDefaults ?? true,
       uiLanguage: normalizeUiLanguage(user?.uiLanguage ?? defaults.defaultUiLanguage),
+    },
+    aiProfile: {
+      role: user?.aiProfile?.role ?? "",
+      specialty: user?.aiProfile?.specialty ?? "",
+      workplace: user?.aiProfile?.workplace ?? "",
+      experienceLevel: user?.aiProfile?.experienceLevel ?? "",
+      defaultClinicalContext: user?.aiProfile?.defaultClinicalContext ?? "",
+      preferredStructure: user?.aiProfile?.preferredStructure ?? "",
+      useProfileByDefault: user?.aiProfile?.useProfileByDefault ?? true,
     },
     countries: PRACTICE_COUNTRIES,
     interfaceLanguages: SUPPORTED_UI_LANGUAGES,
@@ -79,12 +114,24 @@ export async function PUT(req: Request) {
     const usePracticeCountryDefaults = body?.usePracticeCountryDefaults !== false;
     const requestedLanguage = body?.uiLanguage;
     const starterTarget = body?.starterTarget as StarterTarget;
+    const aiProfileBody = body?.aiProfile && typeof body.aiProfile === "object"
+      ? body.aiProfile as OnboardingAiProfile
+      : null;
     const defaults = getPracticeCountryDefaults(practiceCountry);
     const uiLanguage = usePracticeCountryDefaults
       ? defaults.defaultUiLanguage
       : isSupportedUiLanguage(requestedLanguage)
         ? requestedLanguage
         : normalizeUiLanguage(defaults.defaultUiLanguage);
+    const aiProfile = {
+      role: cleanText(aiProfileBody?.role),
+      specialty: cleanText(aiProfileBody?.specialty),
+      workplace: cleanText(aiProfileBody?.workplace),
+      experienceLevel: cleanText(aiProfileBody?.experienceLevel),
+      defaultClinicalContext: cleanText(aiProfileBody?.defaultClinicalContext),
+      preferredStructure: cleanText(aiProfileBody?.preferredStructure),
+      useProfileByDefault: aiProfileBody?.useProfileByDefault !== false,
+    };
 
     await ensureClinicalSourceSeeds();
 
@@ -119,6 +166,17 @@ export async function PUT(req: Request) {
       });
 
       await applyCountryDefaultSourcePreferences(tx, userId, defaults.defaultClinicalCountry);
+
+      if (aiProfileBody) {
+        await tx.userAiProfile.upsert({
+          where: { userId },
+          update: aiProfile,
+          create: {
+            userId,
+            ...aiProfile,
+          },
+        });
+      }
     });
 
     return NextResponse.json({
