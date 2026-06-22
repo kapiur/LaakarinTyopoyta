@@ -179,7 +179,7 @@ export default function StandaloneCalculatorsI18nEnhancer() {
   const { language } = useI18n();
 
   useEffect(() => {
-    const applies = pathname === "/calculators/pca" || pathname === "/calculators/peds";
+    const applies = pathname === "/calculators/pca";
     if (!applies) return;
 
     const apply = () => {
