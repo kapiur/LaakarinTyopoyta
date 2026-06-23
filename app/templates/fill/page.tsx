@@ -174,7 +174,7 @@ export default function TemplateFillPage({
   };
 
   return (
-    <div className={embedded ? "space-y-5 p-4 text-slate-900" : "max-w-7xl mx-auto p-6 space-y-6 text-slate-900"}>
+    <div className={embedded ? "flex h-full min-h-0 flex-col gap-5 p-4 text-slate-900" : "max-w-7xl mx-auto p-6 space-y-6 text-slate-900"}>
       {!embedded && <div className="flex items-center justify-between bg-white border shadow-sm rounded-[2rem] p-6">
         <div className="flex items-center gap-4">
           <Link href="/templates" className="w-11 h-11 rounded-2xl border border-slate-100 flex items-center justify-center text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors">
@@ -197,11 +197,11 @@ export default function TemplateFillPage({
       )}
 
       {loading ? (
-        <div className="flex items-center justify-center p-20 text-blue-500">
+        <div className="flex min-h-0 flex-1 items-center justify-center p-20 text-blue-500">
           <Loader2 className="animate-spin" />
         </div>
       ) : (
-        <div className="grid lg:grid-cols-12 gap-6 items-start">
+        <div className={embedded ? "grid min-h-0 flex-1 grid-cols-1 gap-6 overflow-y-auto pr-1 pb-1 lg:grid-cols-12" : "grid lg:grid-cols-12 gap-6 items-start"}>
           <div className="lg:col-span-5 space-y-5">
             <div className="bg-white border shadow-sm rounded-[2rem] p-6 space-y-4">
               <div className="grid md:grid-cols-2 gap-4">
@@ -285,7 +285,7 @@ export default function TemplateFillPage({
             </div>
           </div>
 
-          <div className="lg:col-span-7 sticky top-6">
+          <div className={embedded ? "lg:col-span-7" : "lg:col-span-7 sticky top-6"}>
             <div className="bg-blue-50/20 border border-blue-50 shadow-sm rounded-[2rem] overflow-hidden">
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-blue-50 bg-white/70 p-5">
                 <div>
@@ -304,7 +304,7 @@ export default function TemplateFillPage({
                   </button>
                 </div>
               </div>
-              <div className="p-8 min-h-[560px] whitespace-pre-wrap text-slate-800 text-lg leading-relaxed bg-white/40">
+              <div className={`p-8 whitespace-pre-wrap text-slate-800 text-lg leading-relaxed bg-white/40 ${embedded ? "min-h-[420px]" : "min-h-[560px]"}`}>
                 {finalText || <span className="text-slate-300 italic">{c.emptyResult}</span>}
               </div>
             </div>

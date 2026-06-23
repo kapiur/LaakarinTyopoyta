@@ -80,7 +80,7 @@ export default function WorkspaceModuleHost({
   const CalculatorComponent = templateModule || literatureModule || guideModule ? null : calculatorComponents[moduleId];
 
   return (
-    <section className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+    <section className="min-w-0 flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-3 py-3 sm:px-4">
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
           <button type="button" onClick={onClose} className="flex min-h-10 shrink-0 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 hover:bg-blue-50 hover:text-blue-700">
