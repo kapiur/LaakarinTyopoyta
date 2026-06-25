@@ -183,6 +183,13 @@ const cases: TestCase[] = [
     expectedFragments: ['12.3.2024', '15.4.2024'],
     forbiddenFragments: ['[DATE]'],
   },
+    {
+      name: 'Clinical transform keeps chronology dates while still redacting names',
+      input: `Leikkaus tehty 12.3.2024. Kontrolli 15.4.2024. Potilas: Matti Meikalainen.`,
+      mode: 'clinicalTransform',
+      expectedFragments: ['12.3.2024', '15.4.2024', 'Potilas: [NAME]'],
+      forbiddenFragments: ['Matti Meikalainen'],
+    },
   {
     name: 'Exact dates are redacted in storage mode',
     input: `Leikkaus tehty 12.3.2024. Kontrolli 15.4.2024.`,
@@ -190,13 +197,13 @@ const cases: TestCase[] = [
     expectedFragments: ['[DATE]'],
     forbiddenFragments: ['12.3.2024', '15.4.2024'],
   },
-  {
-    name: 'Clinical headings acronyms and references are not treated as names in clinical transform mode',
-    input: clinicalHeadingSample,
-    mode: 'clinicalTransform',
-    expectedFragments: ['Kts. yst. kollega [NAME] potilasteksti [DATE]', 'Potilaan HbA1c', 'Libressa TIR', 'Suunnitelma', 'Hoitaja opastanut'],
-    forbiddenFragments: ['[NAME]1c', '[NAME] ollut ainoastaan', '[NAME]. yst.', '[NAME] opastanut'],
-  },
+    {
+      name: 'Clinical headings acronyms and references are not treated as names in clinical transform mode',
+      input: clinicalHeadingSample,
+      mode: 'clinicalTransform',
+      expectedFragments: ['Kts. yst. kollega [NAME] potilasteksti 8.10.2025', 'Potilaan HbA1c', 'Libressa TIR', 'Suunnitelma', 'Hoitaja opastanut'],
+      forbiddenFragments: ['[NAME]1c', '[NAME] ollut ainoastaan', '[NAME]. yst.', '[NAME] opastanut', '[DATE]'],
+    },
   {
     name: 'Comma separated clinician name is redacted',
     input: commaNameSample,

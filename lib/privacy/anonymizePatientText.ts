@@ -69,7 +69,16 @@ function isStrictContextMode(mode: AnonymizationMode) {
 }
 
 function shouldRedactExactDates(mode: AnonymizationMode) {
-  return isStorageLikeMode(mode) || mode === 'clinicalTransform' || mode === 'clinicalBuilder';
+  return isStorageLikeMode(mode);
+}
+
+function hasNearbyDirectIdentifier(text: string, start: number, end: number, strict = false) {
+  const windowSize = strict ? STRICT_CONTEXT_WINDOW_CHARS : CONTEXT_WINDOW_CHARS;
+  const windowStart = Math.max(0, start - windowSize);
+  const windowEnd = Math.min(text.length, end + windowSize);
+  const nearby = text.slice(windowStart, windowEnd);
+
+  return regexMatches(HETU_PATTERN, nearby) || regexMatches(PHONE_PATTERN, nearby) || regexMatches(EMAIL_PATTERN, nearby);
 }
 
 const CONTEXT_WINDOW_CHARS = 120;
@@ -393,6 +402,7 @@ function collectBareDatesNearIdentifiers(text: string, mode: AnonymizationMode, 
   const findings: InternalFinding[] = [];
   const regex = new RegExp(DATE_PATTERN.source, DATE_PATTERN.flags);
   const strictMode = isStrictContextMode(mode);
+  const storageMode = isStorageLikeMode(mode);
   let match: RegExpExecArray | null;
 
   while ((match = regex.exec(text)) !== null) {
@@ -400,7 +410,14 @@ function collectBareDatesNearIdentifiers(text: string, mode: AnonymizationMode, 
     const start = match.index;
     const end = start + value.length;
 
-    if (hasNearbyIdentifier(text, start, end, personContextPattern, strictMode)) {
+    if (storageMode) {
+      if (hasNearbyIdentifier(text, start, end, personContextPattern, true)) {
+        findings.push(createFinding('dateOfBirth', value, '[DATE]', start));
+      }
+      continue;
+    }
+
+    if (hasNearbyDirectIdentifier(text, start, end, strictMode)) {
       findings.push(createFinding('dateOfBirth', value, strictMode ? '[DATE]' : '[DATE_OF_BIRTH]', start));
     }
   }
@@ -487,22 +504,17 @@ function collectCommaSeparatedNames(text: string, mode: AnonymizationMode, perso
   return findings;
 }
 
-function collectStrictDates(text: string, mode: AnonymizationMode, personContextPattern: RegExp): InternalFinding[] {
+function collectStrictDates(text: string, mode: AnonymizationMode): InternalFinding[] {
   if (!shouldRedactExactDates(mode)) return [];
 
   const findings: InternalFinding[] = [];
   const regex = new RegExp(DATE_PATTERN.source, DATE_PATTERN.flags);
-  const alwaysRedact = isStorageLikeMode(mode) || mode === 'clinicalBuilder';
   let match: RegExpExecArray | null;
 
   while ((match = regex.exec(text)) !== null) {
     const value = match[0];
     const start = match.index;
-    const end = start + value.length;
-
-    if (alwaysRedact || hasNearbyIdentifier(text, start, end, personContextPattern, true)) {
-      findings.push(createFinding('dateOfBirth', value, '[DATE]', start));
-    }
+    findings.push(createFinding('dateOfBirth', value, '[DATE]', start));
   }
 
   return findings;
@@ -530,7 +542,7 @@ function collectMatches(text: string, mode: AnonymizationMode, localeKeys: Priva
     ...collectBareDatesNearIdentifiers(text, mode, localeRegex.personContextPattern),
     ...collectBareNamesNearIdentifiers(text, mode, localeRegex.personContextPattern),
     ...collectCommaSeparatedNames(text, mode, localeRegex.personContextPattern),
-    ...collectStrictDates(text, mode, localeRegex.personContextPattern),
+    ...collectStrictDates(text, mode),
     ...collectStandaloneFullInputName(text, mode),
   ];
 
