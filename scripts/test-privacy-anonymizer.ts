@@ -142,6 +142,13 @@ const cases: TestCase[] = [
     forbiddenFragments: ['[DATE]'],
   },
   {
+    name: 'Clinical transform keeps chronology dates while still redacting names',
+    input: `Leikkaus tehty 12.3.2024. Kontrolli 15.4.2024. Potilas: Matti Meikalainen.`,
+    mode: 'clinicalTransform',
+    expectedFragments: ['12.3.2024', '15.4.2024', 'Potilas [NAME]'],
+    forbiddenFragments: ['Matti Meikalainen'],
+  },
+  {
     name: 'Exact dates are redacted in storage mode',
     input: `Leikkaus tehty 12.3.2024. Kontrolli 15.4.2024.`,
     mode: 'storage',

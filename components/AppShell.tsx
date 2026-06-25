@@ -32,7 +32,7 @@ function WorkspaceShell({ children }: { children: React.ReactNode }) {
   }, [mobileNavOpen]);
 
   return (
-    <div className="flex h-[100dvh] min-h-0 overflow-hidden">
+    <div className="flex min-h-[100dvh] md:h-[100dvh] md:min-h-0 md:overflow-hidden">
       <Sidebar />
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="safe-area-top flex h-[calc(3.5rem+env(safe-area-inset-top))] shrink-0 items-end border-b border-slate-200 bg-white md:hidden">
@@ -47,7 +47,7 @@ function WorkspaceShell({ children }: { children: React.ReactNode }) {
             <InstallPwaButton />
           </div>
         </header>
-        <main className="relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-slate-50 scroll-smooth">
+        <main className="relative flex-1 overflow-visible bg-slate-50 scroll-smooth md:min-h-0 md:overflow-y-auto md:overflow-x-hidden">
           <div className="mx-auto max-w-[1600px] p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-4 md:p-6 lg:p-8">{children}</div>
         </main>
       </div>
