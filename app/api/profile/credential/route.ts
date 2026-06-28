@@ -1,9 +1,8 @@
-import { PrismaClient } from "@prisma/client";
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { requireAuthenticatedUser } from "../../../../lib/admin-auth";
-
-const prisma = new PrismaClient();
+import { prisma } from "../../../../lib/prisma";
+import { revokeAllManagedUserSessionsForUser } from "../../../../lib/authSession";
 
 export async function POST(req: Request) {
   const { session, error } = await requireAuthenticatedUser();
@@ -50,6 +49,8 @@ export async function POST(req: Request) {
         mustChangePassword: false
       }
     });
+
+    await revokeAllManagedUserSessionsForUser(userId, "password_changed");
 
     return NextResponse.json({ success: true });
   } catch (error) {

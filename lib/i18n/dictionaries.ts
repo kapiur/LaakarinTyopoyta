@@ -27,6 +27,8 @@ export const dictionaries = {
       signingIn: "Kirjaudutaan...",
       invalidCredentials: "Väärä sähköposti tai salasana.",
       serverError: "Palvelinvirhe. Yritä uudelleen.",
+      sessionEnded: "Tiliä käytettiin toisella laitteella. Edellinen istunto päätettiin.",
+      sessionReplacedNotice: "Tiliä käytettiin toisella laitteella. Edellinen istunto päätettiin.",
     },
     onboarding: {
       loading: "Valmistellaan työtilaa...",
@@ -419,6 +421,8 @@ export const dictionaries = {
       signingIn: "Вход...",
       invalidCredentials: "Неверная почта или пароль.",
       serverError: "Ошибка сервера. Попробуйте снова.",
+      sessionEnded: "Аккаунт уже используется на другом устройстве. Предыдущая сессия завершена.",
+      sessionReplacedNotice: "Аккаунт уже используется на другом устройстве. Предыдущая сессия завершена.",
     },
     onboarding: {
       loading: "Подготавливаем рабочее пространство...",
@@ -811,6 +815,8 @@ export const dictionaries = {
       signingIn: "Signing in...",
       invalidCredentials: "Incorrect email or password.",
       serverError: "Server error. Try again.",
+      sessionEnded: "This account was used on another device. The previous session was ended.",
+      sessionReplacedNotice: "This account was used on another device. The previous session was ended.",
     },
     onboarding: {
       loading: "Preparing your workspace...",
@@ -1203,6 +1209,8 @@ export const dictionaries = {
       signingIn: "Anmeldung laeuft...",
       invalidCredentials: "E-Mail oder Passwort ist falsch.",
       serverError: "Serverfehler. Bitte erneut versuchen.",
+      sessionEnded: "Dieses Konto wurde auf einem anderen Geraet verwendet. Die vorherige Sitzung wurde beendet.",
+      sessionReplacedNotice: "Dieses Konto wurde auf einem anderen Geraet verwendet. Die vorherige Sitzung wurde beendet.",
     },
     onboarding: {
       loading: "Arbeitsbereich wird vorbereitet...",

@@ -1,9 +1,7 @@
-import { PrismaClient } from "@prisma/client";
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { requireAdmin } from "../../../../lib/admin-auth";
-
-const prisma = new PrismaClient();
+import { prisma } from "../../../../lib/prisma";
 
 function normalizeEmail(email: string) {
   return email.toLowerCase().trim();

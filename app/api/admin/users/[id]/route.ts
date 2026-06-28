@@ -1,8 +1,7 @@
-import { PrismaClient } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { requireAdmin } from "../../../../../lib/admin-auth";
-
-const prisma = new PrismaClient();
+import { prisma } from "../../../../../lib/prisma";
+import { revokeAllManagedUserSessionsForUser } from "../../../../../lib/authSession";
 
 function normalizeEmail(email: string) {
   return email.toLowerCase().trim();
@@ -74,6 +73,10 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
         lastLoginAt: true
       }
     });
+
+    if (typeof isActive === "boolean" && isActive === false) {
+      await revokeAllManagedUserSessionsForUser(userId, "account_deactivated");
+    }
 
     return NextResponse.json(updatedUser);
   } catch (error) {

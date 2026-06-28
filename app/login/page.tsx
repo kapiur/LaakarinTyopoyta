@@ -1,18 +1,26 @@
 "use client";
-import { useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { signIn } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Globe, LayoutDashboard, Loader2 } from 'lucide-react';
 import { useI18n } from '../../lib/useI18n';
 import { SUPPORTED_UI_LANGUAGES, type UiLanguage } from '../../lib/i18n';
 
-export default function LoginPage() {
+function LoginPageContent() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { language, setLanguage, t } = useI18n();
+  const sessionEndReason = searchParams.get('reason') === 'session-ended';
+
+  useEffect(() => {
+    if (sessionEndReason) {
+      setError(t('auth.sessionEnded'));
+    }
+  }, [sessionEndReason, t]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -119,5 +127,13 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginPageContent />
+    </Suspense>
   );
 }

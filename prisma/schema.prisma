@@ -31,6 +31,7 @@ model User {
   lastLoginAt        DateTime?
   createdAt          DateTime         @default(now())
   updatedAt          DateTime         @updatedAt
+  authSessions       UserAuthSession[]
 
   // Обратные связи
   categories      Category[]
@@ -56,6 +57,21 @@ model User {
   // Новые связи для каталога ссылок
   linkCategories  LinkCategory[]
   quickLinks      QuickLink[]
+}
+
+model UserAuthSession {
+  id           String   @id @default(cuid())
+  userId       Int
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessionKey   String   @unique
+  createdAt    DateTime @default(now())
+  lastSeenAt   DateTime @default(now())
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  revokedReason String?
+
+  @@index([userId, revokedAt, expiresAt])
+  @@index([sessionKey])
 }
 
 // ==========================================
