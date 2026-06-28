@@ -72,13 +72,32 @@ function shouldRedactExactDates(mode: AnonymizationMode) {
   return isStorageLikeMode(mode);
 }
 
-function hasNearbyDirectIdentifier(text: string, start: number, end: number, strict = false) {
+function hasNearbyBareDateOfBirthContext(
+  text: string,
+  start: number,
+  end: number,
+  personContextPattern: RegExp,
+  strict = false,
+) {
   const windowSize = strict ? STRICT_CONTEXT_WINDOW_CHARS : CONTEXT_WINDOW_CHARS;
   const windowStart = Math.max(0, start - windowSize);
   const windowEnd = Math.min(text.length, end + windowSize);
   const nearby = text.slice(windowStart, windowEnd);
 
-  return regexMatches(HETU_PATTERN, nearby) || regexMatches(PHONE_PATTERN, nearby) || regexMatches(EMAIL_PATTERN, nearby);
+  if (regexMatches(HETU_PATTERN, nearby)) return true;
+
+  const hasDirectContactIdentifier =
+    regexMatches(PHONE_PATTERN, nearby) || regexMatches(EMAIL_PATTERN, nearby);
+
+  if (!hasDirectContactIdentifier) {
+    return false;
+  }
+
+  return (
+    personContextPattern.test(nearby) ||
+    regexMatches(BARE_NAME_PATTERN, nearby) ||
+    regexMatches(COMMA_NAME_PATTERN, nearby)
+  );
 }
 
 const CONTEXT_WINDOW_CHARS = 120;
@@ -417,7 +436,7 @@ function collectBareDatesNearIdentifiers(text: string, mode: AnonymizationMode, 
       continue;
     }
 
-    if (hasNearbyDirectIdentifier(text, start, end, strictMode)) {
+    if (hasNearbyBareDateOfBirthContext(text, start, end, personContextPattern, strictMode)) {
       findings.push(createFinding('dateOfBirth', value, strictMode ? '[DATE]' : '[DATE_OF_BIRTH]', start));
     }
   }

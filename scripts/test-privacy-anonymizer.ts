@@ -197,6 +197,28 @@ const cases: TestCase[] = [
     expectedFragments: ['[DATE]'],
     forbiddenFragments: ['12.3.2024', '15.4.2024'],
   },
+  {
+    name: 'Clinical transform preserves event dates near encounter codes and staff signatures',
+    input: [
+      '03.03.2026VOMANYD2',
+      'YLE',
+      'E87.6',
+      'Hypokalemia',
+      'Romanenko, Olga (Terveyskeskuslaakari)',
+      'Suunnitelma',
+      'Tulospostia tarkistettu, potilas kaynyt verikokeissa 23.2.26. CRP matala ja K 4,0 eli norm.',
+    ].join('\n'),
+    mode: 'clinicalTransform',
+    expectedFragments: ['03.03.2026VOMANYD2', '23.2.26', 'Ammattilainen [NAME]'],
+    forbiddenFragments: ['[DATE]'],
+  },
+  {
+    name: 'Clinical transform still redacts bare date of birth when paired with name and phone',
+    input: `${syntheticName} ${syntheticBareDob} ${syntheticLocalPhone}`,
+    mode: 'clinicalTransform',
+    expectedFragments: ['[NAME]', '[DATE]', '[PHONE]'],
+    forbiddenFragments: [syntheticName, syntheticBareDob, syntheticLocalPhone],
+  },
     {
       name: 'Clinical headings acronyms and references are not treated as names in clinical transform mode',
       input: clinicalHeadingSample,
