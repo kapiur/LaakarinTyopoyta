@@ -500,8 +500,11 @@ export async function POST(req: Request) {
       getConfiguredSourceNames(clinicalConfig),
     );
 
+    const outputPrivacyMode =
+      typeof mode === 'string' ? ('clinicalTransform' as const) : ('transientClinicalChat' as const);
+
     const outputPrivacy = preparePrivacyPayload([
-      { key: 'output', value: normalizedResponseContent, mode: 'persistentStorage' },
+      { key: 'output', value: normalizedResponseContent, mode: outputPrivacyMode },
     ]);
     const safeOutputContent = outputPrivacy.sanitized.output ?? normalizedResponseContent;
 
