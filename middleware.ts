@@ -1,4 +1,23 @@
-export { default } from "next-auth/middleware";
+import { NextResponse } from "next/server";
+import { withAuth } from "next-auth/middleware";
+
+export default withAuth(
+  function middleware(request) {
+    const requestHeaders = new Headers(request.headers);
+    requestHeaders.set("x-protected-pathname", request.nextUrl.pathname);
+
+    return NextResponse.next({
+      request: {
+        headers: requestHeaders,
+      },
+    });
+  },
+  {
+    pages: {
+      signIn: "/login",
+    },
+  },
+);
 
 export const config = {
   // Список путей, которые должны быть доступны только после входа в систему.

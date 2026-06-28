@@ -1,7 +1,10 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
+import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 import "./globals.css";
 import AppShell from "../components/AppShell";
+import { getCurrentSession } from "../lib/admin-auth";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -28,7 +31,17 @@ export const viewport: Viewport = {
   themeColor: "#ffffff",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const protectedPathname = headers().get("x-protected-pathname");
+
+  if (protectedPathname) {
+    const session = await getCurrentSession();
+
+    if (!session?.user) {
+      redirect("/login?reason=session-ended");
+    }
+  }
+
   return (
     <html lang="fi" className="antialiased">
       <body className={`${inter.className} min-h-[100dvh] bg-slate-50 text-slate-900`}>
