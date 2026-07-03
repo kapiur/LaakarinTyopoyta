@@ -6,6 +6,7 @@ import { signOut, useSession } from "next-auth/react";
 import { 
   LayoutDashboard, 
   FileText, 
+  FileBadge2,
   Calculator, 
   Settings, 
   LogOut, 
@@ -36,6 +37,7 @@ type SidebarVisibilityItem = {
 const iconMap = {
   LayoutDashboard,
   FileText,
+  FileBadge2,
   Bot,
   Zap,
   LinkIcon,
@@ -182,7 +184,7 @@ export default function Sidebar() {
         <Link
           href="/settings"
           title={t("sidebar.settings")}
-          className={`flex items-center w-full transition-all group rounded-xl ${isCollapsed ? "justify-center px-0 py-3" : "gap-3 px-4 py-3"} ${pathname.startsWith('/settings') || pathname.startsWith('/profile/security') || pathname.startsWith('/admin/users') ? 'bg-blue-50 text-blue-600 font-bold shadow-sm' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
+          className={`flex items-center w-full transition-all group rounded-xl ${isCollapsed ? "justify-center px-0 py-3" : "gap-3 px-4 py-3"} ${pathname.startsWith('/settings') || pathname.startsWith('/profile/security') || pathname.startsWith('/admin/users') || pathname.startsWith('/admin/ai-access') || pathname.startsWith('/admin/ai-providers') || pathname.startsWith('/admin/clinical-sources') || pathname.startsWith('/admin/lausunto-access') ? 'bg-blue-50 text-blue-600 font-bold shadow-sm' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
         >
           <Settings size={20} className="group-hover:rotate-45 transition-transform" />
           {!isCollapsed && <span className="text-sm font-medium">{t("sidebar.settings")}</span>}

@@ -47,6 +47,7 @@ model User {
   aiProfile       UserAiProfile?
   clinicalSettings UserClinicalSettings?
   clinicalSourcePreferences UserClinicalSourcePreference[]
+  lausuntoAccessPolicy UserLausuntoAccessPolicy?
   substanceNotes  Substance[]      // Связь для Wiki-заметок
   
   // Новые связи для каталога ссылок
@@ -173,6 +174,17 @@ model SidebarMenuPreference {
 
   @@unique([userId, itemKey])
   @@index([userId])
+}
+
+model UserLausuntoAccessPolicy {
+  id                  String   @id @default(cuid())
+  userId              Int      @unique
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lausuntoToolEnabled Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([lausuntoToolEnabled])
 }
 
 model AIHistory {

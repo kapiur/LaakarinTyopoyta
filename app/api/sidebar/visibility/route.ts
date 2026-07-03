@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../../../../lib/auth";
+import { getAvailableSidebarKeys } from "../../../../lib/lausunto/access";
 import { getSidebarItemDefinition, getSortedSidebarItemDefinitions, isSidebarItemKey, type SidebarItemKey } from "../../../../lib/navigation/sidebarRegistry";
 import { prisma } from "../../../../lib/prisma";
 
@@ -29,10 +30,12 @@ async function getVisibilityRows(userId: number) {
   }
 }
 
-function buildSidebarPayload(visibilityRows: SidebarVisibilityRow[]) {
+function buildSidebarPayload(visibilityRows: SidebarVisibilityRow[], availableKeys?: string[]) {
   const visibilityMap = new Map(visibilityRows.map((row) => [row.itemKey, row]));
+  const allowed = availableKeys ? new Set(availableKeys) : null;
 
   return getSortedSidebarItemDefinitions()
+    .filter((item) => (allowed ? allowed.has(item.key) : true))
     .map((item) => {
       const preference = visibilityMap.get(item.key);
       return {
@@ -54,7 +57,8 @@ export async function GET() {
     if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const visibilityRows = await getVisibilityRows(userId);
-    const items = buildSidebarPayload(visibilityRows);
+    const availableKeys = await getAvailableSidebarKeys(userId, getSortedSidebarItemDefinitions().map((item) => item.key));
+    const items = buildSidebarPayload(visibilityRows, availableKeys);
 
     return NextResponse.json({ items });
   } catch (error) {
@@ -80,6 +84,11 @@ export async function PUT(req: Request) {
 
     if (typeof isVisible !== "boolean") {
       return NextResponse.json({ error: "isVisible must be boolean" }, { status: 400 });
+    }
+
+    const availableKeys = await getAvailableSidebarKeys(userId, getSortedSidebarItemDefinitions().map((item) => item.key));
+    if (!availableKeys.includes(itemKey)) {
+      return NextResponse.json({ error: "Sidebar item is not available for this user" }, { status: 400 });
     }
 
     const itemDefinition = getSidebarItemDefinition(itemKey);
@@ -128,14 +137,13 @@ export async function PATCH(req: Request) {
     }
 
     const normalizedOrderedKeys = orderedKeys as SidebarItemKey[];
+    const availableKeys = await getAvailableSidebarKeys(userId, getSortedSidebarItemDefinitions().map((item) => item.key)) as SidebarItemKey[];
 
     if (new Set(normalizedOrderedKeys).size !== normalizedOrderedKeys.length) {
       return NextResponse.json({ error: "orderedKeys must not contain duplicates" }, { status: 400 });
     }
 
-    const defaultKeys = getSortedSidebarItemDefinitions().map((item) => item.key) as SidebarItemKey[];
-
-    if (normalizedOrderedKeys.length !== defaultKeys.length || defaultKeys.some((key) => !normalizedOrderedKeys.includes(key))) {
+    if (normalizedOrderedKeys.length !== availableKeys.length || availableKeys.some((key) => !normalizedOrderedKeys.includes(key))) {
       return NextResponse.json({ error: "orderedKeys must include every sidebar item exactly once" }, { status: 400 });
     }
 
@@ -159,7 +167,7 @@ export async function PATCH(req: Request) {
     );
 
     const visibilityRows = await getVisibilityRows(userId);
-    const items = buildSidebarPayload(visibilityRows);
+    const items = buildSidebarPayload(visibilityRows, availableKeys);
 
     return NextResponse.json({ items });
   } catch (error) {
