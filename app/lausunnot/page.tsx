@@ -57,7 +57,7 @@ export default function LausunnotPage() {
   const [query, setQuery] = useState("");
   const [selectedIcd, setSelectedIcd] = useState<Icd10Entry | null>(null);
   const [mode, setMode] = useState<LausuntoMode>("sairausloma");
-  const [purpose, setPurpose] = useState("short_absence");
+  const [purpose, setPurpose] = useState("sairauslomatodistus");
   const [sourceText, setSourceText] = useState("");
   const [additionalNotes, setAdditionalNotes] = useState("");
   const [occupation, setOccupation] = useState("");
@@ -164,21 +164,24 @@ export default function LausunnotPage() {
 
   const purposeOptions = useMemo<Record<LausuntoMode, PurposeOption[]>>(() => ({
     sairausloma: [
-      { value: "short_absence", label: language === "ru" ? "Краткий больничный" : language === "en" ? "Short sick leave" : language === "de" ? "Kurze Arbeitsunfaehigkeit" : "Lyhyt sairauspoissaolo" },
-      { value: "return_to_work", label: language === "ru" ? "Оценка возврата к работе" : language === "en" ? "Return-to-work assessment" : language === "de" ? "Rueckkehr an die Arbeit" : "Tyohon paluun arvio" },
-      { value: "extended_absence", label: language === "ru" ? "Продление больничного" : language === "en" ? "Extended sick leave" : language === "de" ? "Verlaengerte Arbeitsunfaehigkeit" : "Sairauspoissaolon jatko" },
+      { value: "sairauslomatodistus", label: "Sairauslomatodistus" },
+      { value: "sairauspoissaolon_jatko", label: "Sairauspoissaolon jatko" },
+      { value: "tyohon_paluun_arvio", label: "Työhön paluun arvio" },
     ],
     b_lausunto: [
-      { value: "rehabilitation", label: language === "ru" ? "Реабилитация / пособие" : language === "en" ? "Rehabilitation / benefit support" : language === "de" ? "Rehabilitation / Leistungsbegruendung" : "Kuntoutus tai etuushakemus" },
-      { value: "work_capacity", label: language === "ru" ? "Оценка трудоспособности" : language === "en" ? "Work capacity assessment" : language === "de" ? "Beurteilung der Arbeitsfaehigkeit" : "Tyokyvyn arvio" },
-      { value: "treatment_justification", label: language === "ru" ? "Обоснование лечения / наблюдения" : language === "en" ? "Treatment / follow-up justification" : language === "de" ? "Begruendung fuer Behandlung / Verlauf" : "Hoidon ja seurannan perustelu" },
+      { value: "sairauspaivaraha", label: "Sairauspäiväraha" },
+      { value: "osasairauspaivaraha", label: "Osasairauspäiväraha" },
+      { value: "kuntoutus", label: "Kuntoutus" },
+      { value: "nuoren_kuntoutusraha", label: "Nuoren kuntoutusraha" },
+      { value: "kuntoutustuki_tyokyvyttomyyselake", label: "Kuntoutustuki tai työkyvyttömyyseläke" },
+      { value: "laake_tai_ravintovalmiste_korvausoikeus", label: "Lääkkeen tai kliinisen ravintovalmisteen korvausoikeus" },
     ],
     c_lausunto: [
-      { value: "long_term_work_capacity", label: language === "ru" ? "Длительная оценка трудоспособности" : language === "en" ? "Long-term work capacity assessment" : language === "de" ? "Langfristige Arbeitsfaehigkeitsbeurteilung" : "Pitka-aikainen tyokyvyn arvio" },
-      { value: "pension_or_benefit", label: language === "ru" ? "Пенсия / длительное пособие" : language === "en" ? "Pension / long-term benefit support" : language === "de" ? "Rente / langfristige Leistung" : "Elake- tai pitka etuusasia" },
-      { value: "functional_capacity", label: language === "ru" ? "Развёрнутая оценка функции" : language === "en" ? "Detailed functional capacity assessment" : language === "de" ? "Ausfuehrliche Funktionsbeurteilung" : "Laaja toimintakyvyn arvio" },
+      { value: "alle_16_vammaistuki", label: "Alle 16-vuotiaan vammaistuki" },
+      { value: "16_vuotta_tayttaneen_vammaistuki", label: "16 vuotta täyttäneen vammaistuki" },
+      { value: "elaketta_saavan_hoitotuki", label: "Eläkettä saavan hoitotuki" },
     ],
-  }), [language]);
+  }), []);
 
   const diagnosisSuggestions = useMemo(() => extractDiagnosisSuggestions(sourceText), [sourceText]);
   const manualSearchResults = useMemo(() => searchIcd10Catalog(query), [query]);
