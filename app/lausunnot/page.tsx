@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Copy, FileBadge2, Search } from "lucide-react";
 import { useI18n } from "../../lib/useI18n";
+import { searchIcd10Catalog, type Icd10Entry } from "../../lib/lausunto/icd10Catalog";
 
 type LausuntoMode = "sairausloma" | "b_lausunto" | "c_lausunto";
 
@@ -12,29 +13,52 @@ type AccessPayload = {
   policyEnabled: boolean;
 };
 
-type Icd10Entry = {
-  code: string;
-  fi: string;
-  en: string;
-  ru: string;
-  de: string;
+const MODE_OPTIONS: LausuntoMode[] = ["sairausloma", "b_lausunto", "c_lausunto"];
+
+type PurposeOption = {
+  value: string;
+  label: string;
 };
 
-const MODE_OPTIONS: LausuntoMode[] = ["sairausloma", "b_lausunto", "c_lausunto"];
+function scoreDiagnosisFromSource(entry: Icd10Entry, text: string) {
+  const normalized = text.trim().toLowerCase();
+  if (!normalized) return 0;
+
+  let score = 0;
+  const terms = [entry.code, entry.fi, entry.en, entry.ru, entry.de]
+    .join("|")
+    .toLowerCase()
+    .split("|")
+    .filter(Boolean);
+
+  for (const term of terms) {
+    if (!term || term.length < 3) continue;
+    if (normalized.includes(term)) {
+      score += term === entry.code.toLowerCase() ? 120 : Math.min(60, term.length * 4);
+    }
+  }
+
+  return score;
+}
+
+function extractDiagnosisSuggestions(text: string, limit = 6): Icd10Entry[] {
+  return searchIcd10Catalog(text, 24)
+    .map((entry) => ({ entry, score: scoreDiagnosisFromSource(entry, text) }))
+    .filter((item) => item.score > 0)
+    .sort((a, b) => b.score - a.score || a.entry.code.localeCompare(b.entry.code, "fi"))
+    .slice(0, limit)
+    .map((item) => item.entry);
+}
 
 export default function LausunnotPage() {
   const { language } = useI18n();
   const [access, setAccess] = useState<AccessPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<Icd10Entry[]>([]);
   const [selectedIcd, setSelectedIcd] = useState<Icd10Entry | null>(null);
   const [mode, setMode] = useState<LausuntoMode>("sairausloma");
-  const [purpose, setPurpose] = useState("");
+  const [purpose, setPurpose] = useState("short_absence");
   const [sourceText, setSourceText] = useState("");
-  const [objectiveFindings, setObjectiveFindings] = useState("");
-  const [workLimitations, setWorkLimitations] = useState("");
-  const [treatmentPlan, setTreatmentPlan] = useState("");
   const [additionalNotes, setAdditionalNotes] = useState("");
   const [occupation, setOccupation] = useState("");
   const [absenceFrom, setAbsenceFrom] = useState("");
@@ -49,16 +73,17 @@ export default function LausunnotPage() {
         noAccess: "Этот инструмент доступен только пользователям с включённым доступом и страной работы Финляндия.",
         mode: "Тип документа",
         purpose: "Для чего документ",
-        sourceText: "Исходные тексты и выдержки",
-        objectiveFindings: "Объективные данные и текущая оценка",
-        workLimitations: "Ограничения трудоспособности / функции",
-        treatmentPlan: "План, лечение и продолжение",
+        sourceText: "Исходные тексты одним полем",
+        sourceHint: "Вставьте сюда все записи, выписки и фрагменты. Инструмент сам использует этот массив как основу для lausunto.",
         additionalNotes: "Дополнительные замечания",
         occupation: "Профессия / характер работы",
         absenceFrom: "Больничный с",
         absenceTo: "Больничный по",
-        icdTitle: "Поиск ICD-10",
-        icdHint: "Особенно полезно для sairauslomatodistus: можно быстро найти подходящий код и расшифровку.",
+        diagnosisTitle: "Диагноз и ICD-10",
+        diagnosisHint: "Ниже сначала показываются диагнозы, найденные по смыслу в тексте. При необходимости врач может поправить выбор вручную.",
+        suggestedDiagnosis: "Предположительно из текста",
+        manualDiagnosis: "Ручной поиск ICD-10",
+        noDiagnosisSuggestion: "Автоподсказка пока не нашла уверенный диагноз. Можно выбрать вручную.",
         icdPlaceholder: "Например: I10, hypertension, alaselkan kipu",
         preview: "Черновик по разделам",
         copy: copied ? "Скопировано" : "Копировать",
@@ -72,16 +97,17 @@ export default function LausunnotPage() {
         noAccess: "This tool is available only for Finland workflow users with explicit access.",
         mode: "Document type",
         purpose: "Purpose of document",
-        sourceText: "Source texts and excerpts",
-        objectiveFindings: "Objective findings and current assessment",
-        workLimitations: "Work limitations / functional impact",
-        treatmentPlan: "Plan, treatment, and follow-up",
+        sourceText: "All source texts in one field",
+        sourceHint: "Paste all notes and excerpts here. The tool uses this combined material as the basis for the draft.",
         additionalNotes: "Additional notes",
         occupation: "Occupation / job demands",
         absenceFrom: "Sick leave from",
         absenceTo: "Sick leave until",
-        icdTitle: "ICD-10 search",
-        icdHint: "Useful especially for sickness certificates.",
+        diagnosisTitle: "Diagnosis and ICD-10",
+        diagnosisHint: "Suggested diagnoses are first extracted from the text. The doctor can then refine or replace the choice manually.",
+        suggestedDiagnosis: "Suggested from source text",
+        manualDiagnosis: "Manual ICD-10 search",
+        noDiagnosisSuggestion: "No confident diagnosis suggestion yet. You can select one manually.",
         icdPlaceholder: "For example: I10, hypertension, low back pain",
         preview: "Structured draft",
         copy: copied ? "Copied" : "Copy",
@@ -95,16 +121,17 @@ export default function LausunnotPage() {
         noAccess: "Dieses Werkzeug ist nur fuer Nutzer mit Finnland-Kontext und expliziter Freischaltung verfuegbar.",
         mode: "Dokumenttyp",
         purpose: "Zweck des Dokuments",
-        sourceText: "Ausgangstexte und Auszuege",
-        objectiveFindings: "Objektive Befunde und aktuelle Einschaetzung",
-        workLimitations: "Arbeitsfaehigkeit / funktionelle Einschraenkungen",
-        treatmentPlan: "Plan, Behandlung und weiteres Vorgehen",
+        sourceText: "Alle Ausgangstexte in einem Feld",
+        sourceHint: "Hier koennen alle Notizen und Auszuege gesammelt eingefuegt werden. Daraus wird der Entwurf aufgebaut.",
         additionalNotes: "Zusaetzliche Hinweise",
         occupation: "Beruf / Arbeitsanforderungen",
         absenceFrom: "Arbeitsunfaehig ab",
         absenceTo: "Arbeitsunfaehig bis",
-        icdTitle: "ICD-10-Suche",
-        icdHint: "Besonders nuetzlich fuer Sairauslomatodistus.",
+        diagnosisTitle: "Diagnose und ICD-10",
+        diagnosisHint: "Zuerst werden Diagnosen sinngemaess aus dem Text vorgeschlagen. Danach kann der Arzt manuell nachsteuern.",
+        suggestedDiagnosis: "Aus dem Text vorgeschlagen",
+        manualDiagnosis: "Manuelle ICD-10-Suche",
+        noDiagnosisSuggestion: "Noch keine sichere Diagnose erkannt. Manuelle Auswahl ist moeglich.",
         icdPlaceholder: "Zum Beispiel: I10, Hypertonie, Kreuzschmerz",
         preview: "Entwurf nach Abschnitten",
         copy: copied ? "Kopiert" : "Kopieren",
@@ -117,22 +144,44 @@ export default function LausunnotPage() {
       noAccess: "Tama tyokalu on kaytossa vain niille kayttajille, joille se on erikseen sallittu ja joiden tyoskentelymaa on Suomi.",
       mode: "Asiakirjan tyyppi",
       purpose: "Mita varten lausunto kirjoitetaan",
-      sourceText: "Lahtotekstit ja ydintiedot",
-      objectiveFindings: "Objektiiviset loydokset ja nykyarvio",
-      workLimitations: "Toimintakyky ja tyokyvyn rajoitteet",
-      treatmentPlan: "Hoitosuunnitelma ja jatko",
+      sourceText: "Kaikki lahtotekstit yhteen kenttaan",
+      sourceHint: "Liita tahan kaikki potilaan merkinnat, lausunnot ja poimitut tiedot. Tyokalu rakentaa luonnoksen taman aineiston pohjalta.",
       additionalNotes: "Lisahuomiot",
       occupation: "Ammatti / työn kuva",
       absenceFrom: "Poissaolo alkaa",
       absenceTo: "Poissaolo paattyy",
-      icdTitle: "ICD-10-haku",
-      icdHint: "Erityisen hyodyllinen sairauslomatodistuksessa, jossa oikean diagnoosikoodin loytaminen on keskeista.",
+      diagnosisTitle: "Diagnoosi ja ICD-10",
+      diagnosisHint: "Tyokalu ehdottaa ensin tekstista loytyvia diagnooseja. Niita voi sen jalkeen muokata tai hakea kasin.",
+      suggestedDiagnosis: "Tekstista ehdotettu",
+      manualDiagnosis: "Manuaalinen ICD-10-haku",
+      noDiagnosisSuggestion: "Varmaa diagnoosiehdotusta ei loytynyt viela. Voit hakea diagnoosin kasin.",
       icdPlaceholder: "Esim. I10, hypertensio, alaselkan kipu",
       preview: "Osioitu luonnos",
       copy: copied ? "Kopioitu" : "Kopioi",
       loading: "Ladataan...",
     };
   }, [copied, language]);
+
+  const purposeOptions = useMemo<Record<LausuntoMode, PurposeOption[]>>(() => ({
+    sairausloma: [
+      { value: "short_absence", label: language === "ru" ? "Краткий больничный" : language === "en" ? "Short sick leave" : language === "de" ? "Kurze Arbeitsunfaehigkeit" : "Lyhyt sairauspoissaolo" },
+      { value: "return_to_work", label: language === "ru" ? "Оценка возврата к работе" : language === "en" ? "Return-to-work assessment" : language === "de" ? "Rueckkehr an die Arbeit" : "Tyohon paluun arvio" },
+      { value: "extended_absence", label: language === "ru" ? "Продление больничного" : language === "en" ? "Extended sick leave" : language === "de" ? "Verlaengerte Arbeitsunfaehigkeit" : "Sairauspoissaolon jatko" },
+    ],
+    b_lausunto: [
+      { value: "rehabilitation", label: language === "ru" ? "Реабилитация / пособие" : language === "en" ? "Rehabilitation / benefit support" : language === "de" ? "Rehabilitation / Leistungsbegruendung" : "Kuntoutus tai etuushakemus" },
+      { value: "work_capacity", label: language === "ru" ? "Оценка трудоспособности" : language === "en" ? "Work capacity assessment" : language === "de" ? "Beurteilung der Arbeitsfaehigkeit" : "Tyokyvyn arvio" },
+      { value: "treatment_justification", label: language === "ru" ? "Обоснование лечения / наблюдения" : language === "en" ? "Treatment / follow-up justification" : language === "de" ? "Begruendung fuer Behandlung / Verlauf" : "Hoidon ja seurannan perustelu" },
+    ],
+    c_lausunto: [
+      { value: "long_term_work_capacity", label: language === "ru" ? "Длительная оценка трудоспособности" : language === "en" ? "Long-term work capacity assessment" : language === "de" ? "Langfristige Arbeitsfaehigkeitsbeurteilung" : "Pitka-aikainen tyokyvyn arvio" },
+      { value: "pension_or_benefit", label: language === "ru" ? "Пенсия / длительное пособие" : language === "en" ? "Pension / long-term benefit support" : language === "de" ? "Rente / langfristige Leistung" : "Elake- tai pitka etuusasia" },
+      { value: "functional_capacity", label: language === "ru" ? "Развёрнутая оценка функции" : language === "en" ? "Detailed functional capacity assessment" : language === "de" ? "Ausfuehrliche Funktionsbeurteilung" : "Laaja toimintakyvyn arvio" },
+    ],
+  }), [language]);
+
+  const diagnosisSuggestions = useMemo(() => extractDiagnosisSuggestions(sourceText), [sourceText]);
+  const manualSearchResults = useMemo(() => searchIcd10Catalog(query), [query]);
 
   useEffect(() => {
     async function loadAccess() {
@@ -145,31 +194,21 @@ export default function LausunnotPage() {
   }, []);
 
   useEffect(() => {
-    if (!access?.enabled) return;
+    if (selectedIcd || diagnosisSuggestions.length === 0) return;
+    setSelectedIcd(diagnosisSuggestions[0]);
+  }, [diagnosisSuggestions, selectedIcd]);
 
-    const controller = new AbortController();
-    const timer = setTimeout(async () => {
-      const response = await fetch(`/api/lausunnot/icd-search?q=${encodeURIComponent(query)}`, {
-        cache: "no-store",
-        signal: controller.signal,
-      });
-      if (!response.ok) return;
-      const data = await response.json();
-      setResults(data.items || []);
-    }, 150);
-
-    return () => {
-      clearTimeout(timer);
-      controller.abort();
-    };
-  }, [access?.enabled, query]);
+  useEffect(() => {
+    setPurpose(purposeOptions[mode][0]?.value ?? "");
+  }, [mode, purposeOptions]);
 
   const draft = useMemo(() => {
     const lines: string[] = [];
 
     lines.push(mode === "sairausloma" ? "Sairauslomatodistus" : mode === "b_lausunto" ? "B-lausunto" : "C-lausunto");
     lines.push("");
-    if (purpose.trim()) lines.push(`Tarkoitus: ${purpose.trim()}`);
+    const selectedPurpose = purposeOptions[mode].find((item) => item.value === purpose);
+    if (selectedPurpose?.label) lines.push(`Tarkoitus: ${selectedPurpose.label}`);
     if (selectedIcd) lines.push(`Diagnoosi: ${selectedIcd.code} ${selectedIcd.fi}`);
     if (occupation.trim()) lines.push(`Ammatti / työn kuva: ${occupation.trim()}`);
     if (mode === "sairausloma" && (absenceFrom || absenceTo)) {
@@ -180,21 +219,6 @@ export default function LausunnotPage() {
       lines.push("Lahtotiedot:");
       lines.push(sourceText.trim());
     }
-    if (objectiveFindings.trim()) {
-      lines.push("");
-      lines.push("Objektiiviset loydokset ja arvio:");
-      lines.push(objectiveFindings.trim());
-    }
-    if (workLimitations.trim()) {
-      lines.push("");
-      lines.push("Toiminta- ja tyokyvyn rajoitteet:");
-      lines.push(workLimitations.trim());
-    }
-    if (treatmentPlan.trim()) {
-      lines.push("");
-      lines.push("Hoito ja jatkosuunnitelma:");
-      lines.push(treatmentPlan.trim());
-    }
     if (additionalNotes.trim()) {
       lines.push("");
       lines.push("Lisahuomiot:");
@@ -202,7 +226,7 @@ export default function LausunnotPage() {
     }
 
     return lines.join("\n");
-  }, [absenceFrom, absenceTo, additionalNotes, mode, objectiveFindings, occupation, purpose, selectedIcd, sourceText, treatmentPlan, workLimitations]);
+  }, [absenceFrom, absenceTo, additionalNotes, mode, occupation, purpose, purposeOptions, selectedIcd, sourceText]);
 
   async function copyDraft() {
     await navigator.clipboard.writeText(draft);
@@ -252,44 +276,75 @@ export default function LausunnotPage() {
             </select>
           </div>
 
-          <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50 p-4 space-y-3">
-            <div className="flex items-center gap-2 text-slate-900">
-              <Search size={16} />
-              <h2 className="text-sm font-bold">{copy.icdTitle}</h2>
-            </div>
-            <p className="text-xs text-slate-500">{copy.icdHint}</p>
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder={copy.icdPlaceholder}
-              className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800"
-            />
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-              {results.map((item) => (
-                <button
-                  key={item.code}
-                  type="button"
-                  onClick={() => setSelectedIcd(item)}
-                  className={`text-left rounded-2xl border px-4 py-3 ${selectedIcd?.code === item.code ? "border-blue-200 bg-blue-50" : "border-slate-200 bg-white hover:bg-slate-50"}`}
-                >
-                  <div className="text-sm font-bold text-slate-900">{item.code}</div>
-                  <div className="text-xs text-slate-500 mt-1">{item.fi}</div>
-                </button>
-              ))}
-            </div>
-          </div>
-
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Field label={copy.purpose} value={purpose} onChange={setPurpose} />
+            <SelectField
+              label={copy.purpose}
+              value={purpose}
+              onChange={setPurpose}
+              options={purposeOptions[mode]}
+            />
             <Field label={copy.occupation} value={occupation} onChange={setOccupation} />
             {mode === "sairausloma" ? <Field label={copy.absenceFrom} value={absenceFrom} onChange={setAbsenceFrom} /> : null}
             {mode === "sairausloma" ? <Field label={copy.absenceTo} value={absenceTo} onChange={setAbsenceTo} /> : null}
           </div>
 
           <TextArea label={copy.sourceText} value={sourceText} onChange={setSourceText} rows={7} />
-          <TextArea label={copy.objectiveFindings} value={objectiveFindings} onChange={setObjectiveFindings} rows={5} />
-          <TextArea label={copy.workLimitations} value={workLimitations} onChange={setWorkLimitations} rows={4} />
-          <TextArea label={copy.treatmentPlan} value={treatmentPlan} onChange={setTreatmentPlan} rows={5} />
+          <p className="-mt-2 text-xs text-slate-500">{copy.sourceHint}</p>
+
+          <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50 p-4 space-y-3">
+            <div className="flex items-center gap-2 text-slate-900">
+              <Search size={16} />
+              <h2 className="text-sm font-bold">{copy.diagnosisTitle}</h2>
+            </div>
+            <p className="text-xs text-slate-500">{copy.diagnosisHint}</p>
+
+            <div className="space-y-2">
+              <div className="text-xs font-bold uppercase tracking-wider text-slate-500">{copy.suggestedDiagnosis}</div>
+              {diagnosisSuggestions.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {diagnosisSuggestions.map((item) => (
+                    <button
+                      key={`suggested-${item.code}`}
+                      type="button"
+                      onClick={() => setSelectedIcd(item)}
+                      className={`text-left rounded-2xl border px-4 py-3 ${selectedIcd?.code === item.code ? "border-blue-200 bg-blue-50" : "border-slate-200 bg-white hover:bg-slate-50"}`}
+                    >
+                      <div className="text-sm font-bold text-slate-900">{item.code}</div>
+                      <div className="text-xs text-slate-500 mt-1">{item.fi}</div>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-3 text-sm text-slate-500">
+                  {copy.noDiagnosisSuggestion}
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <div className="text-xs font-bold uppercase tracking-wider text-slate-500">{copy.manualDiagnosis}</div>
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder={copy.icdPlaceholder}
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800"
+              />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                {manualSearchResults.map((item) => (
+                  <button
+                    key={`manual-${item.code}`}
+                    type="button"
+                    onClick={() => setSelectedIcd(item)}
+                    className={`text-left rounded-2xl border px-4 py-3 ${selectedIcd?.code === item.code ? "border-blue-200 bg-blue-50" : "border-slate-200 bg-white hover:bg-slate-50"}`}
+                  >
+                    <div className="text-sm font-bold text-slate-900">{item.code}</div>
+                    <div className="text-xs text-slate-500 mt-1">{item.fi}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
           <TextArea label={copy.additionalNotes} value={additionalNotes} onChange={setAdditionalNotes} rows={4} />
         </section>
 
@@ -327,6 +382,35 @@ function Field({
         onChange={(event) => onChange(event.target.value)}
         className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800"
       />
+    </label>
+  );
+}
+
+function SelectField({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: PurposeOption[];
+}) {
+  return (
+    <label className="block">
+      <span className="text-xs font-bold uppercase tracking-wider text-slate-500">{label}</span>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800"
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
     </label>
   );
 }
