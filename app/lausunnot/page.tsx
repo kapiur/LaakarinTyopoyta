@@ -135,6 +135,14 @@ PURPOSE_OPTIONS.c_lausunto = PURPOSE_OPTIONS.bc_lausunto.filter((item) =>
   ["alle_16_vammaistuki", "16_vuotta_tayttaneen_vammaistuki", "elaketta_saavan_hoitotuki"].includes(item.value),
 );
 
+const SOURCE_EVALUATION_REMINDERS = [
+  "Lääkärin arvio diagnoosista, sairauden kulusta, hoidosta ja ennusteesta",
+  "Potilaan oma kuvaus oireista, arjesta, työstä tai opiskelusta",
+  "Työterveyden, työnantajan tai oppilaitoksen tieto työn/opiskelun vaatimuksista, jos käytettävissä",
+  "Fysioterapeutin, toimintaterapeutin, psykologin, hoitajan tai muun ammattilaisen toimintakykyarvio, jos sellainen on tehty",
+  "Tutkimustulokset, lääkitys, kuntoutus, apuvälineet sekä aiemmat lausunnot tai päätökset",
+];
+
 function scoreDiagnosisFromSource(entry: Icd10Entry, text: string) {
   const normalized = text.trim().toLowerCase();
   if (!normalized) return 0;
@@ -207,7 +215,6 @@ export default function LausunnotPage() {
   const [purpose, setPurpose] = useState("sairauslomatodistus");
   const [sourceText, setSourceText] = useState("");
   const [additionalNotes, setAdditionalNotes] = useState("");
-  const [functionalImpact, setFunctionalImpact] = useState("");
   const [medicineName, setMedicineName] = useState("");
   const [periodFrom, setPeriodFrom] = useState("");
   const [periodTo, setPeriodTo] = useState("");
@@ -224,8 +231,9 @@ export default function LausunnotPage() {
     purpose: "Mihin lausuntoa käytetään",
     sourceText: "Lähtöaineisto",
     sourceHint: "Liitä tähän kaikki potilastekstit, aiemmat lausunnot, tutkimustulokset ja muut poimitut tiedot yhtenä tekstinä. AI:n tehtävä on jäsentää aineisto, ei vaatia valmiiksi jaoteltuja kenttiä.",
+    sourceReminderTitle: "Muistilista lähtöaineistoon",
+    sourceReminderHint: "Näitä ei tarvitse täyttää erillisiin kenttiin. Jos tieto on olemassa, liitä se samaan lähtöaineistoon.",
     additionalNotes: "Lisäohjeet tai lääkärin täsmennykset",
-    functionalImpact: "Toiminta- ja työkyvyn kannalta olennainen tiivistys",
     medicineName: "Lääke tai kliininen ravintovalmiste",
     periodFrom: "Jakso alkaa",
     periodTo: "Jakso päättyy / kontrolli",
@@ -290,11 +298,6 @@ export default function LausunnotPage() {
     if (mode === "sairausloma" && (absenceFrom || absenceTo)) {
       lines.push(`Työkyvyttömyys: ${absenceFrom || "___"} - ${absenceTo || "___"}`);
     }
-    if (functionalImpact.trim()) {
-      lines.push("");
-      lines.push("Toiminta- ja työkyky:");
-      lines.push(functionalImpact.trim());
-    }
     if (selectedPurpose?.guide?.length) {
       lines.push("");
       lines.push("Kelan kannalta tarkistettavat tiedot:");
@@ -314,7 +317,7 @@ export default function LausunnotPage() {
     }
 
     return lines.join("\n");
-  }, [absenceFrom, absenceTo, additionalNotes, functionalImpact, isMedicineReimbursement, medicineName, mode, occupation, periodFrom, periodTo, selectedIcd, selectedPurpose, sourceText]);
+  }, [absenceFrom, absenceTo, additionalNotes, isMedicineReimbursement, medicineName, mode, occupation, periodFrom, periodTo, selectedIcd, selectedPurpose, sourceText]);
 
   async function copyDraft() {
     await navigator.clipboard.writeText(draft);
@@ -395,6 +398,18 @@ export default function LausunnotPage() {
           <TextArea label={copy.sourceText} value={sourceText} onChange={setSourceText} rows={7} />
           <p className="-mt-2 text-xs text-slate-500">{copy.sourceHint}</p>
 
+          <div className="rounded-[1.5rem] border border-slate-200 bg-white p-4">
+            <div className="text-xs font-bold uppercase tracking-wider text-slate-500">{copy.sourceReminderTitle}</div>
+            <p className="mt-1 text-sm leading-6 text-slate-600">{copy.sourceReminderHint}</p>
+            <ul className="mt-3 grid grid-cols-1 gap-2 text-sm text-slate-700">
+              {SOURCE_EVALUATION_REMINDERS.map((item) => (
+                <li key={item} className="rounded-2xl border border-slate-100 bg-slate-50 px-3 py-2">
+                  {item}
+                </li>
+              ))}
+            </ul>
+          </div>
+
           {isMedicineReimbursement ? (
             <div className="grid grid-cols-1 gap-4">
               <Field label={copy.medicineName} value={medicineName} onChange={setMedicineName} />
@@ -405,8 +420,6 @@ export default function LausunnotPage() {
             <Field label={copy.periodFrom} value={periodFrom} onChange={setPeriodFrom} />
             <Field label={copy.periodTo} value={periodTo} onChange={setPeriodTo} />
           </div>
-
-          <TextArea label={copy.functionalImpact} value={functionalImpact} onChange={setFunctionalImpact} rows={3} />
 
           <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50 p-4 space-y-3">
             <div className="flex items-center gap-2 text-slate-900">
