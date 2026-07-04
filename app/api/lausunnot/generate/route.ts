@@ -10,6 +10,90 @@ import { preparePrivacyPayload } from "../../../../lib/privacy/gateway";
 const LAUSUNTO_MODES = new Set(["sairausloma", "bc_lausunto", "b_lausunto", "c_lausunto"]);
 const LAUSUNTO_BLOCKING_RESIDUAL_TYPES = new Set(["hetu", "email", "phone", "address"]);
 
+type StructuredLausuntoField = {
+  key: string;
+  label: string;
+  content: string;
+  required: boolean;
+  omitted: boolean;
+  hint?: string;
+};
+
+const B_LAUSUNTO_FIELDS: Array<Omit<StructuredLausuntoField, "content" | "omitted">> = [
+  {
+    key: "potilaan_terveydentilan_tunteminen",
+    label: "Potilaan terveydentilan tunteminen",
+    required: false,
+    hint: "Lyhyesti miten lausunnon antaja tuntee potilaan tilanteen, jos tieto ilmenee aineistosta.",
+  },
+  {
+    key: "lausunnon_tarkoitus",
+    label: "Lausunnon tarkoitus",
+    required: true,
+    hint: "Mihin etuuteen, arvioon tai päätökseen lausuntoa käytetään.",
+  },
+  {
+    key: "diagnoosit",
+    label: "Diagnoosit",
+    required: true,
+    hint: "ICD-10-koodi ja diagnoosin nimi, tarvittaessa ensisijainen diagnoosi ensin.",
+  },
+  {
+    key: "esitiedot",
+    label: "Esitiedot",
+    required: true,
+    hint: "Sairauden alkuvaihe, kehitys, oireisto, diagnoosin perusteet, aiempi hoito ja kuntoutus.",
+  },
+  {
+    key: "nykytila",
+    label: "Nykytila",
+    required: true,
+    hint: "Ajankohtaiset oireet, tutkimuslöydökset, mittaukset ja vastaanotolla todettu tilanne.",
+  },
+  {
+    key: "toimintakyky",
+    label: "Toimintakyky",
+    required: true,
+    hint: "Arjen, työn, opiskelun ja liikkumisen kannalta olennaiset toimintakyvyn rajoitteet.",
+  },
+  {
+    key: "toimintakyvyn_ennuste",
+    label: "Arvio toimintakyvyn ennusteesta hoidon ja kuntoutuksen jälkeen",
+    required: false,
+    hint: "Ennuste vain aineistossa kuvattujen tietojen perusteella.",
+  },
+  {
+    key: "tutkimus_ja_hoitosuunnitelma",
+    label: "Tutkimus- ja hoitosuunnitelma",
+    required: true,
+    hint: "Suunnitelman sisältö, tavoitteet, aikataulu ja hoidosta vastaava taho.",
+  },
+  {
+    key: "tyokyky_ja_kuntoutus",
+    label: "Työkyky ja kuntoutus",
+    required: false,
+    hint: "Työn vaatimukset, työkyky, kuntoutustarve ja mahdolliset työjärjestelyt.",
+  },
+  {
+    key: "arvio_tyokyvysta",
+    label: "Arvio työkyvystä",
+    required: false,
+    hint: "Työkyvyn arvio ja mahdollinen työkyvyttömyysjakso, jos lausunnon tarkoitus sitä edellyttää.",
+  },
+  {
+    key: "johtopaatokset",
+    label: "Työkykyä koskevat johtopäätökset / etuuden kannalta olennainen perustelu",
+    required: true,
+    hint: "Tiivis päätelmä Kelan kannalta olennaisesta perustelusta.",
+  },
+  {
+    key: "taydennettava",
+    label: "Täydennettävä",
+    required: false,
+    hint: "Vain konkreettiset puuttuvat tiedot, joita ei voi päätellä aineistosta.",
+  },
+];
+
 const PRIVACY_PLACEHOLDER_SYSTEM_PROMPT = `
 Privacy placeholders:
 - The input may contain placeholders such as [NAME], [HETU], [PHONE], [EMAIL], [ADDRESS], [PATIENT_ID], [DATE_OF_BIRTH] or [PROFESSIONAL_NAME].
@@ -101,6 +185,43 @@ ${payload.additionalNotes || "Ei erillisiä lisäohjeita."}
 `;
 }
 
+function buildStructuredBLausuntoPrompt(payload: Parameters<typeof buildPrompt>[0]) {
+  const basePrompt = buildPrompt(payload);
+  const fieldInstructions = B_LAUSUNTO_FIELDS.map((field) => (
+    `- ${field.key}: ${field.label}. ${field.required ? "Pakollinen, jos aineistosta löytyy tieto." : "Valinnainen."} ${field.hint ?? ""}`
+  )).join("\n");
+
+  return `${basePrompt}
+
+Tämän pyynnön tulos palautetaan B-lausunnon kenttärakenteena.
+Palauta vain validi JSON ilman markdownia, ilman johdantoa ja ilman koodiaidan merkkejä.
+
+JSON-rakenne:
+{
+  "fields": [
+    {
+      "key": "kentän_avain",
+      "label": "Kentän otsikko",
+      "content": "Valmis suomenkielinen kenttäteksti. Tyhjä merkkijono, jos aineistossa ei ole riittävää tietoa.",
+      "required": true,
+      "omitted": false,
+      "hint": "Lyhyt ohje käyttäjälle"
+    }
+  ]
+}
+
+Käytä täsmälleen näitä kenttiä ja järjestystä:
+${fieldInstructions}
+
+Täyttöohje:
+- Kirjoita kenttien content-arvot valmiiksi kopioitavaksi Kela B-lausunnon kenttiin.
+- Älä yhdistä kaikkia kenttiä yhdeksi proosaksi.
+- Älä täytä puuttuvaa tietoa keksimällä. Jos tieto puuttuu, jätä content tyhjäksi tai lisää se vain "taydennettava"-kenttään konkreettisena puutteena.
+- Pidä teksti lakonisena mutta riittävänä. Jokaisessa kentässä vain sen kentän asia.
+- Säilytä kliinisesti olennaiset päivämäärät, mittausarvot, lääkeannokset, tutkimukset ja seuranta-ajat.
+`;
+}
+
 function buildSystemPrompt(workspaceInstruction: string, profileInstruction: string) {
   return `
 ${PRIVACY_PLACEHOLDER_SYSTEM_PROMPT}
@@ -127,6 +248,56 @@ Rakenteen ohje:
 - C-lausunto: Diagnoosit / Sairauden kulku ja nykytila / Toimintakyky arjessa / Avun, ohjauksen ja valvonnan tarve / Hoito ja palvelut / Täydennettävä.
 - Lääkekorvausoikeus: korosta valmistetta, diagnoosia, korvauskriteerien kannalta olennaisia tietoja, hoidon aloitusta, annosta, vastetta ja seurantaa.
 `;
+}
+
+function normalizeStructuredField(value: unknown, fallback: Omit<StructuredLausuntoField, "content" | "omitted">): StructuredLausuntoField {
+  const item = typeof value === "object" && value !== null ? value as Record<string, unknown> : {};
+  return {
+    key: fallback.key,
+    label: text(item.label) || fallback.label,
+    content: text(item.content),
+    required: typeof item.required === "boolean" ? item.required : fallback.required,
+    omitted: typeof item.omitted === "boolean" ? item.omitted : false,
+    hint: text(item.hint) || fallback.hint,
+  };
+}
+
+function parseStructuredLausunto(content: string): StructuredLausuntoField[] | null {
+  const trimmed = content.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
+  try {
+    const parsed = JSON.parse(trimmed) as { fields?: unknown };
+    if (!Array.isArray(parsed.fields)) return null;
+    const parsedFields = parsed.fields;
+    return B_LAUSUNTO_FIELDS.map((field) => {
+      const match = parsedFields.find((item) => typeof item === "object" && item !== null && (item as Record<string, unknown>).key === field.key);
+      return normalizeStructuredField(match, field);
+    });
+  } catch {
+    return null;
+  }
+}
+
+function buildContentFromFields(fields: StructuredLausuntoField[]) {
+  return fields
+    .filter((field) => field.content.trim())
+    .map((field) => `${field.label}\n${field.content.trim()}`)
+    .join("\n\n");
+}
+
+function sanitizeStructuredFields(fields: StructuredLausuntoField[]) {
+  const fieldPrivacy = preparePrivacyPayload(fields.map((field) => ({
+    key: field.key,
+    value: field.content,
+    mode: "transientClinicalChat",
+  })));
+
+  return {
+    fields: fields.map((field) => ({
+      ...field,
+      content: fieldPrivacy.sanitized[field.key] ?? field.content,
+    })),
+    privacy: fieldPrivacy.privacy,
+  };
 }
 
 export async function POST(request: Request) {
@@ -186,7 +357,7 @@ export async function POST(request: Request) {
   const userProfile = await getUserAiProfile(userId);
   const profileInstruction = buildUserAiProfileInstruction(userProfile, "full", workspaceContext);
 
-  const userPrompt = buildPrompt({
+  const promptPayload = {
     mode,
     modeLabel: text(body.modeLabel) || mode,
     purposeLabel: text(body.purposeLabel) || text(body.purpose) || "Ei määritelty",
@@ -202,7 +373,10 @@ export async function POST(request: Request) {
     absenceTo: text(body.absenceTo),
     diagnosisCode: text(diagnosis?.code),
     diagnosisLabel: text(diagnosis?.label),
-  });
+  };
+  const userPrompt = mode === "b_lausunto"
+    ? buildStructuredBLausuntoPrompt(promptPayload)
+    : buildPrompt(promptPayload);
 
   const result = await runRoutedAiCompletion({
     userId,
@@ -215,11 +389,18 @@ export async function POST(request: Request) {
     ],
   });
 
+  const structuredFields = mode === "b_lausunto" ? parseStructuredLausunto(result.content) : null;
+  const structuredPrivacy = structuredFields ? sanitizeStructuredFields(structuredFields) : null;
+  const structuredContent = structuredPrivacy ? buildContentFromFields(structuredPrivacy.fields) : "";
   const outputPrivacy = preparePrivacyPayload([
-    { key: "content", value: result.content, mode: "transientClinicalChat" },
+    { key: "content", value: structuredContent || result.content, mode: "transientClinicalChat" },
   ]);
 
-  if (hasBlockingLausuntoPrivacyRisk(outputPrivacy.privacy.residualFindingTypes)) {
+  const outputFindings = [
+    ...outputPrivacy.privacy.residualFindingTypes,
+    ...(structuredPrivacy?.privacy.residualFindingTypes ?? []),
+  ];
+  if (hasBlockingLausuntoPrivacyRisk(outputFindings)) {
     return NextResponse.json({
       error: "Luonnokseen jäi tunnistetietoja. Tarkista lähtöaineisto ja yritä uudelleen.",
       privacy: outputPrivacy.privacy,
@@ -228,6 +409,7 @@ export async function POST(request: Request) {
 
   return NextResponse.json({
     content: outputPrivacy.sanitized.content ?? result.content,
+    fields: structuredPrivacy?.fields,
     privacy: {
       input: inputPrivacy.privacy,
       output: outputPrivacy.privacy,

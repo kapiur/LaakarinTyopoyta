@@ -12,6 +12,15 @@ type AccessPayload = {
   policyEnabled: boolean;
 };
 
+type GeneratedLausuntoField = {
+  key: string;
+  label: string;
+  content: string;
+  required: boolean;
+  omitted: boolean;
+  hint?: string;
+};
+
 const MODE_OPTIONS: LausuntoMode[] = ["sairausloma", "bc_lausunto", "b_lausunto", "c_lausunto"];
 
 type PurposeOption = {
@@ -223,6 +232,7 @@ export default function LausunnotPage() {
   const [absenceTo, setAbsenceTo] = useState("");
   const [copied, setCopied] = useState(false);
   const [generatedDraft, setGeneratedDraft] = useState("");
+  const [generatedFields, setGeneratedFields] = useState<GeneratedLausuntoField[]>([]);
   const [generating, setGenerating] = useState(false);
   const [generateError, setGenerateError] = useState("");
 
@@ -254,6 +264,12 @@ export default function LausunnotPage() {
     generateHint: "Lisää lähtöaineisto ennen AI-luonnoksen laatimista.",
     generateFailed: "Lausunnon laatiminen epäonnistui.",
     copy: copied ? "Kopioitu" : "Kopioi",
+    copyAllFields: "Kopioi käytössä olevat kentät",
+    generatedFields: "B-lausunnon kentät",
+    generatedFieldsHint: "Muokkaa kenttiä ennen kopiointia. Valinnaisen kentän voi jättää pois, jos se ei ole tässä lausunnossa tarpeellinen.",
+    omitField: "Ei tarvita / jätä tyhjäksi",
+    restoreField: "Käytä kenttää",
+    copyField: "Kopioi kenttä",
     loading: "Ladataan...",
   }), [copied, generatedDraft, generating]);
 
@@ -325,10 +341,30 @@ export default function LausunnotPage() {
     return lines.join("\n");
   }, [absenceFrom, absenceTo, additionalNotes, isMedicineReimbursement, medicineName, mode, occupation, periodFrom, periodTo, selectedIcd, selectedPurpose, sourceText]);
 
+  const structuredDraft = useMemo(() => {
+    if (generatedFields.length === 0) return "";
+    return generatedFields
+      .filter((field) => !field.omitted && field.content.trim())
+      .map((field) => `${field.label}\n${field.content.trim()}`)
+      .join("\n\n");
+  }, [generatedFields]);
+
   async function copyDraft() {
-    await navigator.clipboard.writeText(generatedDraft || draft);
+    await navigator.clipboard.writeText(structuredDraft || generatedDraft || draft);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
+  }
+
+  async function copyField(field: GeneratedLausuntoField) {
+    await navigator.clipboard.writeText(field.content.trim());
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }
+
+  function updateGeneratedField(key: string, patch: Partial<GeneratedLausuntoField>) {
+    setGeneratedFields((fields) => fields.map((field) => (
+      field.key === key ? { ...field, ...patch } : field
+    )));
   }
 
   async function generateLausunto() {
@@ -369,6 +405,11 @@ export default function LausunnotPage() {
       }
 
       setGeneratedDraft(data.content.trim());
+      setGeneratedFields(Array.isArray(data.fields) ? data.fields.filter((field: unknown): field is GeneratedLausuntoField => {
+        if (!field || typeof field !== "object") return false;
+        const item = field as Partial<GeneratedLausuntoField>;
+        return typeof item.key === "string" && typeof item.label === "string" && typeof item.content === "string";
+      }) : []);
     } catch (error) {
       setGenerateError(error instanceof Error ? error.message : copy.generateFailed);
     } finally {
@@ -544,7 +585,7 @@ export default function LausunnotPage() {
               </button>
               <button onClick={copyDraft} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 text-sm font-bold text-slate-700 hover:bg-slate-50">
                 <Copy size={16} />
-                {copy.copy}
+                {generatedFields.length > 0 ? copy.copyAllFields : copy.copy}
               </button>
             </div>
           </div>
@@ -553,11 +594,88 @@ export default function LausunnotPage() {
               {generateError}
             </div>
           ) : null}
-          <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50 p-5 whitespace-pre-wrap text-sm leading-7 text-slate-800 min-h-[36rem]">
-            {generatedDraft || draft}
-          </div>
+          {generatedFields.length > 0 ? (
+            <div className="space-y-3">
+              <div className="rounded-2xl border border-blue-100 bg-blue-50/70 px-4 py-3">
+                <div className="text-sm font-bold text-slate-900">{copy.generatedFields}</div>
+                <p className="mt-1 text-xs leading-5 text-slate-600">{copy.generatedFieldsHint}</p>
+              </div>
+              {generatedFields.map((field) => (
+                <GeneratedFieldEditor
+                  key={field.key}
+                  field={field}
+                  omitLabel={copy.omitField}
+                  restoreLabel={copy.restoreField}
+                  copyLabel={copy.copyField}
+                  onChange={(content) => updateGeneratedField(field.key, { content })}
+                  onOmit={(omitted) => updateGeneratedField(field.key, { omitted })}
+                  onCopy={() => copyField(field)}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50 p-5 whitespace-pre-wrap text-sm leading-7 text-slate-800 min-h-[36rem]">
+              {generatedDraft || draft}
+            </div>
+          )}
         </section>
       </div>
+    </div>
+  );
+}
+
+function GeneratedFieldEditor({
+  field,
+  omitLabel,
+  restoreLabel,
+  copyLabel,
+  onChange,
+  onOmit,
+  onCopy,
+}: {
+  field: GeneratedLausuntoField;
+  omitLabel: string;
+  restoreLabel: string;
+  copyLabel: string;
+  onChange: (value: string) => void;
+  onOmit: (value: boolean) => void;
+  onCopy: () => void;
+}) {
+  return (
+    <div className={`rounded-[1.5rem] border p-4 ${field.omitted ? "border-slate-200 bg-slate-50 opacity-70" : "border-slate-200 bg-white"}`}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="text-xs font-bold uppercase tracking-wider text-slate-500">{field.label}</div>
+          {field.hint ? <p className="mt-1 text-xs leading-5 text-slate-500">{field.hint}</p> : null}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {!field.required ? (
+            <button
+              type="button"
+              onClick={() => onOmit(!field.omitted)}
+              className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50"
+            >
+              {field.omitted ? restoreLabel : omitLabel}
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={onCopy}
+            disabled={field.omitted || !field.content.trim()}
+            className="inline-flex items-center gap-2 rounded-xl border border-blue-200 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-300"
+          >
+            <Copy size={14} />
+            {copyLabel}
+          </button>
+        </div>
+      </div>
+      <textarea
+        rows={Math.max(3, Math.min(9, field.content.split("\n").length + 2))}
+        value={field.content}
+        disabled={field.omitted}
+        onChange={(event) => onChange(event.target.value)}
+        className="mt-3 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-800 resize-y disabled:text-slate-400"
+      />
     </div>
   );
 }
