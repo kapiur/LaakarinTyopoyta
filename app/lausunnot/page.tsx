@@ -269,8 +269,8 @@ export default function LausunnotPage() {
     if (selectedPurpose?.label) lines.push(`Tarkoitus: ${selectedPurpose.label}`);
     if (isMedicineReimbursement && medicineName.trim()) lines.push(`Lääke tai kliininen ravintovalmiste: ${medicineName.trim()}`);
     if (selectedIcd) lines.push(`Diagnoosi: ${selectedIcd.code} ${selectedIcd.fi}`);
-    if (isMedicineReimbursement && (periodFrom.trim() || periodTo.trim())) {
-      lines.push(`Hoito-, korvaus- tai kontrollijakso: ${periodFrom.trim() || "___"} - ${periodTo.trim() || "___"}`);
+    if (periodFrom.trim() || periodTo.trim()) {
+      lines.push(`Jakso / hoito / kontrolli: ${periodFrom.trim() || "___"} - ${periodTo.trim() || "___"}`);
     }
     if (occupation.trim()) lines.push(`Ammatti / työn kuva: ${occupation.trim()}`);
     if (mode === "sairausloma" && (absenceFrom || absenceTo)) {
@@ -354,12 +354,15 @@ export default function LausunnotPage() {
           <p className="-mt-2 text-xs text-slate-500">{copy.sourceHint}</p>
 
           {isMedicineReimbursement ? (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 gap-4">
               <Field label={copy.medicineName} value={medicineName} onChange={setMedicineName} />
-              <Field label={copy.periodFrom} value={periodFrom} onChange={setPeriodFrom} />
-              <Field label={copy.periodTo} value={periodTo} onChange={setPeriodTo} />
             </div>
           ) : null}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Field label={copy.periodFrom} value={periodFrom} onChange={setPeriodFrom} />
+            <Field label={copy.periodTo} value={periodTo} onChange={setPeriodTo} />
+          </div>
 
           <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50 p-4 space-y-3">
             <div className="flex items-center gap-2 text-slate-900">
