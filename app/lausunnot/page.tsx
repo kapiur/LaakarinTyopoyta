@@ -5,7 +5,7 @@ import { Copy, FileBadge2, Search } from "lucide-react";
 import { useI18n } from "../../lib/useI18n";
 import { searchIcd10Catalog, type Icd10Entry } from "../../lib/lausunto/icd10Catalog";
 
-type LausuntoMode = "sairausloma" | "b_lausunto" | "c_lausunto";
+type LausuntoMode = "sairausloma" | "bc_lausunto" | "b_lausunto" | "c_lausunto";
 
 type AccessPayload = {
   enabled: boolean;
@@ -13,7 +13,7 @@ type AccessPayload = {
   policyEnabled: boolean;
 };
 
-const MODE_OPTIONS: LausuntoMode[] = ["sairausloma", "b_lausunto", "c_lausunto"];
+const MODE_OPTIONS: LausuntoMode[] = ["sairausloma", "bc_lausunto", "b_lausunto", "c_lausunto"];
 
 type PurposeOption = {
   value: string;
@@ -105,7 +105,7 @@ export default function LausunnotPage() {
     if (language === "ru") {
       return {
         title: "Lausunto-рабочее пространство",
-        subtitle: "Финский инструмент для B-, C-lausunto и sairauslomatodistus. Черновик строится по разделам, чтобы врач мог переносить его в рабочую программу частями.",
+        subtitle: "Финский инструмент для B/C-lausunto, отдельных B- и C-lausunto и sairauslomatodistus. Черновик строится по разделам, чтобы врач мог переносить его в рабочую программу частями.",
         noAccess: "Этот инструмент доступен только пользователям с включённым доступом и страной работы Финляндия.",
         mode: "Тип документа",
         purpose: "Для чего документ",
@@ -132,7 +132,7 @@ export default function LausunnotPage() {
     if (language === "en") {
       return {
         title: "Lausunto workspace",
-        subtitle: "Finnish workspace for B/C lausunto and sickness certificate drafting.",
+        subtitle: "Finnish workspace for combined B/C lausunto, separate B/C lausunto, and sickness certificate drafting.",
         noAccess: "This tool is available only for Finland workflow users with explicit access.",
         mode: "Document type",
         purpose: "Purpose of document",
@@ -159,7 +159,7 @@ export default function LausunnotPage() {
     if (language === "de") {
       return {
         title: "Lausunto-Arbeitsbereich",
-        subtitle: "Finnisches Werkzeug fuer B/C-Lausunto und Sairauslomatodistus.",
+        subtitle: "Finnisches Werkzeug fuer kombiniertes B/C-Lausunto, separate B/C-Lausunto und Sairauslomatodistus.",
         noAccess: "Dieses Werkzeug ist nur fuer Nutzer mit Finnland-Kontext und expliziter Freischaltung verfuegbar.",
         mode: "Dokumenttyp",
         purpose: "Zweck des Dokuments",
@@ -185,7 +185,7 @@ export default function LausunnotPage() {
     }
     return {
       title: "Lausunto-tyotila",
-      subtitle: "Suomeen rajattu tyokalu B- ja C-lausunnon seka sairauslomatodistuksen luonnosteluun. Tulostus rakennetaan osioittain, jotta tekstin voi siirtaa tyosoftaan paloina.",
+      subtitle: "Suomeen rajattu tyokalu yhdistetyn B/C-lausunnon, erillisten B- ja C-lausuntojen seka sairauslomatodistuksen luonnosteluun. Tulostus rakennetaan osioittain, jotta tekstin voi siirtaa tyosoftaan paloina.",
       noAccess: "Tama tyokalu on kaytossa vain niille kayttajille, joille se on erikseen sallittu ja joiden tyoskentelymaa on Suomi.",
       mode: "Asiakirjan tyyppi",
       purpose: "Mita varten lausunto kirjoitetaan",
@@ -216,6 +216,17 @@ export default function LausunnotPage() {
       { value: "sairauspoissaolon_jatko", label: "Sairauspoissaolon jatko" },
       { value: "tyohon_paluun_arvio", label: "Työhön paluun arvio" },
     ],
+    bc_lausunto: [
+      { value: "sairauspaivaraha", label: "Sairauspäiväraha" },
+      { value: "osasairauspaivaraha", label: "Osasairauspäiväraha" },
+      { value: "kuntoutus", label: "Kuntoutus" },
+      { value: "nuoren_kuntoutusraha", label: "Nuoren kuntoutusraha" },
+      { value: "kuntoutustuki_tyokyvyttomyyselake", label: "Kuntoutustuki tai työkyvyttömyyseläke" },
+      { value: "laake_tai_ravintovalmiste_korvausoikeus", label: "Lääkkeen tai kliinisen ravintovalmisteen korvausoikeus" },
+      { value: "alle_16_vammaistuki", label: "Alle 16-vuotiaan vammaistuki" },
+      { value: "16_vuotta_tayttaneen_vammaistuki", label: "16 vuotta täyttäneen vammaistuki" },
+      { value: "elaketta_saavan_hoitotuki", label: "Eläkettä saavan hoitotuki" },
+    ],
     b_lausunto: [
       { value: "sairauspaivaraha", label: "Sairauspäiväraha" },
       { value: "osasairauspaivaraha", label: "Osasairauspäiväraha" },
@@ -233,7 +244,7 @@ export default function LausunnotPage() {
 
   const diagnosisSuggestions = useMemo(() => extractDiagnosisSuggestions(sourceText), [sourceText]);
   const manualSearchResults = useMemo(() => searchIcd10Catalog(query), [query]);
-  const isMedicineReimbursement = mode === "b_lausunto" && purpose === "laake_tai_ravintovalmiste_korvausoikeus";
+  const isMedicineReimbursement = (mode === "b_lausunto" || mode === "bc_lausunto") && purpose === "laake_tai_ravintovalmiste_korvausoikeus";
   const medicineSuggestion = useMemo(() => extractMedicineName(sourceText), [sourceText]);
 
   useEffect(() => {
@@ -263,7 +274,7 @@ export default function LausunnotPage() {
   const draft = useMemo(() => {
     const lines: string[] = [];
 
-    lines.push(mode === "sairausloma" ? "Sairauslomatodistus" : mode === "b_lausunto" ? "B-lausunto" : "C-lausunto");
+    lines.push(mode === "sairausloma" ? "Sairauslomatodistus" : mode === "bc_lausunto" ? "B/C-lausunto" : mode === "b_lausunto" ? "B-lausunto" : "C-lausunto");
     lines.push("");
     const selectedPurpose = purposeOptions[mode].find((item) => item.value === purpose);
     if (selectedPurpose?.label) lines.push(`Tarkoitus: ${selectedPurpose.label}`);
@@ -332,7 +343,7 @@ export default function LausunnotPage() {
             <select value={mode} onChange={(event) => setMode(event.target.value as LausuntoMode)} className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-800">
               {MODE_OPTIONS.map((item) => (
                 <option key={item} value={item}>
-                  {item === "sairausloma" ? "Sairauslomatodistus" : item === "b_lausunto" ? "B-lausunto" : "C-lausunto"}
+                  {item === "sairausloma" ? "Sairauslomatodistus" : item === "bc_lausunto" ? "B/C-lausunto" : item === "b_lausunto" ? "B-lausunto" : "C-lausunto"}
                 </option>
               ))}
             </select>
