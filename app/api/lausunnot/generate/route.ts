@@ -8,6 +8,7 @@ import { getLausuntoWorkspaceAccess } from "../../../../lib/lausunto/access";
 import { preparePrivacyPayload } from "../../../../lib/privacy/gateway";
 
 const LAUSUNTO_MODES = new Set(["sairausloma", "bc_lausunto", "b_lausunto", "c_lausunto"]);
+const LAUSUNTO_BLOCKING_RESIDUAL_TYPES = new Set(["hetu", "email", "phone", "address"]);
 
 const PRIVACY_PLACEHOLDER_SYSTEM_PROMPT = `
 Privacy placeholders:
@@ -45,6 +46,10 @@ function text(value: unknown) {
 
 function stringList(value: unknown) {
   return Array.isArray(value) ? value.map(text).filter(Boolean) : [];
+}
+
+function hasBlockingLausuntoPrivacyRisk(findingTypes: string[]) {
+  return findingTypes.some((type) => LAUSUNTO_BLOCKING_RESIDUAL_TYPES.has(type));
 }
 
 function buildPrompt(payload: {
@@ -157,7 +162,7 @@ export async function POST(request: Request) {
     { key: "occupation", value: text(body.occupation), mode: "transientClinicalChat" },
   ]);
 
-  if (inputPrivacy.privacy.blocked) {
+  if (hasBlockingLausuntoPrivacyRisk(inputPrivacy.privacy.residualFindingTypes)) {
     return NextResponse.json({
       error: "Tekstissä on tunnistetietoja, joita ei voitu poistaa turvallisesti. Poista nimi, yhteystiedot, henkilötunnus tai osoitetiedot ja yritä uudelleen.",
       privacy: inputPrivacy.privacy,
@@ -214,7 +219,7 @@ export async function POST(request: Request) {
     { key: "content", value: result.content, mode: "transientClinicalChat" },
   ]);
 
-  if (outputPrivacy.privacy.blocked) {
+  if (hasBlockingLausuntoPrivacyRisk(outputPrivacy.privacy.residualFindingTypes)) {
     return NextResponse.json({
       error: "Luonnokseen jäi tunnistetietoja. Tarkista lähtöaineisto ja yritä uudelleen.",
       privacy: outputPrivacy.privacy,
