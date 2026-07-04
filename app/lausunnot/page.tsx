@@ -50,6 +50,39 @@ function extractDiagnosisSuggestions(text: string, limit = 6): Icd10Entry[] {
     .map((item) => item.entry);
 }
 
+function extractMedicineName(text: string) {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  if (!normalized) return "";
+
+  const medicineContext = /\b(lääk|laake|lääkitys|laakitys|valmiste|korvausoikeus|aloitetaan|aloitettu|käytössä|kaytossa|annos|insuliini|tabletti|kapseli|injektio|mg|mikrog|µg|iu|ky)\b/i;
+  const stopWords = new Set([
+    "Aiempi",
+    "Aloitetaan",
+    "Diagnoosi",
+    "Hoidon",
+    "Kela",
+    "Kontrolli",
+    "Lausunto",
+    "Lisäksi",
+    "Lisaksi",
+    "Nykytila",
+    "Potilas",
+    "Potilaan",
+    "Suunnitelma",
+    "Tarkoitus",
+  ]);
+
+  const sentences = normalized
+    .split(/(?<=[.!?])\s+|\n+/)
+    .filter((sentence) => medicineContext.test(sentence));
+  const source = sentences.length > 0 ? sentences.join(" ") : normalized;
+  const candidates = Array.from(source.matchAll(/\b[A-ZÅÄÖ][A-Za-zÅÄÖåäö-]{2,}(?:\s+\d+(?:[,.]\d+)?\s*(?:mg|mikrog|µg|g|ml|IU|ky|yks))?/g))
+    .map((match) => match[0].trim())
+    .filter((candidate) => !stopWords.has(candidate.split(/\s+/)[0]));
+
+  return candidates[0] ?? "";
+}
+
 export default function LausunnotPage() {
   const { language } = useI18n();
   const [access, setAccess] = useState<AccessPayload | null>(null);
@@ -60,6 +93,9 @@ export default function LausunnotPage() {
   const [purpose, setPurpose] = useState("sairauslomatodistus");
   const [sourceText, setSourceText] = useState("");
   const [additionalNotes, setAdditionalNotes] = useState("");
+  const [medicineName, setMedicineName] = useState("");
+  const [periodFrom, setPeriodFrom] = useState("");
+  const [periodTo, setPeriodTo] = useState("");
   const [occupation, setOccupation] = useState("");
   const [absenceFrom, setAbsenceFrom] = useState("");
   const [absenceTo, setAbsenceTo] = useState("");
@@ -76,6 +112,9 @@ export default function LausunnotPage() {
         sourceText: "Исходные тексты одним полем",
         sourceHint: "Вставьте сюда все записи, выписки и фрагменты. Инструмент сам использует этот массив как основу для lausunto.",
         additionalNotes: "Дополнительные замечания",
+        medicineName: "Препарат / препарат питания",
+        periodFrom: "Период / лечение с",
+        periodTo: "Период / контроль / до",
         occupation: "Профессия / характер работы",
         absenceFrom: "Больничный с",
         absenceTo: "Больничный по",
@@ -100,6 +139,9 @@ export default function LausunnotPage() {
         sourceText: "All source texts in one field",
         sourceHint: "Paste all notes and excerpts here. The tool uses this combined material as the basis for the draft.",
         additionalNotes: "Additional notes",
+        medicineName: "Medicine / nutritional product",
+        periodFrom: "Period / treatment from",
+        periodTo: "Period / follow-up / until",
         occupation: "Occupation / job demands",
         absenceFrom: "Sick leave from",
         absenceTo: "Sick leave until",
@@ -124,6 +166,9 @@ export default function LausunnotPage() {
         sourceText: "Alle Ausgangstexte in einem Feld",
         sourceHint: "Hier koennen alle Notizen und Auszuege gesammelt eingefuegt werden. Daraus wird der Entwurf aufgebaut.",
         additionalNotes: "Zusaetzliche Hinweise",
+        medicineName: "Arzneimittel / klinisches Naehrpraeparat",
+        periodFrom: "Zeitraum / Behandlung ab",
+        periodTo: "Zeitraum / Kontrolle / bis",
         occupation: "Beruf / Arbeitsanforderungen",
         absenceFrom: "Arbeitsunfaehig ab",
         absenceTo: "Arbeitsunfaehig bis",
@@ -147,6 +192,9 @@ export default function LausunnotPage() {
       sourceText: "Kaikki lahtotekstit yhteen kenttaan",
       sourceHint: "Liita tahan kaikki potilaan merkinnat, lausunnot ja poimitut tiedot. Tyokalu rakentaa luonnoksen taman aineiston pohjalta.",
       additionalNotes: "Lisahuomiot",
+      medicineName: "Lääke tai kliininen ravintovalmiste",
+      periodFrom: "Jakso / hoito alkaen",
+      periodTo: "Jakso / kontrolli / asti",
       occupation: "Ammatti / työn kuva",
       absenceFrom: "Poissaolo alkaa",
       absenceTo: "Poissaolo paattyy",
@@ -185,6 +233,8 @@ export default function LausunnotPage() {
 
   const diagnosisSuggestions = useMemo(() => extractDiagnosisSuggestions(sourceText), [sourceText]);
   const manualSearchResults = useMemo(() => searchIcd10Catalog(query), [query]);
+  const isMedicineReimbursement = mode === "b_lausunto" && purpose === "laake_tai_ravintovalmiste_korvausoikeus";
+  const medicineSuggestion = useMemo(() => extractMedicineName(sourceText), [sourceText]);
 
   useEffect(() => {
     async function loadAccess() {
@@ -205,6 +255,11 @@ export default function LausunnotPage() {
     setPurpose(purposeOptions[mode][0]?.value ?? "");
   }, [mode, purposeOptions]);
 
+  useEffect(() => {
+    if (!isMedicineReimbursement || medicineName.trim() || !medicineSuggestion) return;
+    setMedicineName(medicineSuggestion);
+  }, [isMedicineReimbursement, medicineName, medicineSuggestion]);
+
   const draft = useMemo(() => {
     const lines: string[] = [];
 
@@ -212,7 +267,11 @@ export default function LausunnotPage() {
     lines.push("");
     const selectedPurpose = purposeOptions[mode].find((item) => item.value === purpose);
     if (selectedPurpose?.label) lines.push(`Tarkoitus: ${selectedPurpose.label}`);
+    if (isMedicineReimbursement && medicineName.trim()) lines.push(`Lääke tai kliininen ravintovalmiste: ${medicineName.trim()}`);
     if (selectedIcd) lines.push(`Diagnoosi: ${selectedIcd.code} ${selectedIcd.fi}`);
+    if (isMedicineReimbursement && (periodFrom.trim() || periodTo.trim())) {
+      lines.push(`Hoito-, korvaus- tai kontrollijakso: ${periodFrom.trim() || "___"} - ${periodTo.trim() || "___"}`);
+    }
     if (occupation.trim()) lines.push(`Ammatti / työn kuva: ${occupation.trim()}`);
     if (mode === "sairausloma" && (absenceFrom || absenceTo)) {
       lines.push(`Tyokyvyttomyys: ${absenceFrom || "___"} - ${absenceTo || "___"}`);
@@ -229,7 +288,7 @@ export default function LausunnotPage() {
     }
 
     return lines.join("\n");
-  }, [absenceFrom, absenceTo, additionalNotes, mode, occupation, purpose, purposeOptions, selectedIcd, sourceText]);
+  }, [absenceFrom, absenceTo, additionalNotes, isMedicineReimbursement, medicineName, mode, occupation, periodFrom, periodTo, purpose, purposeOptions, selectedIcd, sourceText]);
 
   async function copyDraft() {
     await navigator.clipboard.writeText(draft);
@@ -293,6 +352,14 @@ export default function LausunnotPage() {
 
           <TextArea label={copy.sourceText} value={sourceText} onChange={setSourceText} rows={7} />
           <p className="-mt-2 text-xs text-slate-500">{copy.sourceHint}</p>
+
+          {isMedicineReimbursement ? (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <Field label={copy.medicineName} value={medicineName} onChange={setMedicineName} />
+              <Field label={copy.periodFrom} value={periodFrom} onChange={setPeriodFrom} />
+              <Field label={copy.periodTo} value={periodTo} onChange={setPeriodTo} />
+            </div>
+          ) : null}
 
           <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50 p-4 space-y-3">
             <div className="flex items-center gap-2 text-slate-900">
