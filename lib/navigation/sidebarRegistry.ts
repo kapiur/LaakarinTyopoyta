@@ -4,6 +4,7 @@ export type SidebarIconName =
   | "LayoutDashboard"
   | "FileText"
   | "Bot"
+  | "FileBadge2"
   | "Zap"
   | "LinkIcon"
   | "Pill"
@@ -24,12 +25,13 @@ const SIDEBAR_ITEMS = [
   { key: "home", href: "/", labelKey: "sidebar.home", icon: "LayoutDashboard", sortOrder: 1, defaultEnabled: true },
   { key: "templates", href: "/malli", labelKey: "sidebar.templates", icon: "FileText", sortOrder: 2, defaultEnabled: true },
   { key: "ai-tools", href: "/ai-tools", labelKey: "sidebar.aiTools", icon: "Bot", sortOrder: 3, defaultEnabled: true },
-  { key: "quick-guides", href: "/pikaohjeet-v2", labelKey: "sidebar.quickGuides", icon: "Zap", sortOrder: 4, defaultEnabled: true },
-  { key: "links", href: "/links", labelKey: "sidebar.links", icon: "LinkIcon", sortOrder: 5, defaultEnabled: true },
-  { key: "literature", href: "/literature", labelKey: "sidebar.literature", icon: "BookText", sortOrder: 6, defaultEnabled: true },
-  { key: "medicines", href: "/medicines", labelKey: "sidebar.medicines", icon: "Pill", sortOrder: 7, defaultEnabled: true },
-  { key: "calculators", href: "/calculators", labelKey: "sidebar.calculators", icon: "Calculator", sortOrder: 8, defaultEnabled: true },
-  { key: "drug-libraries", href: "/calculators/peds-library", labelKey: "sidebar.drugLibraries", icon: "FlaskConical", sortOrder: 9, defaultEnabled: true },
+  { key: "lausunnot", href: "/lausunnot", labelKey: "sidebar.lausunnot", icon: "FileBadge2", sortOrder: 4, defaultEnabled: true },
+  { key: "quick-guides", href: "/pikaohjeet-v2", labelKey: "sidebar.quickGuides", icon: "Zap", sortOrder: 5, defaultEnabled: true },
+  { key: "links", href: "/links", labelKey: "sidebar.links", icon: "LinkIcon", sortOrder: 6, defaultEnabled: true },
+  { key: "literature", href: "/literature", labelKey: "sidebar.literature", icon: "BookText", sortOrder: 7, defaultEnabled: true },
+  { key: "medicines", href: "/medicines", labelKey: "sidebar.medicines", icon: "Pill", sortOrder: 8, defaultEnabled: true },
+  { key: "calculators", href: "/calculators", labelKey: "sidebar.calculators", icon: "Calculator", sortOrder: 9, defaultEnabled: true },
+  { key: "drug-libraries", href: "/calculators/peds-library", labelKey: "sidebar.drugLibraries", icon: "FlaskConical", sortOrder: 10, defaultEnabled: true },
 ] as const satisfies readonly SidebarItemDefinition[];
 
 export type SidebarItemKey = (typeof SIDEBAR_ITEMS)[number]["key"];

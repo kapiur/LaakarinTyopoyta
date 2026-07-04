@@ -10,6 +10,7 @@ import {
   Settings, 
   LogOut, 
   Pill,
+  FileBadge2,
   Zap,
   Link as LinkIcon,
   Bot,
@@ -38,6 +39,7 @@ const iconMap = {
   LayoutDashboard,
   FileText,
   Bot,
+  FileBadge2,
   Zap,
   LinkIcon,
   Pill,
@@ -194,7 +196,7 @@ export default function Sidebar({ mobile = false, onNavigate }: { mobile?: boole
           href="/settings"
           onClick={onNavigate}
           title={t("sidebar.settings")}
-          className={`flex min-h-11 items-center w-full transition-all group rounded-xl ${collapsed ? "justify-center px-0 py-3" : "gap-3 px-4 py-3"} ${pathname.startsWith('/settings') || pathname.startsWith('/profile/security') || pathname.startsWith('/admin/users') ? 'bg-blue-50 text-blue-600 font-bold shadow-sm' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
+          className={`flex min-h-11 items-center w-full transition-all group rounded-xl ${collapsed ? "justify-center px-0 py-3" : "gap-3 px-4 py-3"} ${pathname.startsWith('/settings') || pathname.startsWith('/profile/security') || pathname.startsWith('/admin/users') || pathname.startsWith('/admin/lausunto-access') ? 'bg-blue-50 text-blue-600 font-bold shadow-sm' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
         >
           <Settings size={20} className="group-hover:rotate-45 transition-transform" />
           {!collapsed && <span className="text-sm font-medium">{t("sidebar.settings")}</span>}

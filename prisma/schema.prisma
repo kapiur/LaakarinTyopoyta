@@ -51,6 +51,7 @@ model User {
   aiSettings      UserAiSettings?
   clinicalSettings UserClinicalSettings?
   clinicalSourcePreferences UserClinicalSourcePreference[]
+  lausuntoAccessPolicy UserLausuntoAccessPolicy?
   feedbackReports FeedbackReport[]
   substanceNotes  Substance[]      // Связь для Wiki-заметок
   
@@ -72,6 +73,17 @@ model UserAuthSession {
 
   @@index([userId, revokedAt, expiresAt])
   @@index([sessionKey])
+}
+
+model UserLausuntoAccessPolicy {
+  id                  String   @id @default(cuid())
+  userId              Int      @unique
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lausuntoToolEnabled Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([lausuntoToolEnabled])
 }
 
 // ==========================================

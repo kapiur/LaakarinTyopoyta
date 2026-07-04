@@ -9,6 +9,7 @@ import {
   BrainCircuit,
   Compass,
   DatabaseZap,
+  FileBadge2,
   KeyRound,
   KeySquare,
   LayoutPanelTop,
@@ -337,6 +338,15 @@ function SettingsPageContent() {
               caption={copy.adminCaption}
               icon={DatabaseZap}
               accent="bg-emerald-50 text-emerald-600"
+            />
+
+            <QuickActionCard
+              href="/admin/lausunto-access"
+              title={t("settings.lausuntoAccessTitle")}
+              description={t("settings.lausuntoAccessDescription")}
+              caption={copy.adminCaption}
+              icon={FileBadge2}
+              accent="bg-sky-50 text-sky-600"
             />
 
             <QuickActionCard
