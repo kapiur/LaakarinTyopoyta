@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Copy, FileBadge2, Search, Sparkles } from "lucide-react";
+import { ArrowDown, ArrowUp, Copy, FileBadge2, Plus, RotateCcw, Save, Search, Sparkles, Trash2 } from "lucide-react";
+import type { GeneratedLausuntoField, LausuntoFieldResponseType, LausuntoFieldTemplate } from "../../lib/lausunto/fieldTemplates";
 import { searchIcd10Catalog, type Icd10Entry } from "../../lib/lausunto/icd10Catalog";
 
 type LausuntoMode = "sairausloma" | "bc_lausunto" | "b_lausunto" | "c_lausunto";
@@ -10,15 +11,6 @@ type AccessPayload = {
   enabled: boolean;
   practiceCountry: string;
   policyEnabled: boolean;
-};
-
-type GeneratedLausuntoField = {
-  key: string;
-  label: string;
-  content: string;
-  required: boolean;
-  omitted: boolean;
-  hint?: string;
 };
 
 const MODE_OPTIONS: LausuntoMode[] = ["sairausloma", "bc_lausunto", "b_lausunto", "c_lausunto"];
@@ -235,6 +227,10 @@ export default function LausunnotPage() {
   const [generatedFields, setGeneratedFields] = useState<GeneratedLausuntoField[]>([]);
   const [generating, setGenerating] = useState(false);
   const [generateError, setGenerateError] = useState("");
+  const [fieldTemplate, setFieldTemplate] = useState<LausuntoFieldTemplate[]>([]);
+  const [fieldTemplateLoading, setFieldTemplateLoading] = useState(false);
+  const [fieldTemplateSaving, setFieldTemplateSaving] = useState(false);
+  const [fieldTemplateStatus, setFieldTemplateStatus] = useState("");
 
   const copy = useMemo(() => ({
     title: "Lausunto-työtila",
@@ -265,13 +261,24 @@ export default function LausunnotPage() {
     generateFailed: "Lausunnon laatiminen epäonnistui.",
     copy: copied ? "Kopioitu" : "Kopioi",
     copyAllFields: "Kopioi käytössä olevat kentät",
-    generatedFields: "B-lausunnon kentät",
+    generatedFields: "Lausunnon kentät",
     generatedFieldsHint: "Muokkaa kenttiä ennen kopiointia. Valinnaisen kentän voi jättää pois, jos se ei ole tässä lausunnossa tarpeellinen.",
+    fieldTemplateTitle: "Oma rakenne",
+    fieldTemplateHint: "Valitse kentät, järjestys ja vastaustapa tälle asiakirjatyypille ja käyttötarkoitukselle. Tallennus koskee vain tätä yhdistelmää.",
+    addField: "Lisää kenttä",
+    saveTemplate: fieldTemplateSaving ? "Tallennetaan..." : "Tallenna rakenne",
+    resetTemplate: "Palauta oletus",
+    requiredField: "Pakollinen",
+    enabledField: "Mukana",
+    responseType: "Vastaustapa",
+    responseText: "Teksti",
+    responseYesNo: "Kyllä / Ei",
+    responseYesNoExplain: "Kyllä / Ei + perustelu",
     omitField: "Ei tarvita / jätä tyhjäksi",
     restoreField: "Käytä kenttää",
     copyField: "Kopioi kenttä",
     loading: "Ladataan...",
-  }), [copied, generatedDraft, generating]);
+  }), [copied, fieldTemplateSaving, generatedDraft, generating]);
 
   const purposeOptions = PURPOSE_OPTIONS;
 
@@ -304,6 +311,38 @@ export default function LausunnotPage() {
     if (!isMedicineReimbursement || medicineName.trim() || !medicineSuggestion) return;
     setMedicineName(medicineSuggestion);
   }, [isMedicineReimbursement, medicineName, medicineSuggestion]);
+
+  useEffect(() => {
+    if (!access?.enabled || !mode || !purpose) return;
+    let isCancelled = false;
+
+    async function loadFieldTemplate() {
+      setFieldTemplateLoading(true);
+      setFieldTemplateStatus("");
+      try {
+        const response = await fetch(`/api/lausunnot/field-template?mode=${encodeURIComponent(mode)}&purpose=${encodeURIComponent(purpose)}`, { cache: "no-store" });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !Array.isArray(data.fields)) {
+          throw new Error(typeof data.error === "string" ? data.error : "Rakenteen lataus epäonnistui.");
+        }
+        if (!isCancelled) {
+          setFieldTemplate(data.fields);
+        }
+      } catch (error) {
+        if (!isCancelled) {
+          setFieldTemplateStatus(error instanceof Error ? error.message : "Rakenteen lataus epäonnistui.");
+          setFieldTemplate([]);
+        }
+      } finally {
+        if (!isCancelled) setFieldTemplateLoading(false);
+      }
+    }
+
+    loadFieldTemplate();
+    return () => {
+      isCancelled = true;
+    };
+  }, [access?.enabled, mode, purpose]);
 
   const draft = useMemo(() => {
     const lines: string[] = [];
@@ -367,6 +406,87 @@ export default function LausunnotPage() {
     )));
   }
 
+  function updateTemplateField(key: string, patch: Partial<LausuntoFieldTemplate>) {
+    setFieldTemplate((fields) => fields.map((field) => (
+      field.key === key ? { ...field, ...patch } : field
+    )));
+  }
+
+  function moveTemplateField(key: string, direction: -1 | 1) {
+    setFieldTemplate((fields) => {
+      const index = fields.findIndex((field) => field.key === key);
+      const nextIndex = index + direction;
+      if (index < 0 || nextIndex < 0 || nextIndex >= fields.length) return fields;
+      const copyFields = [...fields];
+      const [field] = copyFields.splice(index, 1);
+      copyFields.splice(nextIndex, 0, field);
+      return copyFields.map((item, orderIndex) => ({ ...item, order: orderIndex + 1 }));
+    });
+  }
+
+  function addTemplateField() {
+    const nextIndex = fieldTemplate.length + 1;
+    setFieldTemplate((fields) => [
+      ...fields,
+      {
+        key: `oma_kentta_${Date.now()}`,
+        label: `Oma kenttä ${nextIndex}`,
+        enabled: true,
+        required: false,
+        responseType: "text",
+        order: nextIndex,
+      },
+    ]);
+  }
+
+  function removeTemplateField(key: string) {
+    setFieldTemplate((fields) => fields
+      .filter((field) => field.key !== key)
+      .map((field, index) => ({ ...field, order: index + 1 })));
+  }
+
+  async function saveFieldTemplate() {
+    setFieldTemplateSaving(true);
+    setFieldTemplateStatus("");
+    try {
+      const response = await fetch("/api/lausunnot/field-template", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode, purpose, fields: fieldTemplate }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !Array.isArray(data.fields)) {
+        throw new Error(typeof data.error === "string" ? data.error : "Rakenteen tallennus epäonnistui.");
+      }
+      setFieldTemplate(data.fields);
+      setFieldTemplateStatus("Rakenne tallennettu.");
+    } catch (error) {
+      setFieldTemplateStatus(error instanceof Error ? error.message : "Rakenteen tallennus epäonnistui.");
+    } finally {
+      setFieldTemplateSaving(false);
+    }
+  }
+
+  async function resetFieldTemplate() {
+    setFieldTemplateSaving(true);
+    setFieldTemplateStatus("");
+    try {
+      const response = await fetch(`/api/lausunnot/field-template?mode=${encodeURIComponent(mode)}&purpose=${encodeURIComponent(purpose)}`, {
+        method: "DELETE",
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !Array.isArray(data.fields)) {
+        throw new Error(typeof data.error === "string" ? data.error : "Oletusrakenteen palautus epäonnistui.");
+      }
+      setFieldTemplate(data.fields);
+      setFieldTemplateStatus("Oletusrakenne palautettu.");
+    } catch (error) {
+      setFieldTemplateStatus(error instanceof Error ? error.message : "Oletusrakenteen palautus epäonnistui.");
+    } finally {
+      setFieldTemplateSaving(false);
+    }
+  }
+
   async function generateLausunto() {
     if (!sourceText.trim() && !additionalNotes.trim()) {
       setGenerateError(copy.generateHint);
@@ -396,6 +516,7 @@ export default function LausunnotPage() {
           absenceFrom,
           absenceTo,
           diagnosis: selectedIcd ? { code: selectedIcd.code, label: selectedIcd.fi } : null,
+          fieldTemplate,
         }),
       });
       const data = await response.json().catch(() => ({}));
@@ -486,6 +607,30 @@ export default function LausunnotPage() {
               </ul>
             </div>
           ) : null}
+
+          <LausuntoFieldTemplateEditor
+            title={copy.fieldTemplateTitle}
+            hint={copy.fieldTemplateHint}
+            fields={fieldTemplate}
+            loading={fieldTemplateLoading}
+            saving={fieldTemplateSaving}
+            status={fieldTemplateStatus}
+            addLabel={copy.addField}
+            saveLabel={copy.saveTemplate}
+            resetLabel={copy.resetTemplate}
+            requiredLabel={copy.requiredField}
+            enabledLabel={copy.enabledField}
+            responseTypeLabel={copy.responseType}
+            responseTextLabel={copy.responseText}
+            responseYesNoLabel={copy.responseYesNo}
+            responseYesNoExplainLabel={copy.responseYesNoExplain}
+            onAdd={addTemplateField}
+            onSave={saveFieldTemplate}
+            onReset={resetFieldTemplate}
+            onMove={moveTemplateField}
+            onChange={updateTemplateField}
+            onRemove={removeTemplateField}
+          />
 
           <TextArea label={copy.sourceText} value={sourceText} onChange={setSourceText} rows={7} />
           <p className="-mt-2 text-xs text-slate-500">{copy.sourceHint}</p>
@@ -646,7 +791,6 @@ function GeneratedFieldEditor({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="text-xs font-bold uppercase tracking-wider text-slate-500">{field.label}</div>
-          {field.hint ? <p className="mt-1 text-xs leading-5 text-slate-500">{field.hint}</p> : null}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {!field.required ? (
@@ -676,6 +820,180 @@ function GeneratedFieldEditor({
         onChange={(event) => onChange(event.target.value)}
         className="mt-3 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-800 resize-y disabled:text-slate-400"
       />
+    </div>
+  );
+}
+
+function LausuntoFieldTemplateEditor({
+  title,
+  hint,
+  fields,
+  loading,
+  saving,
+  status,
+  addLabel,
+  saveLabel,
+  resetLabel,
+  requiredLabel,
+  enabledLabel,
+  responseTypeLabel,
+  responseTextLabel,
+  responseYesNoLabel,
+  responseYesNoExplainLabel,
+  onAdd,
+  onSave,
+  onReset,
+  onMove,
+  onChange,
+  onRemove,
+}: {
+  title: string;
+  hint: string;
+  fields: LausuntoFieldTemplate[];
+  loading: boolean;
+  saving: boolean;
+  status: string;
+  addLabel: string;
+  saveLabel: string;
+  resetLabel: string;
+  requiredLabel: string;
+  enabledLabel: string;
+  responseTypeLabel: string;
+  responseTextLabel: string;
+  responseYesNoLabel: string;
+  responseYesNoExplainLabel: string;
+  onAdd: () => void;
+  onSave: () => void;
+  onReset: () => void;
+  onMove: (key: string, direction: -1 | 1) => void;
+  onChange: (key: string, patch: Partial<LausuntoFieldTemplate>) => void;
+  onRemove: (key: string) => void;
+}) {
+  return (
+    <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50 p-4 space-y-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="text-sm font-bold text-slate-900">{title}</div>
+          <p className="mt-1 text-xs leading-5 text-slate-500">{hint}</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={onAdd}
+            disabled={loading || saving}
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300"
+          >
+            <Plus size={14} />
+            {addLabel}
+          </button>
+          <button
+            type="button"
+            onClick={onReset}
+            disabled={loading || saving}
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300"
+          >
+            <RotateCcw size={14} />
+            {resetLabel}
+          </button>
+          <button
+            type="button"
+            onClick={onSave}
+            disabled={loading || saving || fields.length === 0}
+            className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-xs font-bold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+          >
+            <Save size={14} />
+            {saveLabel}
+          </button>
+        </div>
+      </div>
+
+      {status ? <div className="rounded-2xl border border-blue-100 bg-white px-3 py-2 text-xs font-semibold text-slate-600">{status}</div> : null}
+
+      {loading ? (
+        <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-4 text-sm text-slate-500">
+          Ladataan rakennetta...
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {fields.map((field, index) => (
+            <div key={field.key} className="rounded-2xl border border-slate-200 bg-white p-3">
+              <div className="grid grid-cols-1 xl:grid-cols-[1fr_12rem] gap-3">
+                <label className="block">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Kentän nimi</span>
+                  <input
+                    value={field.label}
+                    onChange={(event) => onChange(field.key, { label: event.target.value })}
+                    className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500">{responseTypeLabel}</span>
+                  <select
+                    value={field.responseType}
+                    onChange={(event) => onChange(field.key, { responseType: event.target.value as LausuntoFieldResponseType })}
+                    className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800"
+                  >
+                    <option value="text">{responseTextLabel}</option>
+                    <option value="yes_no">{responseYesNoLabel}</option>
+                    <option value="yes_no_with_explanation">{responseYesNoExplainLabel}</option>
+                  </select>
+                </label>
+              </div>
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-4 text-xs font-semibold text-slate-600">
+                  <label className="inline-flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={field.enabled}
+                      onChange={(event) => onChange(field.key, { enabled: event.target.checked })}
+                      className="h-4 w-4 rounded border-slate-300 text-blue-600"
+                    />
+                    {enabledLabel}
+                  </label>
+                  <label className="inline-flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={field.required}
+                      onChange={(event) => onChange(field.key, { required: event.target.checked })}
+                      className="h-4 w-4 rounded border-slate-300 text-blue-600"
+                    />
+                    {requiredLabel}
+                  </label>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => onMove(field.key, -1)}
+                    disabled={index === 0}
+                    className="rounded-xl border border-slate-200 p-2 text-slate-500 hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300"
+                    aria-label="Siirrä kenttä ylös"
+                  >
+                    <ArrowUp size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onMove(field.key, 1)}
+                    disabled={index === fields.length - 1}
+                    className="rounded-xl border border-slate-200 p-2 text-slate-500 hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300"
+                    aria-label="Siirrä kenttä alas"
+                  >
+                    <ArrowDown size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onRemove(field.key)}
+                    disabled={fields.length <= 1}
+                    className="rounded-xl border border-rose-100 p-2 text-rose-500 hover:bg-rose-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-300"
+                    aria-label="Poista kenttä"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

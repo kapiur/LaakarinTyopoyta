@@ -5,94 +5,19 @@ import { buildUserAiProfileInstruction } from "../../../../lib/ai/userAiProfile"
 import { getUserAiProfile } from "../../../../lib/ai/userAiProfileStore";
 import { buildWorkspaceContextInstruction, getUserAiWorkspaceContext } from "../../../../lib/ai/workspaceContext";
 import { getLausuntoWorkspaceAccess } from "../../../../lib/lausunto/access";
+import {
+  buildContentFromFields,
+  type GeneratedLausuntoField,
+  type LausuntoFieldTemplate,
+  enabledLausuntoFields,
+  getDefaultLausuntoFieldTemplate,
+  normalizeLausuntoFieldTemplate,
+  responseTypeInstruction,
+} from "../../../../lib/lausunto/fieldTemplates";
 import { preparePrivacyPayload } from "../../../../lib/privacy/gateway";
 
 const LAUSUNTO_MODES = new Set(["sairausloma", "bc_lausunto", "b_lausunto", "c_lausunto"]);
 const LAUSUNTO_BLOCKING_RESIDUAL_TYPES = new Set(["hetu", "email", "phone", "address"]);
-
-type StructuredLausuntoField = {
-  key: string;
-  label: string;
-  content: string;
-  required: boolean;
-  omitted: boolean;
-  hint?: string;
-};
-
-const B_LAUSUNTO_FIELDS: Array<Omit<StructuredLausuntoField, "content" | "omitted">> = [
-  {
-    key: "potilaan_terveydentilan_tunteminen",
-    label: "Potilaan terveydentilan tunteminen",
-    required: false,
-    hint: "Lyhyesti miten lausunnon antaja tuntee potilaan tilanteen, jos tieto ilmenee aineistosta.",
-  },
-  {
-    key: "lausunnon_tarkoitus",
-    label: "Lausunnon tarkoitus",
-    required: true,
-    hint: "Mihin etuuteen, arvioon tai päätökseen lausuntoa käytetään.",
-  },
-  {
-    key: "diagnoosit",
-    label: "Diagnoosit",
-    required: true,
-    hint: "ICD-10-koodi ja diagnoosin nimi, tarvittaessa ensisijainen diagnoosi ensin.",
-  },
-  {
-    key: "esitiedot",
-    label: "Esitiedot",
-    required: true,
-    hint: "Sairauden alkuvaihe, kehitys, oireisto, diagnoosin perusteet, aiempi hoito ja kuntoutus.",
-  },
-  {
-    key: "nykytila",
-    label: "Nykytila",
-    required: true,
-    hint: "Ajankohtaiset oireet, tutkimuslöydökset, mittaukset ja vastaanotolla todettu tilanne.",
-  },
-  {
-    key: "toimintakyky",
-    label: "Toimintakyky",
-    required: true,
-    hint: "Arjen, työn, opiskelun ja liikkumisen kannalta olennaiset toimintakyvyn rajoitteet.",
-  },
-  {
-    key: "toimintakyvyn_ennuste",
-    label: "Arvio toimintakyvyn ennusteesta hoidon ja kuntoutuksen jälkeen",
-    required: false,
-    hint: "Ennuste vain aineistossa kuvattujen tietojen perusteella.",
-  },
-  {
-    key: "tutkimus_ja_hoitosuunnitelma",
-    label: "Tutkimus- ja hoitosuunnitelma",
-    required: true,
-    hint: "Suunnitelman sisältö, tavoitteet, aikataulu ja hoidosta vastaava taho.",
-  },
-  {
-    key: "tyokyky_ja_kuntoutus",
-    label: "Työkyky ja kuntoutus",
-    required: false,
-    hint: "Työn vaatimukset, työkyky, kuntoutustarve ja mahdolliset työjärjestelyt.",
-  },
-  {
-    key: "arvio_tyokyvysta",
-    label: "Arvio työkyvystä",
-    required: false,
-    hint: "Työkyvyn arvio ja mahdollinen työkyvyttömyysjakso, jos lausunnon tarkoitus sitä edellyttää.",
-  },
-  {
-    key: "johtopaatokset",
-    label: "Työkykyä koskevat johtopäätökset / etuuden kannalta olennainen perustelu",
-    required: true,
-    hint: "Tiivis päätelmä Kelan kannalta olennaisesta perustelusta.",
-  },
-  {
-    key: "taydennettava",
-    label: "Täydennettävä",
-    required: false,
-    hint: "Vain konkreettiset puuttuvat tiedot, joita ei voi päätellä aineistosta.",
-  },
-];
 
 const PRIVACY_PLACEHOLDER_SYSTEM_PROMPT = `
 Privacy placeholders:
@@ -122,6 +47,7 @@ type GenerateBody = {
   absenceFrom?: unknown;
   absenceTo?: unknown;
   diagnosis?: DiagnosisPayload | null;
+  fieldTemplate?: unknown;
 };
 
 function text(value: unknown) {
@@ -185,15 +111,16 @@ ${payload.additionalNotes || "Ei erillisiä lisäohjeita."}
 `;
 }
 
-function buildStructuredBLausuntoPrompt(payload: Parameters<typeof buildPrompt>[0]) {
+function buildStructuredLausuntoPrompt(payload: Parameters<typeof buildPrompt>[0], fieldTemplate: LausuntoFieldTemplate[]) {
   const basePrompt = buildPrompt(payload);
-  const fieldInstructions = B_LAUSUNTO_FIELDS.map((field) => (
-    `- ${field.key}: ${field.label}. ${field.required ? "Pakollinen, jos aineistosta löytyy tieto." : "Valinnainen."} ${field.hint ?? ""}`
+  const fields = enabledLausuntoFields(fieldTemplate, payload.mode);
+  const fieldInstructions = fields.map((field) => (
+    `- ${field.key}: ${field.label}. ${field.required ? "Pakollinen, jos aineistosta löytyy tieto." : "Valinnainen."} ${responseTypeInstruction(field.responseType)}`
   )).join("\n");
 
   return `${basePrompt}
 
-Tämän pyynnön tulos palautetaan B-lausunnon kenttärakenteena.
+Tämän pyynnön tulos palautetaan käyttäjän valitsemana lausuntokenttien rakenteena.
 Palauta vain validi JSON ilman markdownia, ilman johdantoa ja ilman koodiaidan merkkejä.
 
 JSON-rakenne:
@@ -205,7 +132,7 @@ JSON-rakenne:
       "content": "Valmis suomenkielinen kenttäteksti. Tyhjä merkkijono, jos aineistossa ei ole riittävää tietoa.",
       "required": true,
       "omitted": false,
-      "hint": "Lyhyt ohje käyttäjälle"
+      "responseType": "text"
     }
   ]
 }
@@ -214,7 +141,7 @@ Käytä täsmälleen näitä kenttiä ja järjestystä:
 ${fieldInstructions}
 
 Täyttöohje:
-- Kirjoita kenttien content-arvot valmiiksi kopioitavaksi Kela B-lausunnon kenttiin.
+- Kirjoita kenttien content-arvot valmiiksi kopioitavaksi valitun lausunnon tai todistuksen kenttiin.
 - Älä yhdistä kaikkia kenttiä yhdeksi proosaksi.
 - Älä täytä puuttuvaa tietoa keksimällä. Jos tieto puuttuu, jätä content tyhjäksi tai lisää se vain "taydennettava"-kenttään konkreettisena puutteena.
 - Pidä teksti lakonisena mutta riittävänä. Jokaisessa kentässä vain sen kentän asia.
@@ -250,7 +177,7 @@ Rakenteen ohje:
 `;
 }
 
-function normalizeStructuredField(value: unknown, fallback: Omit<StructuredLausuntoField, "content" | "omitted">): StructuredLausuntoField {
+function normalizeStructuredField(value: unknown, fallback: LausuntoFieldTemplate): GeneratedLausuntoField {
   const item = typeof value === "object" && value !== null ? value as Record<string, unknown> : {};
   return {
     key: fallback.key,
@@ -258,17 +185,17 @@ function normalizeStructuredField(value: unknown, fallback: Omit<StructuredLausu
     content: text(item.content),
     required: typeof item.required === "boolean" ? item.required : fallback.required,
     omitted: typeof item.omitted === "boolean" ? item.omitted : false,
-    hint: text(item.hint) || fallback.hint,
+    responseType: fallback.responseType,
   };
 }
 
-function parseStructuredLausunto(content: string): StructuredLausuntoField[] | null {
+function parseStructuredLausunto(content: string, fieldTemplate: LausuntoFieldTemplate[], mode: string): GeneratedLausuntoField[] | null {
   const trimmed = content.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
   try {
     const parsed = JSON.parse(trimmed) as { fields?: unknown };
     if (!Array.isArray(parsed.fields)) return null;
     const parsedFields = parsed.fields;
-    return B_LAUSUNTO_FIELDS.map((field) => {
+    return enabledLausuntoFields(fieldTemplate, mode).map((field) => {
       const match = parsedFields.find((item) => typeof item === "object" && item !== null && (item as Record<string, unknown>).key === field.key);
       return normalizeStructuredField(match, field);
     });
@@ -277,14 +204,7 @@ function parseStructuredLausunto(content: string): StructuredLausuntoField[] | n
   }
 }
 
-function buildContentFromFields(fields: StructuredLausuntoField[]) {
-  return fields
-    .filter((field) => field.content.trim())
-    .map((field) => `${field.label}\n${field.content.trim()}`)
-    .join("\n\n");
-}
-
-function sanitizeStructuredFields(fields: StructuredLausuntoField[]) {
+function sanitizeStructuredFields(fields: GeneratedLausuntoField[]) {
   const fieldPrivacy = preparePrivacyPayload(fields.map((field) => ({
     key: field.key,
     value: field.content,
@@ -374,8 +294,13 @@ export async function POST(request: Request) {
     diagnosisCode: text(diagnosis?.code),
     diagnosisLabel: text(diagnosis?.label),
   };
-  const userPrompt = mode === "b_lausunto"
-    ? buildStructuredBLausuntoPrompt(promptPayload)
+  const fieldTemplate = normalizeLausuntoFieldTemplate(
+    body.fieldTemplate ?? getDefaultLausuntoFieldTemplate(mode, text(body.purpose) || "default"),
+    mode,
+  );
+  const hasStructuredFields = enabledLausuntoFields(fieldTemplate, mode).length > 0;
+  const userPrompt = hasStructuredFields
+    ? buildStructuredLausuntoPrompt(promptPayload, fieldTemplate)
     : buildPrompt(promptPayload);
 
   const result = await runRoutedAiCompletion({
@@ -389,7 +314,7 @@ export async function POST(request: Request) {
     ],
   });
 
-  const structuredFields = mode === "b_lausunto" ? parseStructuredLausunto(result.content) : null;
+  const structuredFields = hasStructuredFields ? parseStructuredLausunto(result.content, fieldTemplate, mode) : null;
   const structuredPrivacy = structuredFields ? sanitizeStructuredFields(structuredFields) : null;
   const structuredContent = structuredPrivacy ? buildContentFromFields(structuredPrivacy.fields) : "";
   const outputPrivacy = preparePrivacyPayload([
