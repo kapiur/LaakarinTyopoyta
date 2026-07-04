@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Copy, FileBadge2, Search } from "lucide-react";
+import { Copy, FileBadge2, Search, Sparkles } from "lucide-react";
 import { searchIcd10Catalog, type Icd10Entry } from "../../lib/lausunto/icd10Catalog";
 
 type LausuntoMode = "sairausloma" | "bc_lausunto" | "b_lausunto" | "c_lausunto";
@@ -222,6 +222,9 @@ export default function LausunnotPage() {
   const [absenceFrom, setAbsenceFrom] = useState("");
   const [absenceTo, setAbsenceTo] = useState("");
   const [copied, setCopied] = useState(false);
+  const [generatedDraft, setGeneratedDraft] = useState("");
+  const [generating, setGenerating] = useState(false);
+  const [generateError, setGenerateError] = useState("");
 
   const copy = useMemo(() => ({
     title: "Lausunto-työtila",
@@ -246,10 +249,13 @@ export default function LausunnotPage() {
     manualDiagnosis: "Manuaalinen ICD-10-haku",
     noDiagnosisSuggestion: "Varmaa diagnoosiehdotusta ei löytynyt vielä. Voit hakea diagnoosin käsin.",
     icdPlaceholder: "Esim. I10, hypertensio, alaselän kipu",
-    preview: "Rakennettu luonnos",
+    preview: generatedDraft ? "AI-luonnos" : "Rakenne-esikatselu",
+    generate: generating ? "Laaditaan..." : "Laadi lausunto AI:lla",
+    generateHint: "Lisää lähtöaineisto ennen AI-luonnoksen laatimista.",
+    generateFailed: "Lausunnon laatiminen epäonnistui.",
     copy: copied ? "Kopioitu" : "Kopioi",
     loading: "Ladataan...",
-  }), [copied]);
+  }), [copied, generatedDraft, generating]);
 
   const purposeOptions = PURPOSE_OPTIONS;
 
@@ -320,9 +326,54 @@ export default function LausunnotPage() {
   }, [absenceFrom, absenceTo, additionalNotes, isMedicineReimbursement, medicineName, mode, occupation, periodFrom, periodTo, selectedIcd, selectedPurpose, sourceText]);
 
   async function copyDraft() {
-    await navigator.clipboard.writeText(draft);
+    await navigator.clipboard.writeText(generatedDraft || draft);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
+  }
+
+  async function generateLausunto() {
+    if (!sourceText.trim() && !additionalNotes.trim()) {
+      setGenerateError(copy.generateHint);
+      return;
+    }
+
+    setGenerating(true);
+    setGenerateError("");
+
+    try {
+      const response = await fetch("/api/lausunnot/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode,
+          modeLabel: MODE_LABELS[mode],
+          purpose,
+          purposeLabel: selectedPurpose?.label,
+          purposeDescription: selectedPurpose?.description,
+          purposeGuide: selectedPurpose?.guide,
+          sourceText,
+          additionalNotes,
+          medicineName,
+          periodFrom,
+          periodTo,
+          occupation,
+          absenceFrom,
+          absenceTo,
+          diagnosis: selectedIcd ? { code: selectedIcd.code, label: selectedIcd.fi } : null,
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok || typeof data.content !== "string" || !data.content.trim()) {
+        throw new Error(typeof data.error === "string" ? data.error : copy.generateFailed);
+      }
+
+      setGeneratedDraft(data.content.trim());
+    } catch (error) {
+      setGenerateError(error instanceof Error ? error.message : copy.generateFailed);
+    } finally {
+      setGenerating(false);
+    }
   }
 
   if (loading) {
@@ -481,13 +532,29 @@ export default function LausunnotPage() {
         <section className="bg-white border border-slate-200 rounded-[2rem] p-6 shadow-sm space-y-4">
           <div className="flex items-center justify-between gap-4">
             <h2 className="text-lg font-bold text-slate-900">{copy.preview}</h2>
-            <button onClick={copyDraft} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 text-sm font-bold text-slate-700 hover:bg-slate-50">
-              <Copy size={16} />
-              {copy.copy}
-            </button>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={generateLausunto}
+                disabled={generating || (!sourceText.trim() && !additionalNotes.trim())}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 text-sm font-bold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+              >
+                <Sparkles size={16} />
+                {copy.generate}
+              </button>
+              <button onClick={copyDraft} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 text-sm font-bold text-slate-700 hover:bg-slate-50">
+                <Copy size={16} />
+                {copy.copy}
+              </button>
+            </div>
           </div>
+          {generateError ? (
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
+              {generateError}
+            </div>
+          ) : null}
           <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50 p-5 whitespace-pre-wrap text-sm leading-7 text-slate-800 min-h-[36rem]">
-            {draft}
+            {generatedDraft || draft}
           </div>
         </section>
       </div>
