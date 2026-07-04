@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Copy, FileBadge2, Search } from "lucide-react";
-import { useI18n } from "../../lib/useI18n";
 import { searchIcd10Catalog, type Icd10Entry } from "../../lib/lausunto/icd10Catalog";
 
 type LausuntoMode = "sairausloma" | "bc_lausunto" | "b_lausunto" | "c_lausunto";
@@ -18,7 +17,123 @@ const MODE_OPTIONS: LausuntoMode[] = ["sairausloma", "bc_lausunto", "b_lausunto"
 type PurposeOption = {
   value: string;
   label: string;
+  description: string;
+  guide: string[];
 };
+
+const MODE_LABELS: Record<LausuntoMode, string> = {
+  sairausloma: "Sairauslomatodistus",
+  bc_lausunto: "B/C-lausunto",
+  b_lausunto: "B-lausunto",
+  c_lausunto: "C-lausunto",
+};
+
+const MODE_NOTES: Record<LausuntoMode, string> = {
+  sairausloma: "Sairauslomatodistus sopii lyhyen työkyvyttömyyden ja poissaolon todentamiseen.",
+  bc_lausunto: "Uusi B/C-lausunto kokoaa B- ja C-lausunnon käyttötarkoituksia samaan rakenteeseen. Samaan lausuntoon voi sisältyä useita etuuksia, mutta tekstiin kirjataan vain asian kannalta olennaiset tiedot.",
+  b_lausunto: "B-lausuntoa käytetään edelleen siirtymäkaudella sairauspäivärahan, kuntoutuksen, työkyvyttömyyden ja lääkekorvausoikeuden arviointiin.",
+  c_lausunto: "C-lausuntoa käytetään vammaisetuuksiin: alle 16-vuotiaan vammaistuki, 16 vuotta täyttäneen vammaistuki ja eläkettä saavan hoitotuki.",
+};
+
+const PURPOSE_OPTIONS: Record<LausuntoMode, PurposeOption[]> = {
+  sairausloma: [
+    {
+      value: "sairauslomatodistus",
+      label: "Sairauslomatodistus",
+      description: "Lyhyt todistus työkyvyttömyydestä tai sairauspoissaolosta.",
+      guide: ["Diagnoosi tai oireperuste", "Työkyvyttömyyden alku ja arvioitu loppu", "Lyhyt status/perustelu", "Hoito- ja seurantasuunnitelma"],
+    },
+    {
+      value: "sairauspoissaolon_jatko",
+      label: "Sairauspoissaolon jatko",
+      description: "Jatkotodistus, jossa korostuu oireiden kulku ja työkyvyn uusi arvio.",
+      guide: ["Miksi työkyvyttömyys jatkuu", "Mitä on muuttunut edellisestä arviosta", "Nykyinen toimintakyky", "Seuranta ja uusi arviointiajankohta"],
+    },
+    {
+      value: "tyohon_paluun_arvio",
+      label: "Työhön paluun arvio",
+      description: "Arvio työkyvyn palautumisesta, rajoitteista ja mahdollisesta osittaisesta paluusta.",
+      guide: ["Nykyinen toimintakyky", "Työn vaatimukset", "Mahdolliset rajoitteet", "Työhön paluun aikataulu ja seuranta"],
+    },
+  ],
+  bc_lausunto: [
+    {
+      value: "sairauspaivaraha",
+      label: "Sairauspäiväraha",
+      description: "B/C-lausunnon sairauspäivärahaosio, kun työkyvyttömyys pitkittyy tai Kela tarvitsee laajemman arvion.",
+      guide: ["Diagnoosi ja sairauden kulku", "Tutkimus- ja statuslöydökset", "Toimintakyky ja työkyky suhteessa omaan työhön", "Hoito-, kuntoutus- ja seurantasuunnitelma"],
+    },
+    {
+      value: "osasairauspaivaraha",
+      label: "Osasairauspäiväraha",
+      description: "Arvio siitä, voiko potilas tehdä osa-aikatyötä terveyttään vaarantamatta.",
+      guide: ["Nykytila ja toimintakyky", "Miksi osa-aikatyö on mahdollinen", "Tarvittavat työjärjestelyt", "Arvioitu kesto ja seuranta"],
+    },
+    {
+      value: "ammatillinen_kuntoutus",
+      label: "Ammatillinen kuntoutus",
+      description: "Kun sairaus uhkaa työkykyä ja tarvitaan ammatillisen kuntoutuksen arvio.",
+      guide: ["Ammatti ja työn vaatimukset", "Diagnoosi ja toimintakyky", "Miten sairaus vaikuttaa työhön", "Motivaatio, voimavarat ja kuntoutuksen tavoitteet"],
+    },
+    {
+      value: "vaativa_laakinnallinen_kuntoutus",
+      label: "Vaativa lääkinnällinen kuntoutus",
+      description: "Kuntoutussuunnitelmaa tukeva lausunto vaativaa lääkinnällistä kuntoutusta varten.",
+      guide: ["Toimintakyky arjessa, opiskelussa tai työssä", "Aiempi kuntoutus ja sen vaikutus", "Tavoitteet, toimenpiteet ja kesto", "Seuranta ja yhteistyötahot"],
+    },
+    {
+      value: "kuntoutuspsykoterapia",
+      label: "Kuntoutuspsykoterapia",
+      description: "Lausunto psykoterapiakuntoutuksen tarpeesta ja ajankohdasta.",
+      guide: ["Psykiatrinen diagnoosi ja oirekuva", "Vähintään 3 kuukauden hoito ja sen vaste", "Työ- tai opiskelukyky", "Soveltuvuus, ajoitus, päihdeanamneesi ja ennuste"],
+    },
+    {
+      value: "nuoren_kuntoutusraha",
+      label: "Nuoren kuntoutusraha",
+      description: "Nuoren opiskelu- ja ammatillisen polun tukeminen sairauden tai toimintakyvyn rajoitteen vuoksi.",
+      guide: ["Diagnoosi ja nykytila", "Opiskelu tai muu elämäntilanne", "Hoito ja kuntoutus", "Vaikutus koulutukseen, ammatinvalintaan ja erityisen tuen tarpeeseen"],
+    },
+    {
+      value: "kuntoutustuki_tyokyvyttomyyselake",
+      label: "Kuntoutustuki tai työkyvyttömyyseläke",
+      description: "Laaja työkykyarvio määräaikaista tai pysyvää työkyvyttömyysetuutta varten.",
+      guide: ["Sairaudet, löydökset ja hoitohistoria", "Työtehtävät ja niiden vaatimukset", "Jäljellä oleva työ- ja toimintakyky", "Hoito, kuntoutus, ennuste ja jatkosuunnitelma"],
+    },
+    {
+      value: "laake_tai_ravintovalmiste_korvausoikeus",
+      label: "Lääkkeen tai kliinisen ravintovalmisteen korvausoikeus",
+      description: "Perustelu lääkkeen tai kliinisen ravintovalmisteen erityiskorvausoikeudelle.",
+      guide: ["Valmisteen nimi ja käyttötarkoitus", "Diagnoosi ja Kelan korvauskriteereihin liittyvät tiedot", "Aloitettu tai suunniteltu hoito ja annos", "Hoitovaste, seuranta ja muut perustelut"],
+    },
+    {
+      value: "alle_16_vammaistuki",
+      label: "Alle 16-vuotiaan vammaistuki",
+      description: "Lapsen pitkäaikainen sairaus tai vamma ja siitä aiheutuva hoidon, huolenpidon ja valvonnan tarve.",
+      guide: ["Sairaudet, vammat ja diagnostiikka", "Hoito ja kuntoutus", "Hoidon, avun ja valvonnan tarve", "Miten tarve poikkeaa saman ikäisestä terveestä lapsesta"],
+    },
+    {
+      value: "16_vuotta_tayttaneen_vammaistuki",
+      label: "16 vuotta täyttäneen vammaistuki",
+      description: "Pitkäaikainen toimintakyvyn heikentyminen ja avun, ohjauksen tai valvonnan tarve.",
+      guide: ["Nykyinen toimintakyky", "Toimintakykyyn vaikuttavat sairaudet tai vammat", "Pitkäaikainen vaikutus arkeen", "Avun, ohjauksen ja valvonnan tarve"],
+    },
+    {
+      value: "elaketta_saavan_hoitotuki",
+      label: "Eläkettä saavan hoitotuki",
+      description: "Eläkkeensaajan toimintakyky, hoidon tarve ja arjessa tarvittava apu.",
+      guide: ["Nykyinen toimintakyky", "Sairaudet ja vammat, jotka rajoittavat toimintaa", "Päivittäinen avun ja ohjauksen tarve", "Hoidon, valvonnan ja palvelujen tarve"],
+    },
+  ],
+  b_lausunto: [],
+  c_lausunto: [],
+};
+
+PURPOSE_OPTIONS.b_lausunto = PURPOSE_OPTIONS.bc_lausunto.filter(
+  (item) => !["alle_16_vammaistuki", "16_vuotta_tayttaneen_vammaistuki", "elaketta_saavan_hoitotuki"].includes(item.value),
+);
+PURPOSE_OPTIONS.c_lausunto = PURPOSE_OPTIONS.bc_lausunto.filter((item) =>
+  ["alle_16_vammaistuki", "16_vuotta_tayttaneen_vammaistuki", "elaketta_saavan_hoitotuki"].includes(item.value),
+);
 
 function scoreDiagnosisFromSource(entry: Icd10Entry, text: string) {
   const normalized = text.trim().toLowerCase();
@@ -84,7 +199,6 @@ function extractMedicineName(text: string) {
 }
 
 export default function LausunnotPage() {
-  const { language } = useI18n();
   const [access, setAccess] = useState<AccessPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
@@ -93,6 +207,7 @@ export default function LausunnotPage() {
   const [purpose, setPurpose] = useState("sairauslomatodistus");
   const [sourceText, setSourceText] = useState("");
   const [additionalNotes, setAdditionalNotes] = useState("");
+  const [functionalImpact, setFunctionalImpact] = useState("");
   const [medicineName, setMedicineName] = useState("");
   const [periodFrom, setPeriodFrom] = useState("");
   const [periodTo, setPeriodTo] = useState("");
@@ -101,149 +216,38 @@ export default function LausunnotPage() {
   const [absenceTo, setAbsenceTo] = useState("");
   const [copied, setCopied] = useState(false);
 
-  const copy = useMemo(() => {
-    if (language === "ru") {
-      return {
-        title: "Lausunto-рабочее пространство",
-        subtitle: "Финский инструмент для B/C-lausunto, отдельных B- и C-lausunto и sairauslomatodistus. Черновик строится по разделам, чтобы врач мог переносить его в рабочую программу частями.",
-        noAccess: "Этот инструмент доступен только пользователям с включённым доступом и страной работы Финляндия.",
-        mode: "Тип документа",
-        purpose: "Для чего документ",
-        sourceText: "Исходные тексты одним полем",
-        sourceHint: "Вставьте сюда все записи, выписки и фрагменты. Инструмент сам использует этот массив как основу для lausunto.",
-        additionalNotes: "Дополнительные замечания",
-        medicineName: "Препарат / препарат питания",
-        periodFrom: "Период / лечение с",
-        periodTo: "Период / контроль / до",
-        occupation: "Профессия / характер работы",
-        absenceFrom: "Больничный с",
-        absenceTo: "Больничный по",
-        diagnosisTitle: "Диагноз и ICD-10",
-        diagnosisHint: "Ниже сначала показываются диагнозы, найденные по смыслу в тексте. При необходимости врач может поправить выбор вручную.",
-        suggestedDiagnosis: "Предположительно из текста",
-        manualDiagnosis: "Ручной поиск ICD-10",
-        noDiagnosisSuggestion: "Автоподсказка пока не нашла уверенный диагноз. Можно выбрать вручную.",
-        icdPlaceholder: "Например: I10, hypertension, alaselkan kipu",
-        preview: "Черновик по разделам",
-        copy: copied ? "Скопировано" : "Копировать",
-        loading: "Загрузка...",
-      };
-    }
-    if (language === "en") {
-      return {
-        title: "Lausunto workspace",
-        subtitle: "Finnish workspace for combined B/C lausunto, separate B/C lausunto, and sickness certificate drafting.",
-        noAccess: "This tool is available only for Finland workflow users with explicit access.",
-        mode: "Document type",
-        purpose: "Purpose of document",
-        sourceText: "All source texts in one field",
-        sourceHint: "Paste all notes and excerpts here. The tool uses this combined material as the basis for the draft.",
-        additionalNotes: "Additional notes",
-        medicineName: "Medicine / nutritional product",
-        periodFrom: "Period / treatment from",
-        periodTo: "Period / follow-up / until",
-        occupation: "Occupation / job demands",
-        absenceFrom: "Sick leave from",
-        absenceTo: "Sick leave until",
-        diagnosisTitle: "Diagnosis and ICD-10",
-        diagnosisHint: "Suggested diagnoses are first extracted from the text. The doctor can then refine or replace the choice manually.",
-        suggestedDiagnosis: "Suggested from source text",
-        manualDiagnosis: "Manual ICD-10 search",
-        noDiagnosisSuggestion: "No confident diagnosis suggestion yet. You can select one manually.",
-        icdPlaceholder: "For example: I10, hypertension, low back pain",
-        preview: "Structured draft",
-        copy: copied ? "Copied" : "Copy",
-        loading: "Loading...",
-      };
-    }
-    if (language === "de") {
-      return {
-        title: "Lausunto-Arbeitsbereich",
-        subtitle: "Finnisches Werkzeug fuer kombiniertes B/C-Lausunto, separate B/C-Lausunto und Sairauslomatodistus.",
-        noAccess: "Dieses Werkzeug ist nur fuer Nutzer mit Finnland-Kontext und expliziter Freischaltung verfuegbar.",
-        mode: "Dokumenttyp",
-        purpose: "Zweck des Dokuments",
-        sourceText: "Alle Ausgangstexte in einem Feld",
-        sourceHint: "Hier koennen alle Notizen und Auszuege gesammelt eingefuegt werden. Daraus wird der Entwurf aufgebaut.",
-        additionalNotes: "Zusaetzliche Hinweise",
-        medicineName: "Arzneimittel / klinisches Naehrpraeparat",
-        periodFrom: "Zeitraum / Behandlung ab",
-        periodTo: "Zeitraum / Kontrolle / bis",
-        occupation: "Beruf / Arbeitsanforderungen",
-        absenceFrom: "Arbeitsunfaehig ab",
-        absenceTo: "Arbeitsunfaehig bis",
-        diagnosisTitle: "Diagnose und ICD-10",
-        diagnosisHint: "Zuerst werden Diagnosen sinngemaess aus dem Text vorgeschlagen. Danach kann der Arzt manuell nachsteuern.",
-        suggestedDiagnosis: "Aus dem Text vorgeschlagen",
-        manualDiagnosis: "Manuelle ICD-10-Suche",
-        noDiagnosisSuggestion: "Noch keine sichere Diagnose erkannt. Manuelle Auswahl ist moeglich.",
-        icdPlaceholder: "Zum Beispiel: I10, Hypertonie, Kreuzschmerz",
-        preview: "Entwurf nach Abschnitten",
-        copy: copied ? "Kopiert" : "Kopieren",
-        loading: "Laedt...",
-      };
-    }
-    return {
-      title: "Lausunto-tyotila",
-      subtitle: "Suomeen rajattu tyokalu yhdistetyn B/C-lausunnon, erillisten B- ja C-lausuntojen seka sairauslomatodistuksen luonnosteluun. Tulostus rakennetaan osioittain, jotta tekstin voi siirtaa tyosoftaan paloina.",
-      noAccess: "Tama tyokalu on kaytossa vain niille kayttajille, joille se on erikseen sallittu ja joiden tyoskentelymaa on Suomi.",
-      mode: "Asiakirjan tyyppi",
-      purpose: "Mita varten lausunto kirjoitetaan",
-      sourceText: "Kaikki lahtotekstit yhteen kenttaan",
-      sourceHint: "Liita tahan kaikki potilaan merkinnat, lausunnot ja poimitut tiedot. Tyokalu rakentaa luonnoksen taman aineiston pohjalta.",
-      additionalNotes: "Lisahuomiot",
-      medicineName: "Lääke tai kliininen ravintovalmiste",
-      periodFrom: "Jakso / hoito alkaen",
-      periodTo: "Jakso / kontrolli / asti",
-      occupation: "Ammatti / työn kuva",
-      absenceFrom: "Poissaolo alkaa",
-      absenceTo: "Poissaolo paattyy",
-      diagnosisTitle: "Diagnoosi ja ICD-10",
-      diagnosisHint: "Tyokalu ehdottaa ensin tekstista loytyvia diagnooseja. Niita voi sen jalkeen muokata tai hakea kasin.",
-      suggestedDiagnosis: "Tekstista ehdotettu",
-      manualDiagnosis: "Manuaalinen ICD-10-haku",
-      noDiagnosisSuggestion: "Varmaa diagnoosiehdotusta ei loytynyt viela. Voit hakea diagnoosin kasin.",
-      icdPlaceholder: "Esim. I10, hypertensio, alaselkan kipu",
-      preview: "Osioitu luonnos",
-      copy: copied ? "Kopioitu" : "Kopioi",
-      loading: "Ladataan...",
-    };
-  }, [copied, language]);
+  const copy = useMemo(() => ({
+    title: "Lausunto-työtila",
+    subtitle: "Suomeen rajattu työtila B/C-lausunnon, B-lausunnon, C-lausunnon ja sairauslomatodistuksen luonnosteluun. Lääkäri liittää lähtöaineiston yhteen kenttään ja viimeistelee rakenteen ennen siirtoa työjärjestelmään.",
+    noAccess: "Tämä työkalu on käytössä vain niille käyttäjille, joille se on erikseen sallittu ja joiden työskentelymaa on Suomi.",
+    mode: "Asiakirjan tyyppi",
+    purpose: "Mihin lausuntoa käytetään",
+    sourceText: "Lähtöaineisto",
+    sourceHint: "Liitä tähän kaikki potilastekstit, aiemmat lausunnot, tutkimustulokset ja muut poimitut tiedot yhtenä tekstinä. AI:n tehtävä on jäsentää aineisto, ei vaatia valmiiksi jaoteltuja kenttiä.",
+    additionalNotes: "Lisäohjeet tai lääkärin täsmennykset",
+    functionalImpact: "Toiminta- ja työkyvyn kannalta olennainen tiivistys",
+    medicineName: "Lääke tai kliininen ravintovalmiste",
+    periodFrom: "Jakso alkaa",
+    periodTo: "Jakso päättyy / kontrolli",
+    occupation: "Ammatti / työn kuva",
+    absenceFrom: "Poissaolo alkaa",
+    absenceTo: "Poissaolo päättyy",
+    diagnosisTitle: "Diagnoosi ja ICD-10",
+    diagnosisHint: "Ehdotukset poimitaan lähtöaineistosta. Valintaa voi muuttaa tai diagnoosin voi hakea käsin.",
+    suggestedDiagnosis: "Ehdotettu lähtöaineistosta",
+    manualDiagnosis: "Manuaalinen ICD-10-haku",
+    noDiagnosisSuggestion: "Varmaa diagnoosiehdotusta ei löytynyt vielä. Voit hakea diagnoosin käsin.",
+    icdPlaceholder: "Esim. I10, hypertensio, alaselän kipu",
+    preview: "Rakennettu luonnos",
+    copy: copied ? "Kopioitu" : "Kopioi",
+    loading: "Ladataan...",
+  }), [copied]);
 
-  const purposeOptions = useMemo<Record<LausuntoMode, PurposeOption[]>>(() => ({
-    sairausloma: [
-      { value: "sairauslomatodistus", label: "Sairauslomatodistus" },
-      { value: "sairauspoissaolon_jatko", label: "Sairauspoissaolon jatko" },
-      { value: "tyohon_paluun_arvio", label: "Työhön paluun arvio" },
-    ],
-    bc_lausunto: [
-      { value: "sairauspaivaraha", label: "Sairauspäiväraha" },
-      { value: "osasairauspaivaraha", label: "Osasairauspäiväraha" },
-      { value: "kuntoutus", label: "Kuntoutus" },
-      { value: "nuoren_kuntoutusraha", label: "Nuoren kuntoutusraha" },
-      { value: "kuntoutustuki_tyokyvyttomyyselake", label: "Kuntoutustuki tai työkyvyttömyyseläke" },
-      { value: "laake_tai_ravintovalmiste_korvausoikeus", label: "Lääkkeen tai kliinisen ravintovalmisteen korvausoikeus" },
-      { value: "alle_16_vammaistuki", label: "Alle 16-vuotiaan vammaistuki" },
-      { value: "16_vuotta_tayttaneen_vammaistuki", label: "16 vuotta täyttäneen vammaistuki" },
-      { value: "elaketta_saavan_hoitotuki", label: "Eläkettä saavan hoitotuki" },
-    ],
-    b_lausunto: [
-      { value: "sairauspaivaraha", label: "Sairauspäiväraha" },
-      { value: "osasairauspaivaraha", label: "Osasairauspäiväraha" },
-      { value: "kuntoutus", label: "Kuntoutus" },
-      { value: "nuoren_kuntoutusraha", label: "Nuoren kuntoutusraha" },
-      { value: "kuntoutustuki_tyokyvyttomyyselake", label: "Kuntoutustuki tai työkyvyttömyyseläke" },
-      { value: "laake_tai_ravintovalmiste_korvausoikeus", label: "Lääkkeen tai kliinisen ravintovalmisteen korvausoikeus" },
-    ],
-    c_lausunto: [
-      { value: "alle_16_vammaistuki", label: "Alle 16-vuotiaan vammaistuki" },
-      { value: "16_vuotta_tayttaneen_vammaistuki", label: "16 vuotta täyttäneen vammaistuki" },
-      { value: "elaketta_saavan_hoitotuki", label: "Eläkettä saavan hoitotuki" },
-    ],
-  }), []);
+  const purposeOptions = PURPOSE_OPTIONS;
 
   const diagnosisSuggestions = useMemo(() => extractDiagnosisSuggestions(sourceText), [sourceText]);
   const manualSearchResults = useMemo(() => searchIcd10Catalog(query), [query]);
+  const selectedPurpose = purposeOptions[mode].find((item) => item.value === purpose) ?? purposeOptions[mode][0];
   const isMedicineReimbursement = (mode === "b_lausunto" || mode === "bc_lausunto") && purpose === "laake_tai_ravintovalmiste_korvausoikeus";
   const medicineSuggestion = useMemo(() => extractMedicineName(sourceText), [sourceText]);
 
@@ -274,9 +278,8 @@ export default function LausunnotPage() {
   const draft = useMemo(() => {
     const lines: string[] = [];
 
-    lines.push(mode === "sairausloma" ? "Sairauslomatodistus" : mode === "bc_lausunto" ? "B/C-lausunto" : mode === "b_lausunto" ? "B-lausunto" : "C-lausunto");
+    lines.push(MODE_LABELS[mode]);
     lines.push("");
-    const selectedPurpose = purposeOptions[mode].find((item) => item.value === purpose);
     if (selectedPurpose?.label) lines.push(`Tarkoitus: ${selectedPurpose.label}`);
     if (isMedicineReimbursement && medicineName.trim()) lines.push(`Lääke tai kliininen ravintovalmiste: ${medicineName.trim()}`);
     if (selectedIcd) lines.push(`Diagnoosi: ${selectedIcd.code} ${selectedIcd.fi}`);
@@ -285,21 +288,33 @@ export default function LausunnotPage() {
     }
     if (occupation.trim()) lines.push(`Ammatti / työn kuva: ${occupation.trim()}`);
     if (mode === "sairausloma" && (absenceFrom || absenceTo)) {
-      lines.push(`Tyokyvyttomyys: ${absenceFrom || "___"} - ${absenceTo || "___"}`);
+      lines.push(`Työkyvyttömyys: ${absenceFrom || "___"} - ${absenceTo || "___"}`);
+    }
+    if (functionalImpact.trim()) {
+      lines.push("");
+      lines.push("Toiminta- ja työkyky:");
+      lines.push(functionalImpact.trim());
+    }
+    if (selectedPurpose?.guide?.length) {
+      lines.push("");
+      lines.push("Kelan kannalta tarkistettavat tiedot:");
+      for (const item of selectedPurpose.guide) {
+        lines.push(`- ${item}`);
+      }
     }
     if (sourceText.trim()) {
       lines.push("");
-      lines.push("Lahtotiedot:");
+      lines.push("Lähtöaineisto:");
       lines.push(sourceText.trim());
     }
     if (additionalNotes.trim()) {
       lines.push("");
-      lines.push("Lisahuomiot:");
+      lines.push("Lisäohjeet:");
       lines.push(additionalNotes.trim());
     }
 
     return lines.join("\n");
-  }, [absenceFrom, absenceTo, additionalNotes, isMedicineReimbursement, medicineName, mode, occupation, periodFrom, periodTo, purpose, purposeOptions, selectedIcd, sourceText]);
+  }, [absenceFrom, absenceTo, additionalNotes, functionalImpact, isMedicineReimbursement, medicineName, mode, occupation, periodFrom, periodTo, selectedIcd, selectedPurpose, sourceText]);
 
   async function copyDraft() {
     await navigator.clipboard.writeText(draft);
@@ -343,10 +358,11 @@ export default function LausunnotPage() {
             <select value={mode} onChange={(event) => setMode(event.target.value as LausuntoMode)} className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-800">
               {MODE_OPTIONS.map((item) => (
                 <option key={item} value={item}>
-                  {item === "sairausloma" ? "Sairauslomatodistus" : item === "bc_lausunto" ? "B/C-lausunto" : item === "b_lausunto" ? "B-lausunto" : "C-lausunto"}
+                  {MODE_LABELS[item]}
                 </option>
               ))}
             </select>
+            <p className="mt-2 text-xs leading-5 text-slate-500">{MODE_NOTES[mode]}</p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -361,6 +377,21 @@ export default function LausunnotPage() {
             {mode === "sairausloma" ? <Field label={copy.absenceTo} value={absenceTo} onChange={setAbsenceTo} /> : null}
           </div>
 
+          {selectedPurpose ? (
+            <div className="rounded-[1.5rem] border border-blue-100 bg-blue-50/60 p-4">
+              <div className="text-sm font-bold text-slate-900">{selectedPurpose.label}</div>
+              <p className="mt-1 text-sm leading-6 text-slate-600">{selectedPurpose.description}</p>
+              <div className="mt-3 text-xs font-bold uppercase tracking-wider text-blue-700">Kelan kannalta olennaista</div>
+              <ul className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-slate-700">
+                {selectedPurpose.guide.map((item) => (
+                  <li key={item} className="rounded-2xl border border-blue-100 bg-white px-3 py-2">
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
           <TextArea label={copy.sourceText} value={sourceText} onChange={setSourceText} rows={7} />
           <p className="-mt-2 text-xs text-slate-500">{copy.sourceHint}</p>
 
@@ -374,6 +405,8 @@ export default function LausunnotPage() {
             <Field label={copy.periodFrom} value={periodFrom} onChange={setPeriodFrom} />
             <Field label={copy.periodTo} value={periodTo} onChange={setPeriodTo} />
           </div>
+
+          <TextArea label={copy.functionalImpact} value={functionalImpact} onChange={setFunctionalImpact} rows={3} />
 
           <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50 p-4 space-y-3">
             <div className="flex items-center gap-2 text-slate-900">
