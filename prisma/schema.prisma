@@ -52,6 +52,7 @@ model User {
   clinicalSettings UserClinicalSettings?
   clinicalSourcePreferences UserClinicalSourcePreference[]
   lausuntoAccessPolicy UserLausuntoAccessPolicy?
+  lausuntoFieldTemplates UserLausuntoFieldTemplate[]
   feedbackReports FeedbackReport[]
   substanceNotes  Substance[]      // Связь для Wiki-заметок
   
@@ -84,6 +85,21 @@ model UserLausuntoAccessPolicy {
   updatedAt           DateTime @updatedAt
 
   @@index([lausuntoToolEnabled])
+}
+
+model UserLausuntoFieldTemplate {
+  id        String   @id @default(cuid())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mode      String
+  purpose   String
+  fields    Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, mode, purpose])
+  @@index([userId])
+  @@index([mode, purpose])
 }
 
 // ==========================================

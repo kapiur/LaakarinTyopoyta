@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { FileBadge2, Loader2, RefreshCcw } from "lucide-react";
+import { useI18n } from "../../../lib/useI18n";
 
 type LausuntoAccessUser = {
   id: number;
@@ -14,18 +15,34 @@ type LausuntoAccessUser = {
 };
 
 export default function AdminLausuntoAccessPage() {
+  const { language } = useI18n();
   const [users, setUsers] = useState<LausuntoAccessUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const copy = {
-    title: "Lausunto-työkalun käyttöoikeus",
-    description: "Ota työkalu käyttöön vain niille lääkäreille, jotka toimivat Suomen työnkulussa.",
-    refresh: "Päivitä",
-    enabled: "Työkalu käytössä",
-    fiOnly: "Toimii vain, jos työskentelymaa on FI.",
-    loading: "Ladataan...",
+    title:
+      language === "ru" ? "Доступ к lausunto-инструменту" : language === "en" ? "Lausunto tool access" : language === "de" ? "Zugriff auf das Lausunto-Werkzeug" : "Lausunto-tyokalun kayttooikeus",
+    description:
+      language === "ru"
+        ? "Включайте инструмент только тем врачам, которые работают по финскому контуру."
+        : language === "en"
+          ? "Enable the tool only for clinicians working in the Finnish workflow."
+          : language === "de"
+            ? "Das Werkzeug nur fuer Kliniker im finnischen Arbeitskontext freischalten."
+            : "Ota tyokalu kayttoon vain niille laakareille, jotka toimivat Suomen tyokulussa.",
+    refresh: language === "ru" ? "Обновить" : language === "en" ? "Refresh" : language === "de" ? "Aktualisieren" : "Paivita",
+    enabled: language === "ru" ? "Инструмент включён" : language === "en" ? "Tool enabled" : language === "de" ? "Werkzeug aktiviert" : "Tyokalu kaytossa",
+    fiOnly:
+      language === "ru"
+        ? "Работает только при стране работы FI."
+        : language === "en"
+          ? "Works only when practice country is FI."
+          : language === "de"
+            ? "Funktioniert nur bei Arbeitsland FI."
+            : "Toimii vain, jos tyoskentelymaa on FI.",
+    loading: language === "ru" ? "Загрузка..." : language === "en" ? "Loading..." : language === "de" ? "Laedt..." : "Ladataan...",
   };
 
   async function fetchUsers() {

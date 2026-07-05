@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Copy, FileBadge2, Search } from "lucide-react";
+import { ArrowDown, ArrowUp, Copy, FileBadge2, Plus, RotateCcw, Save, Search, Settings2, Sparkles, Trash2, X } from "lucide-react";
+import type { GeneratedLausuntoField, LausuntoFieldResponseType, LausuntoFieldTemplate } from "../../lib/lausunto/fieldTemplates";
 import { searchIcd10Catalog, type Icd10Entry } from "../../lib/lausunto/icd10Catalog";
 
-type LausuntoMode = "sairausloma" | "bc_lausunto" | "b_lausunto" | "c_lausunto";
+type LausuntoMode = "sairausloma" | "bc_lausunto" | "b_lausunto" | "c_lausunto" | "oma_lomake";
 
 type AccessPayload = {
   enabled: boolean;
@@ -12,12 +13,153 @@ type AccessPayload = {
   policyEnabled: boolean;
 };
 
-const MODE_OPTIONS: LausuntoMode[] = ["sairausloma", "bc_lausunto", "b_lausunto", "c_lausunto"];
+const MODE_OPTIONS: LausuntoMode[] = ["sairausloma", "bc_lausunto", "b_lausunto", "c_lausunto", "oma_lomake"];
 
 type PurposeOption = {
   value: string;
   label: string;
+  description: string;
+  guide: string[];
 };
+
+type CustomFormSummary = {
+  purpose: string;
+  name: string;
+  formDescription: string;
+  aiInstruction: string;
+};
+
+const MODE_LABELS: Record<LausuntoMode, string> = {
+  sairausloma: "Sairauslomatodistus",
+  bc_lausunto: "B/C-lausunto",
+  b_lausunto: "B-lausunto",
+  c_lausunto: "C-lausunto",
+  oma_lomake: "Oma lomake",
+};
+
+const MODE_NOTES: Record<LausuntoMode, string> = {
+  sairausloma: "Sairauslomatodistus sopii lyhyen työkyvyttömyyden ja poissaolon todentamiseen.",
+  bc_lausunto: "Uusi B/C-lausunto kokoaa B- ja C-lausunnon käyttötarkoituksia samaan rakenteeseen. Samaan lausuntoon voi sisältyä useita etuuksia, mutta tekstiin kirjataan vain asian kannalta olennaiset tiedot.",
+  b_lausunto: "B-lausuntoa käytetään edelleen siirtymäkaudella sairauspäivärahan, kuntoutuksen, työkyvyttömyyden ja lääkekorvausoikeuden arviointiin.",
+  c_lausunto: "C-lausuntoa käytetään vammaisetuuksiin: alle 16-vuotiaan vammaistuki, 16 vuotta täyttäneen vammaistuki ja eläkettä saavan hoitotuki.",
+  oma_lomake: "Käyttäjän oma lausunto- tai todistuspohja. Määritä käyttötarkoitus, rakenne ja tarvittaessa lomakekohtainen AI-ohje.",
+};
+
+const PURPOSE_OPTIONS: Record<LausuntoMode, PurposeOption[]> = {
+  sairausloma: [
+    {
+      value: "sairauslomatodistus",
+      label: "Sairauslomatodistus",
+      description: "Lyhyt todistus työkyvyttömyydestä tai sairauspoissaolosta.",
+      guide: ["Diagnoosi tai oireperuste", "Työkyvyttömyyden alku ja arvioitu loppu", "Lyhyt status/perustelu", "Hoito- ja seurantasuunnitelma"],
+    },
+    {
+      value: "sairauspoissaolon_jatko",
+      label: "Sairauspoissaolon jatko",
+      description: "Jatkotodistus, jossa korostuu oireiden kulku ja työkyvyn uusi arvio.",
+      guide: ["Miksi työkyvyttömyys jatkuu", "Mitä on muuttunut edellisestä arviosta", "Nykyinen toimintakyky", "Seuranta ja uusi arviointiajankohta"],
+    },
+    {
+      value: "tyohon_paluun_arvio",
+      label: "Työhön paluun arvio",
+      description: "Arvio työkyvyn palautumisesta, rajoitteista ja mahdollisesta osittaisesta paluusta.",
+      guide: ["Nykyinen toimintakyky", "Työn vaatimukset", "Mahdolliset rajoitteet", "Työhön paluun aikataulu ja seuranta"],
+    },
+  ],
+  bc_lausunto: [
+    {
+      value: "sairauspaivaraha",
+      label: "Sairauspäiväraha",
+      description: "B/C-lausunnon sairauspäivärahaosio, kun työkyvyttömyys pitkittyy tai Kela tarvitsee laajemman arvion.",
+      guide: ["Diagnoosi ja sairauden kulku", "Tutkimus- ja statuslöydökset", "Toimintakyky ja työkyky suhteessa omaan työhön", "Hoito-, kuntoutus- ja seurantasuunnitelma"],
+    },
+    {
+      value: "osasairauspaivaraha",
+      label: "Osasairauspäiväraha",
+      description: "Arvio siitä, voiko potilas tehdä osa-aikatyötä terveyttään vaarantamatta.",
+      guide: ["Nykytila ja toimintakyky", "Miksi osa-aikatyö on mahdollinen", "Tarvittavat työjärjestelyt", "Arvioitu kesto ja seuranta"],
+    },
+    {
+      value: "ammatillinen_kuntoutus",
+      label: "Ammatillinen kuntoutus",
+      description: "Kun sairaus uhkaa työkykyä ja tarvitaan ammatillisen kuntoutuksen arvio.",
+      guide: ["Ammatti ja työn vaatimukset", "Diagnoosi ja toimintakyky", "Miten sairaus vaikuttaa työhön", "Motivaatio, voimavarat ja kuntoutuksen tavoitteet"],
+    },
+    {
+      value: "vaativa_laakinnallinen_kuntoutus",
+      label: "Vaativa lääkinnällinen kuntoutus",
+      description: "Kuntoutussuunnitelmaa tukeva lausunto vaativaa lääkinnällistä kuntoutusta varten.",
+      guide: ["Toimintakyky arjessa, opiskelussa tai työssä", "Aiempi kuntoutus ja sen vaikutus", "Tavoitteet, toimenpiteet ja kesto", "Seuranta ja yhteistyötahot"],
+    },
+    {
+      value: "kuntoutuspsykoterapia",
+      label: "Kuntoutuspsykoterapia",
+      description: "Lausunto psykoterapiakuntoutuksen tarpeesta ja ajankohdasta.",
+      guide: ["Psykiatrinen diagnoosi ja oirekuva", "Vähintään 3 kuukauden hoito ja sen vaste", "Työ- tai opiskelukyky", "Soveltuvuus, ajoitus, päihdeanamneesi ja ennuste"],
+    },
+    {
+      value: "nuoren_kuntoutusraha",
+      label: "Nuoren kuntoutusraha",
+      description: "Nuoren opiskelu- ja ammatillisen polun tukeminen sairauden tai toimintakyvyn rajoitteen vuoksi.",
+      guide: ["Diagnoosi ja nykytila", "Opiskelu tai muu elämäntilanne", "Hoito ja kuntoutus", "Vaikutus koulutukseen, ammatinvalintaan ja erityisen tuen tarpeeseen"],
+    },
+    {
+      value: "kuntoutustuki_tyokyvyttomyyselake",
+      label: "Kuntoutustuki tai työkyvyttömyyseläke",
+      description: "Laaja työkykyarvio määräaikaista tai pysyvää työkyvyttömyysetuutta varten.",
+      guide: ["Sairaudet, löydökset ja hoitohistoria", "Työtehtävät ja niiden vaatimukset", "Jäljellä oleva työ- ja toimintakyky", "Hoito, kuntoutus, ennuste ja jatkosuunnitelma"],
+    },
+    {
+      value: "laake_tai_ravintovalmiste_korvausoikeus",
+      label: "Lääkkeen tai kliinisen ravintovalmisteen korvausoikeus",
+      description: "Perustelu lääkkeen tai kliinisen ravintovalmisteen erityiskorvausoikeudelle.",
+      guide: ["Valmisteen nimi ja käyttötarkoitus", "Diagnoosi ja Kelan korvauskriteereihin liittyvät tiedot", "Aloitettu tai suunniteltu hoito ja annos", "Hoitovaste, seuranta ja muut perustelut"],
+    },
+    {
+      value: "alle_16_vammaistuki",
+      label: "Alle 16-vuotiaan vammaistuki",
+      description: "Lapsen pitkäaikainen sairaus tai vamma ja siitä aiheutuva hoidon, huolenpidon ja valvonnan tarve.",
+      guide: ["Sairaudet, vammat ja diagnostiikka", "Hoito ja kuntoutus", "Hoidon, avun ja valvonnan tarve", "Miten tarve poikkeaa saman ikäisestä terveestä lapsesta"],
+    },
+    {
+      value: "16_vuotta_tayttaneen_vammaistuki",
+      label: "16 vuotta täyttäneen vammaistuki",
+      description: "Pitkäaikainen toimintakyvyn heikentyminen ja avun, ohjauksen tai valvonnan tarve.",
+      guide: ["Nykyinen toimintakyky", "Toimintakykyyn vaikuttavat sairaudet tai vammat", "Pitkäaikainen vaikutus arkeen", "Avun, ohjauksen ja valvonnan tarve"],
+    },
+    {
+      value: "elaketta_saavan_hoitotuki",
+      label: "Eläkettä saavan hoitotuki",
+      description: "Eläkkeensaajan toimintakyky, hoidon tarve ja arjessa tarvittava apu.",
+      guide: ["Nykyinen toimintakyky", "Sairaudet ja vammat, jotka rajoittavat toimintaa", "Päivittäinen avun ja ohjauksen tarve", "Hoidon, valvonnan ja palvelujen tarve"],
+    },
+  ],
+  b_lausunto: [],
+  c_lausunto: [],
+  oma_lomake: [
+    {
+      value: "oma_lomake",
+      label: "Oma lomake",
+      description: "Vapaasti määriteltävä todistus, lausunto tai muu kliininen tekstipohja.",
+      guide: ["Tausta ja tarkoitus", "Olennaiset tiedot", "Arvio", "Suunnitelma tai päätös", "Täydennettävä"],
+    },
+  ],
+};
+
+PURPOSE_OPTIONS.b_lausunto = PURPOSE_OPTIONS.bc_lausunto.filter(
+  (item) => !["alle_16_vammaistuki", "16_vuotta_tayttaneen_vammaistuki", "elaketta_saavan_hoitotuki"].includes(item.value),
+);
+PURPOSE_OPTIONS.c_lausunto = PURPOSE_OPTIONS.bc_lausunto.filter((item) =>
+  ["alle_16_vammaistuki", "16_vuotta_tayttaneen_vammaistuki", "elaketta_saavan_hoitotuki"].includes(item.value),
+);
+
+const SOURCE_EVALUATION_REMINDERS = [
+  "Lääkärin arvio diagnoosista, sairauden kulusta, hoidosta ja ennusteesta",
+  "Potilaan oma kuvaus oireista, arjesta, työstä tai opiskelusta",
+  "Työterveyden, työnantajan tai oppilaitoksen tieto työn/opiskelun vaatimuksista, jos käytettävissä",
+  "Fysioterapeutin, toimintaterapeutin, psykologin, hoitajan tai muun ammattilaisen toimintakykyarvio, jos sellainen on tehty",
+  "Tutkimustulokset, lääkitys, kuntoutus, apuvälineet sekä aiemmat lausunnot tai päätökset",
+];
 
 function scoreDiagnosisFromSource(entry: Icd10Entry, text: string) {
   const normalized = text.trim().toLowerCase();
@@ -82,6 +224,10 @@ function extractMedicineName(text: string) {
   return candidates[0] ?? "";
 }
 
+function createCustomFormPurpose() {
+  return `oma_${Date.now().toString(36)}`;
+}
+
 export default function LausunnotPage() {
   const [access, setAccess] = useState<AccessPayload | null>(null);
   const [loading, setLoading] = useState(true);
@@ -98,69 +244,110 @@ export default function LausunnotPage() {
   const [absenceFrom, setAbsenceFrom] = useState("");
   const [absenceTo, setAbsenceTo] = useState("");
   const [copied, setCopied] = useState(false);
+  const [generatedDraft, setGeneratedDraft] = useState("");
+  const [generatedFields, setGeneratedFields] = useState<GeneratedLausuntoField[]>([]);
+  const [generating, setGenerating] = useState(false);
+  const [generateError, setGenerateError] = useState("");
+  const [fieldTemplate, setFieldTemplate] = useState<LausuntoFieldTemplate[]>([]);
+  const [fieldTemplateLoading, setFieldTemplateLoading] = useState(false);
+  const [fieldTemplateSaving, setFieldTemplateSaving] = useState(false);
+  const [fieldTemplateStatus, setFieldTemplateStatus] = useState("");
+  const [fieldTemplateInstruction, setFieldTemplateInstruction] = useState("");
+  const [customForms, setCustomForms] = useState<CustomFormSummary[]>([]);
+  const [customFormsLoading, setCustomFormsLoading] = useState(false);
+  const [customFormPurpose, setCustomFormPurpose] = useState("oma_lomake");
+  const [customFormName, setCustomFormName] = useState("");
+  const [customFormInstruction, setCustomFormInstruction] = useState("");
+  const [fieldTemplateModalOpen, setFieldTemplateModalOpen] = useState(false);
 
-  const copy = useMemo(() => {
-    return {
-      title: "Lausunto-työtila",
-      subtitle: "Suomeen rajattu työkalu yhdistetyn B/C-lausunnon, erillisten B- ja C-lausuntojen sekä sairauslomatodistuksen luonnosteluun. Tulostus rakennetaan osioittain, jotta tekstin voi siirtää työsoftaan paloina.",
-      noAccess: "Tämä työkalu on käytössä vain niille käyttäjille, joille se on erikseen sallittu ja joiden työskentelymaa on Suomi.",
-      mode: "Asiakirjan tyyppi",
-      purpose: "Mitä varten lausunto kirjoitetaan",
-      sourceText: "Kaikki lähtötekstit yhteen kenttään",
-      sourceHint: "Liitä tähän kaikki potilaan merkinnät, lausunnot ja poimitut tiedot. Työkalu rakentaa luonnoksen tämän aineiston pohjalta.",
-      additionalNotes: "Lisähuomiot",
-      medicineName: "Lääke tai kliininen ravintovalmiste",
-      periodFrom: "Jakso / hoito alkaen",
-      periodTo: "Jakso / kontrolli / asti",
-      occupation: "Ammatti / työn kuva",
-      absenceFrom: "Poissaolo alkaa",
-      absenceTo: "Poissaolo päättyy",
-      diagnosisTitle: "Diagnoosi ja ICD-10",
-      diagnosisHint: "Työkalu ehdottaa ensin tekstistä löytyviä diagnooseja. Niitä voi sen jälkeen muokata tai hakea käsin.",
-      suggestedDiagnosis: "Tekstistä ehdotettu",
-      manualDiagnosis: "Manuaalinen ICD-10-haku",
-      noDiagnosisSuggestion: "Varmaa diagnoosiehdotusta ei löytynyt vielä. Voit hakea diagnoosin käsin.",
-      icdPlaceholder: "Esim. I10, hypertensio, alaselän kipu",
-      preview: "Osioitu luonnos",
-      copy: copied ? "Kopioitu" : "Kopioi",
-      loading: "Ladataan...",
-    };
-  }, [copied]);
+  const copy = useMemo(() => ({
+    title: "Lausunto-työtila",
+    subtitle: "Suomeen rajattu työtila B/C-lausunnon, B-lausunnon, C-lausunnon ja sairauslomatodistuksen luonnosteluun. Lääkäri liittää lähtöaineiston yhteen kenttään ja viimeistelee rakenteen ennen siirtoa työjärjestelmään.",
+    noAccess: "Tämä työkalu on käytössä vain niille käyttäjille, joille se on erikseen sallittu ja joiden työskentelymaa on Suomi.",
+    mode: "Asiakirjan tyyppi",
+    purpose: "Mihin lausuntoa käytetään",
+    customFormSelect: "Oma lomake",
+    customFormName: "Oman lomakkeen nimi / käyttötarkoitus",
+    newCustomForm: "Uusi oma lomake",
+    newCustomFormOption: "Uusi tallentamaton lomake",
+    sourceText: "Lähtöaineisto",
+    sourceHint: "Liitä tähän kaikki potilastekstit, aiemmat lausunnot, tutkimustulokset ja muut poimitut tiedot yhtenä tekstinä. AI:n tehtävä on jäsentää aineisto, ei vaatia valmiiksi jaoteltuja kenttiä.",
+    sourceReminderTitle: "Muistilista lähtöaineistoon",
+    sourceReminderHint: "Näitä ei tarvitse täyttää erillisiin kenttiin. Jos tieto on olemassa, liitä se samaan lähtöaineistoon.",
+    additionalNotes: "Lisäohjeet tai lääkärin täsmennykset",
+    medicineName: "Lääke tai kliininen ravintovalmiste",
+    periodFrom: "Jakso alkaa",
+    periodTo: "Jakso päättyy / kontrolli",
+    occupation: "Ammatti / työn kuva",
+    absenceFrom: "Poissaolo alkaa",
+    absenceTo: "Poissaolo päättyy",
+    diagnosisTitle: "Diagnoosi ja ICD-10",
+    diagnosisHint: "Ehdotukset poimitaan lähtöaineistosta. Valintaa voi muuttaa tai diagnoosin voi hakea käsin.",
+    suggestedDiagnosis: "Ehdotettu lähtöaineistosta",
+    manualDiagnosis: "Manuaalinen ICD-10-haku",
+    noDiagnosisSuggestion: "Varmaa diagnoosiehdotusta ei löytynyt vielä. Voit hakea diagnoosin käsin.",
+    icdPlaceholder: "Esim. I10, hypertensio, alaselän kipu",
+    preview: generatedDraft ? "AI-luonnos" : "Rakenne-esikatselu",
+    generate: generating ? "Laaditaan..." : "Laadi lausunto AI:lla",
+    generateHint: "Lisää lähtöaineisto ennen AI-luonnoksen laatimista.",
+    generateFailed: "Lausunnon laatiminen epäonnistui.",
+    copy: copied ? "Kopioitu" : "Kopioi",
+    copyAllFields: "Kopioi käytössä olevat kentät",
+    generatedFields: "Lausunnon kentät",
+    generatedFieldsHint: "Muokkaa kenttiä ennen kopiointia. Valinnaisen kentän voi jättää pois, jos se ei ole tässä lausunnossa tarpeellinen.",
+    fieldTemplateTitle: "Oma rakenne",
+    fieldTemplateHint: "Valitse kentät, järjestys ja vastaustapa tälle asiakirjatyypille ja käyttötarkoitukselle. Tallennus koskee vain tätä yhdistelmää.",
+    openFieldTemplate: "Muokkaa rakennetta",
+    closeFieldTemplate: "Sulje rakenne",
+    fieldsInUse: (count: number) => `${count} kenttää käytössä`,
+    fieldTemplateInstruction: "Lisäohje AI:lle tälle rakenteelle",
+    fieldTemplateInstructionHint: "Koskee vain tätä asiakirjatyyppiä ja käyttötarkoitusta. Kirjoita esimerkiksi painotukset, tiiviyden taso tai miten puuttuva tieto merkitään.",
+    customFormInstruction: "Lomakkeen tarkoitus ja AI-ohje",
+    customFormInstructionHint: "Kuvaa mihin omaa lomaketta käytetään ja millaista lopputulosta AI:n pitää tavoitella.",
+    addField: "Lisää kenttä",
+    saveTemplate: fieldTemplateSaving ? "Tallennetaan..." : "Tallenna rakenne",
+    resetTemplate: "Palauta oletus",
+    requiredField: "Pakollinen",
+    enabledField: "Mukana",
+    responseType: "Vastaustapa",
+    responseText: "Teksti",
+    responseYesNo: "Kyllä / Ei",
+    responseYesNoExplain: "Kyllä / Ei + perustelu",
+    omitField: "Ei tarvita / jätä tyhjäksi",
+    restoreField: "Käytä kenttää",
+    copyField: "Kopioi kenttä",
+    loading: "Ladataan...",
+  }), [copied, fieldTemplateSaving, generatedDraft, generating]);
 
-  const purposeOptions = useMemo<Record<LausuntoMode, PurposeOption[]>>(() => ({
-    sairausloma: [
-      { value: "sairauslomatodistus", label: "Sairauslomatodistus" },
-      { value: "sairauspoissaolon_jatko", label: "Sairauspoissaolon jatko" },
-      { value: "tyohon_paluun_arvio", label: "Työhön paluun arvio" },
-    ],
-    bc_lausunto: [
-      { value: "sairauspaivaraha", label: "Sairauspäiväraha" },
-      { value: "osasairauspaivaraha", label: "Osasairauspäiväraha" },
-      { value: "kuntoutus", label: "Kuntoutus" },
-      { value: "nuoren_kuntoutusraha", label: "Nuoren kuntoutusraha" },
-      { value: "kuntoutustuki_tyokyvyttomyyselake", label: "Kuntoutustuki tai työkyvyttömyyseläke" },
-      { value: "laake_tai_ravintovalmiste_korvausoikeus", label: "Lääkkeen tai kliinisen ravintovalmisteen korvausoikeus" },
-      { value: "alle_16_vammaistuki", label: "Alle 16-vuotiaan vammaistuki" },
-      { value: "16_vuotta_tayttaneen_vammaistuki", label: "16 vuotta täyttäneen vammaistuki" },
-      { value: "elaketta_saavan_hoitotuki", label: "Eläkettä saavan hoitotuki" },
-    ],
-    b_lausunto: [
-      { value: "sairauspaivaraha", label: "Sairauspäiväraha" },
-      { value: "osasairauspaivaraha", label: "Osasairauspäiväraha" },
-      { value: "kuntoutus", label: "Kuntoutus" },
-      { value: "nuoren_kuntoutusraha", label: "Nuoren kuntoutusraha" },
-      { value: "kuntoutustuki_tyokyvyttomyyselake", label: "Kuntoutustuki tai työkyvyttömyyseläke" },
-      { value: "laake_tai_ravintovalmiste_korvausoikeus", label: "Lääkkeen tai kliinisen ravintovalmisteen korvausoikeus" },
-    ],
-    c_lausunto: [
-      { value: "alle_16_vammaistuki", label: "Alle 16-vuotiaan vammaistuki" },
-      { value: "16_vuotta_tayttaneen_vammaistuki", label: "16 vuotta täyttäneen vammaistuki" },
-      { value: "elaketta_saavan_hoitotuki", label: "Eläkettä saavan hoitotuki" },
-    ],
-  }), []);
+  const purposeOptions = PURPOSE_OPTIONS;
 
   const diagnosisSuggestions = useMemo(() => extractDiagnosisSuggestions(sourceText), [sourceText]);
   const manualSearchResults = useMemo(() => searchIcd10Catalog(query), [query]);
+  const selectedPurpose = purposeOptions[mode].find((item) => item.value === purpose) ?? purposeOptions[mode][0];
+  const selectedCustomForm = customForms.find((item) => item.purpose === customFormPurpose);
+  const customFormOptions = useMemo(() => {
+    const savedOptions = customForms.map((item) => ({
+      value: item.purpose,
+      label: item.name,
+      description: item.formDescription,
+      guide: purposeOptions.oma_lomake[0].guide,
+    }));
+    if (savedOptions.some((item) => item.value === customFormPurpose)) return savedOptions;
+    return [
+      {
+        value: customFormPurpose,
+        label: customFormName.trim() || copy.newCustomFormOption,
+        description: customFormInstruction,
+        guide: purposeOptions.oma_lomake[0].guide,
+      },
+      ...savedOptions,
+    ];
+  }, [copy.newCustomFormOption, customFormInstruction, customFormName, customFormPurpose, customForms, purposeOptions.oma_lomake]);
+  const effectivePurpose = mode === "oma_lomake" ? customFormPurpose : purpose;
+  const effectivePurposeLabel = mode === "oma_lomake" ? (customFormName.trim() || selectedCustomForm?.name || "Oma lomake") : selectedPurpose?.label;
+  const effectivePurposeDescription = mode === "oma_lomake" ? customFormInstruction : selectedPurpose?.description;
+  const effectivePurposeGuide = mode === "oma_lomake" ? purposeOptions.oma_lomake[0].guide : selectedPurpose?.guide;
+  const enabledFieldCount = fieldTemplate.filter((field) => field.enabled).length;
   const isMedicineReimbursement = (mode === "b_lausunto" || mode === "bc_lausunto") && purpose === "laake_tai_ravintovalmiste_korvausoikeus";
   const medicineSuggestion = useMemo(() => extractMedicineName(sourceText), [sourceText]);
 
@@ -173,6 +360,44 @@ export default function LausunnotPage() {
     }
     loadAccess();
   }, []);
+
+  async function loadCustomForms(preferredPurpose?: string) {
+    if (!access?.enabled) return;
+    setCustomFormsLoading(true);
+    try {
+      const response = await fetch("/api/lausunnot/field-template?mode=oma_lomake&list=1", { cache: "no-store" });
+      const data = await response.json().catch(() => ({}));
+      const forms = Array.isArray(data.forms)
+        ? data.forms
+          .map((item: any) => ({
+            purpose: typeof item.purpose === "string" ? item.purpose : "",
+            name: typeof item.name === "string" ? item.name : "",
+            formDescription: typeof item.formDescription === "string" ? item.formDescription : "",
+            aiInstruction: typeof item.aiInstruction === "string" ? item.aiInstruction : "",
+          }))
+          .filter((item: CustomFormSummary) => item.purpose && item.name)
+        : [];
+
+      setCustomForms(forms);
+      const nextSelected = forms.find((item) => item.purpose === preferredPurpose)
+        ?? forms.find((item) => item.purpose === customFormPurpose)
+        ?? forms[0];
+      if (nextSelected && customFormPurpose === "oma_lomake") {
+        setCustomFormPurpose(nextSelected.purpose);
+        setCustomFormName(nextSelected.name);
+        setCustomFormInstruction(nextSelected.formDescription);
+        setFieldTemplateInstruction(nextSelected.aiInstruction);
+      }
+    } finally {
+      setCustomFormsLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!access?.enabled) return;
+    loadCustomForms();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [access?.enabled]);
 
   useEffect(() => {
     if (selectedIcd || diagnosisSuggestions.length === 0) return;
@@ -188,13 +413,53 @@ export default function LausunnotPage() {
     setMedicineName(medicineSuggestion);
   }, [isMedicineReimbursement, medicineName, medicineSuggestion]);
 
+  useEffect(() => {
+    if (!access?.enabled || !mode || !effectivePurpose) return;
+    let isCancelled = false;
+
+    async function loadFieldTemplate() {
+      setFieldTemplateLoading(true);
+      setFieldTemplateStatus("");
+      try {
+        const response = await fetch(`/api/lausunnot/field-template?mode=${encodeURIComponent(mode)}&purpose=${encodeURIComponent(effectivePurpose)}`, { cache: "no-store" });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !Array.isArray(data.fields)) {
+          throw new Error(typeof data.error === "string" ? data.error : "Rakenteen lataus epäonnistui.");
+        }
+        if (!isCancelled) {
+          setFieldTemplate(data.fields);
+          setFieldTemplateInstruction(typeof data.aiInstruction === "string" ? data.aiInstruction : "");
+          if (mode === "oma_lomake" && typeof data.formName === "string") {
+            setCustomFormName(data.formName || selectedCustomForm?.name || "");
+          }
+          if (mode === "oma_lomake" && typeof data.formDescription === "string") {
+            setCustomFormInstruction(data.formDescription);
+          }
+        }
+      } catch (error) {
+        if (!isCancelled) {
+          setFieldTemplateStatus(error instanceof Error ? error.message : "Rakenteen lataus epäonnistui.");
+          setFieldTemplate([]);
+          setFieldTemplateInstruction("");
+        }
+      } finally {
+        if (!isCancelled) setFieldTemplateLoading(false);
+      }
+    }
+
+    loadFieldTemplate();
+    return () => {
+      isCancelled = true;
+    };
+  }, [access?.enabled, effectivePurpose, mode, selectedCustomForm?.name]);
+
   const draft = useMemo(() => {
     const lines: string[] = [];
 
-    lines.push(mode === "sairausloma" ? "Sairauslomatodistus" : mode === "bc_lausunto" ? "B/C-lausunto" : mode === "b_lausunto" ? "B-lausunto" : "C-lausunto");
+    lines.push(MODE_LABELS[mode]);
     lines.push("");
-    const selectedPurpose = purposeOptions[mode].find((item) => item.value === purpose);
-    if (selectedPurpose?.label) lines.push(`Tarkoitus: ${selectedPurpose.label}`);
+    if (effectivePurposeLabel) lines.push(`Tarkoitus: ${effectivePurposeLabel}`);
+    if (mode === "oma_lomake" && customFormInstruction.trim()) lines.push(`Lomakkeen kuvaus: ${customFormInstruction.trim()}`);
     if (isMedicineReimbursement && medicineName.trim()) lines.push(`Lääke tai kliininen ravintovalmiste: ${medicineName.trim()}`);
     if (selectedIcd) lines.push(`Diagnoosi: ${selectedIcd.code} ${selectedIcd.fi}`);
     if (periodFrom.trim() || periodTo.trim()) {
@@ -204,24 +469,221 @@ export default function LausunnotPage() {
     if (mode === "sairausloma" && (absenceFrom || absenceTo)) {
       lines.push(`Työkyvyttömyys: ${absenceFrom || "___"} - ${absenceTo || "___"}`);
     }
+    if (effectivePurposeGuide?.length) {
+      lines.push("");
+      lines.push(mode === "oma_lomake" ? "Rakenteen kannalta tarkistettavat tiedot:" : "Kelan kannalta tarkistettavat tiedot:");
+      for (const item of effectivePurposeGuide) {
+        lines.push(`- ${item}`);
+      }
+    }
     if (sourceText.trim()) {
       lines.push("");
-      lines.push("Lähtötiedot:");
+      lines.push("Lähtöaineisto:");
       lines.push(sourceText.trim());
     }
     if (additionalNotes.trim()) {
       lines.push("");
-      lines.push("Lisähuomiot:");
+      lines.push("Lisäohjeet:");
       lines.push(additionalNotes.trim());
     }
 
     return lines.join("\n");
-  }, [absenceFrom, absenceTo, additionalNotes, isMedicineReimbursement, medicineName, mode, occupation, periodFrom, periodTo, purpose, purposeOptions, selectedIcd, sourceText]);
+  }, [absenceFrom, absenceTo, additionalNotes, customFormInstruction, effectivePurposeGuide, effectivePurposeLabel, isMedicineReimbursement, medicineName, mode, occupation, periodFrom, periodTo, selectedIcd, sourceText]);
+
+  const structuredDraft = useMemo(() => {
+    if (generatedFields.length === 0) return "";
+    return generatedFields
+      .filter((field) => !field.omitted && field.content.trim())
+      .map((field) => `${field.label}\n${field.content.trim()}`)
+      .join("\n\n");
+  }, [generatedFields]);
 
   async function copyDraft() {
-    await navigator.clipboard.writeText(draft);
+    await navigator.clipboard.writeText(structuredDraft || generatedDraft || draft);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
+  }
+
+  async function copyField(field: GeneratedLausuntoField) {
+    await navigator.clipboard.writeText(field.content.trim());
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }
+
+  function updateGeneratedField(key: string, patch: Partial<GeneratedLausuntoField>) {
+    setGeneratedFields((fields) => fields.map((field) => (
+      field.key === key ? { ...field, ...patch } : field
+    )));
+  }
+
+  function updateTemplateField(key: string, patch: Partial<LausuntoFieldTemplate>) {
+    setFieldTemplate((fields) => fields.map((field) => (
+      field.key === key ? { ...field, ...patch } : field
+    )));
+  }
+
+  function moveTemplateField(key: string, direction: -1 | 1) {
+    setFieldTemplate((fields) => {
+      const index = fields.findIndex((field) => field.key === key);
+      const nextIndex = index + direction;
+      if (index < 0 || nextIndex < 0 || nextIndex >= fields.length) return fields;
+      const copyFields = [...fields];
+      const [field] = copyFields.splice(index, 1);
+      copyFields.splice(nextIndex, 0, field);
+      return copyFields.map((item, orderIndex) => ({ ...item, order: orderIndex + 1 }));
+    });
+  }
+
+  function addTemplateField() {
+    const nextIndex = fieldTemplate.length + 1;
+    setFieldTemplate((fields) => [
+      ...fields,
+      {
+        key: `oma_kentta_${Date.now()}`,
+        label: `Oma kenttä ${nextIndex}`,
+        enabled: true,
+        required: false,
+        responseType: "text",
+        order: nextIndex,
+      },
+    ]);
+  }
+
+  function removeTemplateField(key: string) {
+    setFieldTemplate((fields) => fields
+      .filter((field) => field.key !== key)
+      .map((field, index) => ({ ...field, order: index + 1 })));
+  }
+
+  function selectCustomForm(nextPurpose: string) {
+    setCustomFormPurpose(nextPurpose);
+    const nextForm = customForms.find((item) => item.purpose === nextPurpose);
+    setCustomFormName(nextForm?.name ?? "");
+    setCustomFormInstruction(nextForm?.formDescription ?? "");
+    setFieldTemplateInstruction(nextForm?.aiInstruction ?? "");
+    setFieldTemplateStatus("");
+  }
+
+  function createCustomForm() {
+    const nextPurpose = createCustomFormPurpose();
+    setCustomFormPurpose(nextPurpose);
+    setCustomFormName("");
+    setCustomFormInstruction("");
+    setFieldTemplateInstruction("");
+    setFieldTemplate([]);
+    setFieldTemplateStatus("");
+    setGeneratedDraft("");
+    setGeneratedFields([]);
+  }
+
+  async function saveFieldTemplate() {
+    setFieldTemplateSaving(true);
+    setFieldTemplateStatus("");
+    try {
+      const response = await fetch("/api/lausunnot/field-template", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode,
+          purpose: effectivePurpose,
+          fields: fieldTemplate,
+          aiInstruction: fieldTemplateInstruction,
+          formName: mode === "oma_lomake" ? customFormName : "",
+          formDescription: mode === "oma_lomake" ? customFormInstruction : "",
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !Array.isArray(data.fields)) {
+        throw new Error(typeof data.error === "string" ? data.error : "Rakenteen tallennus epäonnistui.");
+      }
+      setFieldTemplate(data.fields);
+      setFieldTemplateStatus("Rakenne tallennettu.");
+      if (mode === "oma_lomake") {
+        await loadCustomForms(effectivePurpose);
+      }
+    } catch (error) {
+      setFieldTemplateStatus(error instanceof Error ? error.message : "Rakenteen tallennus epäonnistui.");
+    } finally {
+      setFieldTemplateSaving(false);
+    }
+  }
+
+  async function resetFieldTemplate() {
+    setFieldTemplateSaving(true);
+    setFieldTemplateStatus("");
+    try {
+      const response = await fetch(`/api/lausunnot/field-template?mode=${encodeURIComponent(mode)}&purpose=${encodeURIComponent(effectivePurpose)}`, {
+        method: "DELETE",
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !Array.isArray(data.fields)) {
+        throw new Error(typeof data.error === "string" ? data.error : "Oletusrakenteen palautus epäonnistui.");
+      }
+      setFieldTemplate(data.fields);
+      setFieldTemplateInstruction("");
+      if (mode === "oma_lomake") setCustomFormInstruction("");
+      setFieldTemplateStatus("Oletusrakenne palautettu.");
+      if (mode === "oma_lomake") {
+        await loadCustomForms();
+      }
+    } catch (error) {
+      setFieldTemplateStatus(error instanceof Error ? error.message : "Oletusrakenteen palautus epäonnistui.");
+    } finally {
+      setFieldTemplateSaving(false);
+    }
+  }
+
+  async function generateLausunto() {
+    if (!sourceText.trim() && !additionalNotes.trim()) {
+      setGenerateError(copy.generateHint);
+      return;
+    }
+
+    setGenerating(true);
+    setGenerateError("");
+
+    try {
+      const response = await fetch("/api/lausunnot/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode,
+          modeLabel: MODE_LABELS[mode],
+          purpose: effectivePurpose,
+          purposeLabel: effectivePurposeLabel,
+          purposeDescription: effectivePurposeDescription,
+          purposeGuide: effectivePurposeGuide,
+          sourceText,
+          additionalNotes,
+          medicineName,
+          periodFrom,
+          periodTo,
+          occupation,
+          absenceFrom,
+          absenceTo,
+          diagnosis: selectedIcd ? { code: selectedIcd.code, label: selectedIcd.fi } : null,
+          fieldTemplate,
+          fieldTemplateInstruction,
+          customFormInstruction: mode === "oma_lomake" ? customFormInstruction : "",
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok || typeof data.content !== "string" || !data.content.trim()) {
+        throw new Error(typeof data.error === "string" ? data.error : copy.generateFailed);
+      }
+
+      setGeneratedDraft(data.content.trim());
+      setGeneratedFields(Array.isArray(data.fields) ? data.fields.filter((field: unknown): field is GeneratedLausuntoField => {
+        if (!field || typeof field !== "object") return false;
+        const item = field as Partial<GeneratedLausuntoField>;
+        return typeof item.key === "string" && typeof item.label === "string" && typeof item.content === "string";
+      }) : []);
+    } catch (error) {
+      setGenerateError(error instanceof Error ? error.message : copy.generateFailed);
+    } finally {
+      setGenerating(false);
+    }
   }
 
   if (loading) {
@@ -260,26 +722,92 @@ export default function LausunnotPage() {
             <select value={mode} onChange={(event) => setMode(event.target.value as LausuntoMode)} className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-800">
               {MODE_OPTIONS.map((item) => (
                 <option key={item} value={item}>
-                  {item === "sairausloma" ? "Sairauslomatodistus" : item === "bc_lausunto" ? "B/C-lausunto" : item === "b_lausunto" ? "B-lausunto" : "C-lausunto"}
+                  {MODE_LABELS[item]}
                 </option>
               ))}
             </select>
+            <p className="mt-2 text-xs leading-5 text-slate-500">{MODE_NOTES[mode]}</p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <SelectField
-              label={copy.purpose}
-              value={purpose}
-              onChange={setPurpose}
-              options={purposeOptions[mode]}
-            />
+            {mode === "oma_lomake" ? (
+              <>
+                <div className="space-y-2">
+                  <SelectField
+                    label={copy.customFormSelect}
+                    value={customFormPurpose}
+                    onChange={selectCustomForm}
+                    options={customFormOptions}
+                  />
+                  <button
+                    type="button"
+                    onClick={createCustomForm}
+                    className="inline-flex items-center gap-2 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-100"
+                  >
+                    <Plus size={14} />
+                    {copy.newCustomForm}
+                  </button>
+                  {customFormsLoading ? <div className="text-xs text-slate-400">{copy.loading}</div> : null}
+                </div>
+                <Field label={copy.customFormName} value={customFormName} onChange={setCustomFormName} />
+              </>
+            ) : (
+              <SelectField
+                label={copy.purpose}
+                value={purpose}
+                onChange={setPurpose}
+                options={purposeOptions[mode]}
+              />
+            )}
             <Field label={copy.occupation} value={occupation} onChange={setOccupation} />
             {mode === "sairausloma" ? <Field label={copy.absenceFrom} value={absenceFrom} onChange={setAbsenceFrom} /> : null}
             {mode === "sairausloma" ? <Field label={copy.absenceTo} value={absenceTo} onChange={setAbsenceTo} /> : null}
           </div>
 
+          {selectedPurpose && mode !== "oma_lomake" ? (
+            <div className="rounded-[1.5rem] border border-blue-100 bg-blue-50/60 p-4">
+              <div className="text-sm font-bold text-slate-900">{selectedPurpose.label}</div>
+              <p className="mt-1 text-sm leading-6 text-slate-600">{selectedPurpose.description}</p>
+              <div className="mt-3 text-xs font-bold uppercase tracking-wider text-blue-700">Kelan kannalta olennaista</div>
+              <ul className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-slate-700">
+                {selectedPurpose.guide.map((item) => (
+                  <li key={item} className="rounded-2xl border border-blue-100 bg-white px-3 py-2">
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50 p-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-bold text-slate-900">{copy.fieldTemplateTitle}</div>
+              <p className="mt-1 text-xs leading-5 text-slate-500">{copy.fieldsInUse(enabledFieldCount)}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setFieldTemplateModalOpen(true)}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
+            >
+              <Settings2 size={16} />
+              {copy.openFieldTemplate}
+            </button>
+          </div>
+
           <TextArea label={copy.sourceText} value={sourceText} onChange={setSourceText} rows={7} />
           <p className="-mt-2 text-xs text-slate-500">{copy.sourceHint}</p>
+
+          <div className="rounded-[1.5rem] border border-slate-200 bg-white p-4">
+            <div className="text-xs font-bold uppercase tracking-wider text-slate-500">{copy.sourceReminderTitle}</div>
+            <p className="mt-1 text-sm leading-6 text-slate-600">{copy.sourceReminderHint}</p>
+            <ul className="mt-3 grid grid-cols-1 gap-2 text-sm text-slate-700">
+              {SOURCE_EVALUATION_REMINDERS.map((item) => (
+                <li key={item} className="rounded-2xl border border-slate-100 bg-slate-50 px-3 py-2">
+                  {item}
+                </li>
+              ))}
+            </ul>
+          </div>
 
           {isMedicineReimbursement ? (
             <div className="grid grid-cols-1 gap-4">
@@ -352,16 +880,380 @@ export default function LausunnotPage() {
         <section className="bg-white border border-slate-200 rounded-[2rem] p-6 shadow-sm space-y-4">
           <div className="flex items-center justify-between gap-4">
             <h2 className="text-lg font-bold text-slate-900">{copy.preview}</h2>
-            <button onClick={copyDraft} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 text-sm font-bold text-slate-700 hover:bg-slate-50">
-              <Copy size={16} />
-              {copy.copy}
-            </button>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={generateLausunto}
+                disabled={generating || (!sourceText.trim() && !additionalNotes.trim())}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 text-sm font-bold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+              >
+                <Sparkles size={16} />
+                {copy.generate}
+              </button>
+              <button onClick={copyDraft} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 text-sm font-bold text-slate-700 hover:bg-slate-50">
+                <Copy size={16} />
+                {generatedFields.length > 0 ? copy.copyAllFields : copy.copy}
+              </button>
+            </div>
           </div>
-          <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50 p-5 whitespace-pre-wrap text-sm leading-7 text-slate-800 min-h-[36rem]">
-            {draft}
-          </div>
+          {generateError ? (
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
+              {generateError}
+            </div>
+          ) : null}
+          {generatedFields.length > 0 ? (
+            <div className="space-y-3">
+              <div className="rounded-2xl border border-blue-100 bg-blue-50/70 px-4 py-3">
+                <div className="text-sm font-bold text-slate-900">{copy.generatedFields}</div>
+                <p className="mt-1 text-xs leading-5 text-slate-600">{copy.generatedFieldsHint}</p>
+              </div>
+              {generatedFields.map((field) => (
+                <GeneratedFieldEditor
+                  key={field.key}
+                  field={field}
+                  omitLabel={copy.omitField}
+                  restoreLabel={copy.restoreField}
+                  copyLabel={copy.copyField}
+                  onChange={(content) => updateGeneratedField(field.key, { content })}
+                  onOmit={(omitted) => updateGeneratedField(field.key, { omitted })}
+                  onCopy={() => copyField(field)}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50 p-5 whitespace-pre-wrap text-sm leading-7 text-slate-800 min-h-[36rem]">
+              {generatedDraft || draft}
+            </div>
+          )}
         </section>
       </div>
+
+      {fieldTemplateModalOpen ? (
+        <div className="fixed inset-0 z-50 bg-slate-950/40 p-4 md:p-8">
+          <div className="mx-auto flex max-h-[calc(100vh-2rem)] max-w-5xl flex-col overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-2xl md:max-h-[calc(100vh-4rem)]">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-6 py-5">
+              <div>
+                <h2 className="text-xl font-bold text-slate-900">{copy.fieldTemplateTitle}</h2>
+                <p className="mt-1 text-sm leading-6 text-slate-500">{effectivePurposeLabel}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setFieldTemplateModalOpen(false)}
+                className="rounded-xl border border-slate-200 p-2 text-slate-500 hover:bg-slate-50"
+                aria-label={copy.closeFieldTemplate}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="overflow-y-auto p-6">
+              <LausuntoFieldTemplateEditor
+                title={copy.fieldTemplateTitle}
+                hint={copy.fieldTemplateHint}
+                fields={fieldTemplate}
+                loading={fieldTemplateLoading}
+                saving={fieldTemplateSaving}
+                status={fieldTemplateStatus}
+                aiInstruction={fieldTemplateInstruction}
+                aiInstructionLabel={copy.fieldTemplateInstruction}
+                aiInstructionHint={copy.fieldTemplateInstructionHint}
+                customFormDescription={customFormInstruction}
+                customFormDescriptionLabel={copy.customFormInstruction}
+                customFormDescriptionHint={copy.customFormInstructionHint}
+                isCustomMode={mode === "oma_lomake"}
+                addLabel={copy.addField}
+                saveLabel={copy.saveTemplate}
+                resetLabel={copy.resetTemplate}
+                requiredLabel={copy.requiredField}
+                enabledLabel={copy.enabledField}
+                responseTypeLabel={copy.responseType}
+                responseTextLabel={copy.responseText}
+                responseYesNoLabel={copy.responseYesNo}
+                responseYesNoExplainLabel={copy.responseYesNoExplain}
+                onAdd={addTemplateField}
+                onSave={saveFieldTemplate}
+                onReset={resetFieldTemplate}
+                onMove={moveTemplateField}
+                onChange={updateTemplateField}
+                onRemove={removeTemplateField}
+                onAiInstructionChange={setFieldTemplateInstruction}
+                onCustomFormDescriptionChange={setCustomFormInstruction}
+              />
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function GeneratedFieldEditor({
+  field,
+  omitLabel,
+  restoreLabel,
+  copyLabel,
+  onChange,
+  onOmit,
+  onCopy,
+}: {
+  field: GeneratedLausuntoField;
+  omitLabel: string;
+  restoreLabel: string;
+  copyLabel: string;
+  onChange: (value: string) => void;
+  onOmit: (value: boolean) => void;
+  onCopy: () => void;
+}) {
+  return (
+    <div className={`rounded-[1.5rem] border p-4 ${field.omitted ? "border-slate-200 bg-slate-50 opacity-70" : "border-slate-200 bg-white"}`}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="text-xs font-bold uppercase tracking-wider text-slate-500">{field.label}</div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {!field.required ? (
+            <button
+              type="button"
+              onClick={() => onOmit(!field.omitted)}
+              className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50"
+            >
+              {field.omitted ? restoreLabel : omitLabel}
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={onCopy}
+            disabled={field.omitted || !field.content.trim()}
+            className="inline-flex items-center gap-2 rounded-xl border border-blue-200 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-300"
+          >
+            <Copy size={14} />
+            {copyLabel}
+          </button>
+        </div>
+      </div>
+      <textarea
+        rows={Math.max(3, Math.min(9, field.content.split("\n").length + 2))}
+        value={field.content}
+        disabled={field.omitted}
+        onChange={(event) => onChange(event.target.value)}
+        className="mt-3 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-800 resize-y disabled:text-slate-400"
+      />
+    </div>
+  );
+}
+
+function LausuntoFieldTemplateEditor({
+  title,
+  hint,
+  fields,
+  loading,
+  saving,
+  status,
+  aiInstruction,
+  aiInstructionLabel,
+  aiInstructionHint,
+  customFormDescription,
+  customFormDescriptionLabel,
+  customFormDescriptionHint,
+  isCustomMode,
+  addLabel,
+  saveLabel,
+  resetLabel,
+  requiredLabel,
+  enabledLabel,
+  responseTypeLabel,
+  responseTextLabel,
+  responseYesNoLabel,
+  responseYesNoExplainLabel,
+  onAdd,
+  onSave,
+  onReset,
+  onMove,
+  onChange,
+  onRemove,
+  onAiInstructionChange,
+  onCustomFormDescriptionChange,
+}: {
+  title: string;
+  hint: string;
+  fields: LausuntoFieldTemplate[];
+  loading: boolean;
+  saving: boolean;
+  status: string;
+  aiInstruction: string;
+  aiInstructionLabel: string;
+  aiInstructionHint: string;
+  customFormDescription: string;
+  customFormDescriptionLabel: string;
+  customFormDescriptionHint: string;
+  isCustomMode: boolean;
+  addLabel: string;
+  saveLabel: string;
+  resetLabel: string;
+  requiredLabel: string;
+  enabledLabel: string;
+  responseTypeLabel: string;
+  responseTextLabel: string;
+  responseYesNoLabel: string;
+  responseYesNoExplainLabel: string;
+  onAdd: () => void;
+  onSave: () => void;
+  onReset: () => void;
+  onMove: (key: string, direction: -1 | 1) => void;
+  onChange: (key: string, patch: Partial<LausuntoFieldTemplate>) => void;
+  onRemove: (key: string) => void;
+  onAiInstructionChange: (value: string) => void;
+  onCustomFormDescriptionChange: (value: string) => void;
+}) {
+  return (
+    <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50 p-4 space-y-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="text-sm font-bold text-slate-900">{title}</div>
+          <p className="mt-1 text-xs leading-5 text-slate-500">{hint}</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={onAdd}
+            disabled={loading || saving}
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300"
+          >
+            <Plus size={14} />
+            {addLabel}
+          </button>
+          <button
+            type="button"
+            onClick={onReset}
+            disabled={loading || saving}
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300"
+          >
+            <RotateCcw size={14} />
+            {resetLabel}
+          </button>
+          <button
+            type="button"
+            onClick={onSave}
+            disabled={loading || saving || fields.length === 0}
+            className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-xs font-bold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+          >
+            <Save size={14} />
+            {saveLabel}
+          </button>
+        </div>
+      </div>
+
+      {status ? <div className="rounded-2xl border border-blue-100 bg-white px-3 py-2 text-xs font-semibold text-slate-600">{status}</div> : null}
+
+      <div className="grid grid-cols-1 gap-3">
+        {isCustomMode ? (
+          <label className="block rounded-2xl border border-slate-200 bg-white p-3">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">{customFormDescriptionLabel}</span>
+            <textarea
+              rows={4}
+              value={customFormDescription}
+              onChange={(event) => onCustomFormDescriptionChange(event.target.value)}
+              className="mt-2 w-full resize-y rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-800"
+            />
+            <span className="mt-2 block text-xs leading-5 text-slate-500">{customFormDescriptionHint}</span>
+          </label>
+        ) : null}
+        <label className="block rounded-2xl border border-slate-200 bg-white p-3">
+          <span className="text-xs font-bold uppercase tracking-wider text-slate-500">{aiInstructionLabel}</span>
+          <textarea
+            rows={3}
+            value={aiInstruction}
+            onChange={(event) => onAiInstructionChange(event.target.value)}
+            className="mt-2 w-full resize-y rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-800"
+          />
+          <span className="mt-2 block text-xs leading-5 text-slate-500">{aiInstructionHint}</span>
+        </label>
+      </div>
+
+      {loading ? (
+        <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-4 text-sm text-slate-500">
+          Ladataan rakennetta...
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {fields.map((field, index) => (
+            <div key={field.key} className="rounded-2xl border border-slate-200 bg-white p-3">
+              <div className="grid grid-cols-1 xl:grid-cols-[1fr_12rem] gap-3">
+                <label className="block">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Kentän nimi</span>
+                  <input
+                    value={field.label}
+                    onChange={(event) => onChange(field.key, { label: event.target.value })}
+                    className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500">{responseTypeLabel}</span>
+                  <select
+                    value={field.responseType}
+                    onChange={(event) => onChange(field.key, { responseType: event.target.value as LausuntoFieldResponseType })}
+                    className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800"
+                  >
+                    <option value="text">{responseTextLabel}</option>
+                    <option value="yes_no">{responseYesNoLabel}</option>
+                    <option value="yes_no_with_explanation">{responseYesNoExplainLabel}</option>
+                  </select>
+                </label>
+              </div>
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-4 text-xs font-semibold text-slate-600">
+                  <label className="inline-flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={field.enabled}
+                      onChange={(event) => onChange(field.key, { enabled: event.target.checked })}
+                      className="h-4 w-4 rounded border-slate-300 text-blue-600"
+                    />
+                    {enabledLabel}
+                  </label>
+                  <label className="inline-flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={field.required}
+                      onChange={(event) => onChange(field.key, { required: event.target.checked })}
+                      className="h-4 w-4 rounded border-slate-300 text-blue-600"
+                    />
+                    {requiredLabel}
+                  </label>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => onMove(field.key, -1)}
+                    disabled={index === 0}
+                    className="rounded-xl border border-slate-200 p-2 text-slate-500 hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300"
+                    aria-label="Siirrä kenttä ylös"
+                  >
+                    <ArrowUp size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onMove(field.key, 1)}
+                    disabled={index === fields.length - 1}
+                    className="rounded-xl border border-slate-200 p-2 text-slate-500 hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300"
+                    aria-label="Siirrä kenttä alas"
+                  >
+                    <ArrowDown size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onRemove(field.key)}
+                    disabled={fields.length <= 1}
+                    className="rounded-xl border border-rose-100 p-2 text-rose-500 hover:bg-rose-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-300"
+                    aria-label="Poista kenttä"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
