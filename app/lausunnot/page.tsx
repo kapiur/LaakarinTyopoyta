@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, Copy, FileBadge2, Plus, RotateCcw, Save, Search, Sparkles, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Copy, FileBadge2, Plus, RotateCcw, Save, Search, Settings2, Sparkles, Trash2, X } from "lucide-react";
 import type { GeneratedLausuntoField, LausuntoFieldResponseType, LausuntoFieldTemplate } from "../../lib/lausunto/fieldTemplates";
 import { searchIcd10Catalog, type Icd10Entry } from "../../lib/lausunto/icd10Catalog";
 
-type LausuntoMode = "sairausloma" | "bc_lausunto" | "b_lausunto" | "c_lausunto";
+type LausuntoMode = "sairausloma" | "bc_lausunto" | "b_lausunto" | "c_lausunto" | "oma_lomake";
 
 type AccessPayload = {
   enabled: boolean;
@@ -13,7 +13,7 @@ type AccessPayload = {
   policyEnabled: boolean;
 };
 
-const MODE_OPTIONS: LausuntoMode[] = ["sairausloma", "bc_lausunto", "b_lausunto", "c_lausunto"];
+const MODE_OPTIONS: LausuntoMode[] = ["sairausloma", "bc_lausunto", "b_lausunto", "c_lausunto", "oma_lomake"];
 
 type PurposeOption = {
   value: string;
@@ -27,6 +27,7 @@ const MODE_LABELS: Record<LausuntoMode, string> = {
   bc_lausunto: "B/C-lausunto",
   b_lausunto: "B-lausunto",
   c_lausunto: "C-lausunto",
+  oma_lomake: "Oma lomake",
 };
 
 const MODE_NOTES: Record<LausuntoMode, string> = {
@@ -34,6 +35,7 @@ const MODE_NOTES: Record<LausuntoMode, string> = {
   bc_lausunto: "Uusi B/C-lausunto kokoaa B- ja C-lausunnon käyttötarkoituksia samaan rakenteeseen. Samaan lausuntoon voi sisältyä useita etuuksia, mutta tekstiin kirjataan vain asian kannalta olennaiset tiedot.",
   b_lausunto: "B-lausuntoa käytetään edelleen siirtymäkaudella sairauspäivärahan, kuntoutuksen, työkyvyttömyyden ja lääkekorvausoikeuden arviointiin.",
   c_lausunto: "C-lausuntoa käytetään vammaisetuuksiin: alle 16-vuotiaan vammaistuki, 16 vuotta täyttäneen vammaistuki ja eläkettä saavan hoitotuki.",
+  oma_lomake: "Käyttäjän oma lausunto- tai todistuspohja. Määritä käyttötarkoitus, rakenne ja tarvittaessa lomakekohtainen AI-ohje.",
 };
 
 const PURPOSE_OPTIONS: Record<LausuntoMode, PurposeOption[]> = {
@@ -127,6 +129,14 @@ const PURPOSE_OPTIONS: Record<LausuntoMode, PurposeOption[]> = {
   ],
   b_lausunto: [],
   c_lausunto: [],
+  oma_lomake: [
+    {
+      value: "oma_lomake",
+      label: "Oma lomake",
+      description: "Vapaasti määriteltävä todistus, lausunto tai muu kliininen tekstipohja.",
+      guide: ["Tausta ja tarkoitus", "Olennaiset tiedot", "Arvio", "Suunnitelma tai päätös", "Täydennettävä"],
+    },
+  ],
 };
 
 PURPOSE_OPTIONS.b_lausunto = PURPOSE_OPTIONS.bc_lausunto.filter(
@@ -207,6 +217,22 @@ function extractMedicineName(text: string) {
   return candidates[0] ?? "";
 }
 
+function customPurposeKey(value: string) {
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/å/g, "a")
+    .replace(/ä/g, "a")
+    .replace(/ö/g, "o")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 80);
+
+  return normalized ? `oma_${normalized}` : "oma_lomake";
+}
+
 export default function LausunnotPage() {
   const [access, setAccess] = useState<AccessPayload | null>(null);
   const [loading, setLoading] = useState(true);
@@ -231,6 +257,10 @@ export default function LausunnotPage() {
   const [fieldTemplateLoading, setFieldTemplateLoading] = useState(false);
   const [fieldTemplateSaving, setFieldTemplateSaving] = useState(false);
   const [fieldTemplateStatus, setFieldTemplateStatus] = useState("");
+  const [fieldTemplateInstruction, setFieldTemplateInstruction] = useState("");
+  const [customFormName, setCustomFormName] = useState("");
+  const [customFormInstruction, setCustomFormInstruction] = useState("");
+  const [fieldTemplateModalOpen, setFieldTemplateModalOpen] = useState(false);
 
   const copy = useMemo(() => ({
     title: "Lausunto-työtila",
@@ -238,6 +268,7 @@ export default function LausunnotPage() {
     noAccess: "Tämä työkalu on käytössä vain niille käyttäjille, joille se on erikseen sallittu ja joiden työskentelymaa on Suomi.",
     mode: "Asiakirjan tyyppi",
     purpose: "Mihin lausuntoa käytetään",
+    customFormName: "Oman lomakkeen nimi / käyttötarkoitus",
     sourceText: "Lähtöaineisto",
     sourceHint: "Liitä tähän kaikki potilastekstit, aiemmat lausunnot, tutkimustulokset ja muut poimitut tiedot yhtenä tekstinä. AI:n tehtävä on jäsentää aineisto, ei vaatia valmiiksi jaoteltuja kenttiä.",
     sourceReminderTitle: "Muistilista lähtöaineistoon",
@@ -265,6 +296,13 @@ export default function LausunnotPage() {
     generatedFieldsHint: "Muokkaa kenttiä ennen kopiointia. Valinnaisen kentän voi jättää pois, jos se ei ole tässä lausunnossa tarpeellinen.",
     fieldTemplateTitle: "Oma rakenne",
     fieldTemplateHint: "Valitse kentät, järjestys ja vastaustapa tälle asiakirjatyypille ja käyttötarkoitukselle. Tallennus koskee vain tätä yhdistelmää.",
+    openFieldTemplate: "Muokkaa rakennetta",
+    closeFieldTemplate: "Sulje rakenne",
+    fieldsInUse: (count: number) => `${count} kenttää käytössä`,
+    fieldTemplateInstruction: "Lisäohje AI:lle tälle rakenteelle",
+    fieldTemplateInstructionHint: "Koskee vain tätä asiakirjatyyppiä ja käyttötarkoitusta. Kirjoita esimerkiksi painotukset, tiiviyden taso tai miten puuttuva tieto merkitään.",
+    customFormInstruction: "Lomakkeen tarkoitus ja AI-ohje",
+    customFormInstructionHint: "Kuvaa mihin omaa lomaketta käytetään ja millaista lopputulosta AI:n pitää tavoitella.",
     addField: "Lisää kenttä",
     saveTemplate: fieldTemplateSaving ? "Tallennetaan..." : "Tallenna rakenne",
     resetTemplate: "Palauta oletus",
@@ -285,6 +323,11 @@ export default function LausunnotPage() {
   const diagnosisSuggestions = useMemo(() => extractDiagnosisSuggestions(sourceText), [sourceText]);
   const manualSearchResults = useMemo(() => searchIcd10Catalog(query), [query]);
   const selectedPurpose = purposeOptions[mode].find((item) => item.value === purpose) ?? purposeOptions[mode][0];
+  const effectivePurpose = mode === "oma_lomake" ? customPurposeKey(customFormName) : purpose;
+  const effectivePurposeLabel = mode === "oma_lomake" ? (customFormName.trim() || "Oma lomake") : selectedPurpose?.label;
+  const effectivePurposeDescription = mode === "oma_lomake" ? customFormInstruction : selectedPurpose?.description;
+  const effectivePurposeGuide = mode === "oma_lomake" ? purposeOptions.oma_lomake[0].guide : selectedPurpose?.guide;
+  const enabledFieldCount = fieldTemplate.filter((field) => field.enabled).length;
   const isMedicineReimbursement = (mode === "b_lausunto" || mode === "bc_lausunto") && purpose === "laake_tai_ravintovalmiste_korvausoikeus";
   const medicineSuggestion = useMemo(() => extractMedicineName(sourceText), [sourceText]);
 
@@ -313,25 +356,30 @@ export default function LausunnotPage() {
   }, [isMedicineReimbursement, medicineName, medicineSuggestion]);
 
   useEffect(() => {
-    if (!access?.enabled || !mode || !purpose) return;
+    if (!access?.enabled || !mode || !effectivePurpose) return;
     let isCancelled = false;
 
     async function loadFieldTemplate() {
       setFieldTemplateLoading(true);
       setFieldTemplateStatus("");
       try {
-        const response = await fetch(`/api/lausunnot/field-template?mode=${encodeURIComponent(mode)}&purpose=${encodeURIComponent(purpose)}`, { cache: "no-store" });
+        const response = await fetch(`/api/lausunnot/field-template?mode=${encodeURIComponent(mode)}&purpose=${encodeURIComponent(effectivePurpose)}`, { cache: "no-store" });
         const data = await response.json().catch(() => ({}));
         if (!response.ok || !Array.isArray(data.fields)) {
           throw new Error(typeof data.error === "string" ? data.error : "Rakenteen lataus epäonnistui.");
         }
         if (!isCancelled) {
           setFieldTemplate(data.fields);
+          setFieldTemplateInstruction(typeof data.aiInstruction === "string" ? data.aiInstruction : "");
+          if (mode === "oma_lomake" && typeof data.formDescription === "string") {
+            setCustomFormInstruction(data.formDescription);
+          }
         }
       } catch (error) {
         if (!isCancelled) {
           setFieldTemplateStatus(error instanceof Error ? error.message : "Rakenteen lataus epäonnistui.");
           setFieldTemplate([]);
+          setFieldTemplateInstruction("");
         }
       } finally {
         if (!isCancelled) setFieldTemplateLoading(false);
@@ -342,14 +390,15 @@ export default function LausunnotPage() {
     return () => {
       isCancelled = true;
     };
-  }, [access?.enabled, mode, purpose]);
+  }, [access?.enabled, effectivePurpose, mode]);
 
   const draft = useMemo(() => {
     const lines: string[] = [];
 
     lines.push(MODE_LABELS[mode]);
     lines.push("");
-    if (selectedPurpose?.label) lines.push(`Tarkoitus: ${selectedPurpose.label}`);
+    if (effectivePurposeLabel) lines.push(`Tarkoitus: ${effectivePurposeLabel}`);
+    if (mode === "oma_lomake" && customFormInstruction.trim()) lines.push(`Lomakkeen kuvaus: ${customFormInstruction.trim()}`);
     if (isMedicineReimbursement && medicineName.trim()) lines.push(`Lääke tai kliininen ravintovalmiste: ${medicineName.trim()}`);
     if (selectedIcd) lines.push(`Diagnoosi: ${selectedIcd.code} ${selectedIcd.fi}`);
     if (periodFrom.trim() || periodTo.trim()) {
@@ -359,10 +408,10 @@ export default function LausunnotPage() {
     if (mode === "sairausloma" && (absenceFrom || absenceTo)) {
       lines.push(`Työkyvyttömyys: ${absenceFrom || "___"} - ${absenceTo || "___"}`);
     }
-    if (selectedPurpose?.guide?.length) {
+    if (effectivePurposeGuide?.length) {
       lines.push("");
-      lines.push("Kelan kannalta tarkistettavat tiedot:");
-      for (const item of selectedPurpose.guide) {
+      lines.push(mode === "oma_lomake" ? "Rakenteen kannalta tarkistettavat tiedot:" : "Kelan kannalta tarkistettavat tiedot:");
+      for (const item of effectivePurposeGuide) {
         lines.push(`- ${item}`);
       }
     }
@@ -378,7 +427,7 @@ export default function LausunnotPage() {
     }
 
     return lines.join("\n");
-  }, [absenceFrom, absenceTo, additionalNotes, isMedicineReimbursement, medicineName, mode, occupation, periodFrom, periodTo, selectedIcd, selectedPurpose, sourceText]);
+  }, [absenceFrom, absenceTo, additionalNotes, customFormInstruction, effectivePurposeGuide, effectivePurposeLabel, isMedicineReimbursement, medicineName, mode, occupation, periodFrom, periodTo, selectedIcd, sourceText]);
 
   const structuredDraft = useMemo(() => {
     if (generatedFields.length === 0) return "";
@@ -452,7 +501,13 @@ export default function LausunnotPage() {
       const response = await fetch("/api/lausunnot/field-template", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode, purpose, fields: fieldTemplate }),
+        body: JSON.stringify({
+          mode,
+          purpose: effectivePurpose,
+          fields: fieldTemplate,
+          aiInstruction: fieldTemplateInstruction,
+          formDescription: mode === "oma_lomake" ? customFormInstruction : "",
+        }),
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok || !Array.isArray(data.fields)) {
@@ -471,7 +526,7 @@ export default function LausunnotPage() {
     setFieldTemplateSaving(true);
     setFieldTemplateStatus("");
     try {
-      const response = await fetch(`/api/lausunnot/field-template?mode=${encodeURIComponent(mode)}&purpose=${encodeURIComponent(purpose)}`, {
+      const response = await fetch(`/api/lausunnot/field-template?mode=${encodeURIComponent(mode)}&purpose=${encodeURIComponent(effectivePurpose)}`, {
         method: "DELETE",
       });
       const data = await response.json().catch(() => ({}));
@@ -479,6 +534,8 @@ export default function LausunnotPage() {
         throw new Error(typeof data.error === "string" ? data.error : "Oletusrakenteen palautus epäonnistui.");
       }
       setFieldTemplate(data.fields);
+      setFieldTemplateInstruction("");
+      if (mode === "oma_lomake") setCustomFormInstruction("");
       setFieldTemplateStatus("Oletusrakenne palautettu.");
     } catch (error) {
       setFieldTemplateStatus(error instanceof Error ? error.message : "Oletusrakenteen palautus epäonnistui.");
@@ -503,10 +560,10 @@ export default function LausunnotPage() {
         body: JSON.stringify({
           mode,
           modeLabel: MODE_LABELS[mode],
-          purpose,
-          purposeLabel: selectedPurpose?.label,
-          purposeDescription: selectedPurpose?.description,
-          purposeGuide: selectedPurpose?.guide,
+          purpose: effectivePurpose,
+          purposeLabel: effectivePurposeLabel,
+          purposeDescription: effectivePurposeDescription,
+          purposeGuide: effectivePurposeGuide,
           sourceText,
           additionalNotes,
           medicineName,
@@ -517,6 +574,8 @@ export default function LausunnotPage() {
           absenceTo,
           diagnosis: selectedIcd ? { code: selectedIcd.code, label: selectedIcd.fi } : null,
           fieldTemplate,
+          fieldTemplateInstruction,
+          customFormInstruction: mode === "oma_lomake" ? customFormInstruction : "",
         }),
       });
       const data = await response.json().catch(() => ({}));
@@ -582,18 +641,22 @@ export default function LausunnotPage() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <SelectField
-              label={copy.purpose}
-              value={purpose}
-              onChange={setPurpose}
-              options={purposeOptions[mode]}
-            />
+            {mode === "oma_lomake" ? (
+              <Field label={copy.customFormName} value={customFormName} onChange={setCustomFormName} />
+            ) : (
+              <SelectField
+                label={copy.purpose}
+                value={purpose}
+                onChange={setPurpose}
+                options={purposeOptions[mode]}
+              />
+            )}
             <Field label={copy.occupation} value={occupation} onChange={setOccupation} />
             {mode === "sairausloma" ? <Field label={copy.absenceFrom} value={absenceFrom} onChange={setAbsenceFrom} /> : null}
             {mode === "sairausloma" ? <Field label={copy.absenceTo} value={absenceTo} onChange={setAbsenceTo} /> : null}
           </div>
 
-          {selectedPurpose ? (
+          {selectedPurpose && mode !== "oma_lomake" ? (
             <div className="rounded-[1.5rem] border border-blue-100 bg-blue-50/60 p-4">
               <div className="text-sm font-bold text-slate-900">{selectedPurpose.label}</div>
               <p className="mt-1 text-sm leading-6 text-slate-600">{selectedPurpose.description}</p>
@@ -608,29 +671,20 @@ export default function LausunnotPage() {
             </div>
           ) : null}
 
-          <LausuntoFieldTemplateEditor
-            title={copy.fieldTemplateTitle}
-            hint={copy.fieldTemplateHint}
-            fields={fieldTemplate}
-            loading={fieldTemplateLoading}
-            saving={fieldTemplateSaving}
-            status={fieldTemplateStatus}
-            addLabel={copy.addField}
-            saveLabel={copy.saveTemplate}
-            resetLabel={copy.resetTemplate}
-            requiredLabel={copy.requiredField}
-            enabledLabel={copy.enabledField}
-            responseTypeLabel={copy.responseType}
-            responseTextLabel={copy.responseText}
-            responseYesNoLabel={copy.responseYesNo}
-            responseYesNoExplainLabel={copy.responseYesNoExplain}
-            onAdd={addTemplateField}
-            onSave={saveFieldTemplate}
-            onReset={resetFieldTemplate}
-            onMove={moveTemplateField}
-            onChange={updateTemplateField}
-            onRemove={removeTemplateField}
-          />
+          <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50 p-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-bold text-slate-900">{copy.fieldTemplateTitle}</div>
+              <p className="mt-1 text-xs leading-5 text-slate-500">{copy.fieldsInUse(enabledFieldCount)}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setFieldTemplateModalOpen(true)}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
+            >
+              <Settings2 size={16} />
+              {copy.openFieldTemplate}
+            </button>
+          </div>
 
           <TextArea label={copy.sourceText} value={sourceText} onChange={setSourceText} rows={7} />
           <p className="-mt-2 text-xs text-slate-500">{copy.sourceHint}</p>
@@ -765,6 +819,61 @@ export default function LausunnotPage() {
           )}
         </section>
       </div>
+
+      {fieldTemplateModalOpen ? (
+        <div className="fixed inset-0 z-50 bg-slate-950/40 p-4 md:p-8">
+          <div className="mx-auto flex max-h-[calc(100vh-2rem)] max-w-5xl flex-col overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-2xl md:max-h-[calc(100vh-4rem)]">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-6 py-5">
+              <div>
+                <h2 className="text-xl font-bold text-slate-900">{copy.fieldTemplateTitle}</h2>
+                <p className="mt-1 text-sm leading-6 text-slate-500">{effectivePurposeLabel}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setFieldTemplateModalOpen(false)}
+                className="rounded-xl border border-slate-200 p-2 text-slate-500 hover:bg-slate-50"
+                aria-label={copy.closeFieldTemplate}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="overflow-y-auto p-6">
+              <LausuntoFieldTemplateEditor
+                title={copy.fieldTemplateTitle}
+                hint={copy.fieldTemplateHint}
+                fields={fieldTemplate}
+                loading={fieldTemplateLoading}
+                saving={fieldTemplateSaving}
+                status={fieldTemplateStatus}
+                aiInstruction={fieldTemplateInstruction}
+                aiInstructionLabel={copy.fieldTemplateInstruction}
+                aiInstructionHint={copy.fieldTemplateInstructionHint}
+                customFormDescription={customFormInstruction}
+                customFormDescriptionLabel={copy.customFormInstruction}
+                customFormDescriptionHint={copy.customFormInstructionHint}
+                isCustomMode={mode === "oma_lomake"}
+                addLabel={copy.addField}
+                saveLabel={copy.saveTemplate}
+                resetLabel={copy.resetTemplate}
+                requiredLabel={copy.requiredField}
+                enabledLabel={copy.enabledField}
+                responseTypeLabel={copy.responseType}
+                responseTextLabel={copy.responseText}
+                responseYesNoLabel={copy.responseYesNo}
+                responseYesNoExplainLabel={copy.responseYesNoExplain}
+                onAdd={addTemplateField}
+                onSave={saveFieldTemplate}
+                onReset={resetFieldTemplate}
+                onMove={moveTemplateField}
+                onChange={updateTemplateField}
+                onRemove={removeTemplateField}
+                onAiInstructionChange={setFieldTemplateInstruction}
+                onCustomFormDescriptionChange={setCustomFormInstruction}
+              />
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -831,6 +940,13 @@ function LausuntoFieldTemplateEditor({
   loading,
   saving,
   status,
+  aiInstruction,
+  aiInstructionLabel,
+  aiInstructionHint,
+  customFormDescription,
+  customFormDescriptionLabel,
+  customFormDescriptionHint,
+  isCustomMode,
   addLabel,
   saveLabel,
   resetLabel,
@@ -846,6 +962,8 @@ function LausuntoFieldTemplateEditor({
   onMove,
   onChange,
   onRemove,
+  onAiInstructionChange,
+  onCustomFormDescriptionChange,
 }: {
   title: string;
   hint: string;
@@ -853,6 +971,13 @@ function LausuntoFieldTemplateEditor({
   loading: boolean;
   saving: boolean;
   status: string;
+  aiInstruction: string;
+  aiInstructionLabel: string;
+  aiInstructionHint: string;
+  customFormDescription: string;
+  customFormDescriptionLabel: string;
+  customFormDescriptionHint: string;
+  isCustomMode: boolean;
   addLabel: string;
   saveLabel: string;
   resetLabel: string;
@@ -868,6 +993,8 @@ function LausuntoFieldTemplateEditor({
   onMove: (key: string, direction: -1 | 1) => void;
   onChange: (key: string, patch: Partial<LausuntoFieldTemplate>) => void;
   onRemove: (key: string) => void;
+  onAiInstructionChange: (value: string) => void;
+  onCustomFormDescriptionChange: (value: string) => void;
 }) {
   return (
     <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50 p-4 space-y-4">
@@ -908,6 +1035,31 @@ function LausuntoFieldTemplateEditor({
       </div>
 
       {status ? <div className="rounded-2xl border border-blue-100 bg-white px-3 py-2 text-xs font-semibold text-slate-600">{status}</div> : null}
+
+      <div className="grid grid-cols-1 gap-3">
+        {isCustomMode ? (
+          <label className="block rounded-2xl border border-slate-200 bg-white p-3">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">{customFormDescriptionLabel}</span>
+            <textarea
+              rows={4}
+              value={customFormDescription}
+              onChange={(event) => onCustomFormDescriptionChange(event.target.value)}
+              className="mt-2 w-full resize-y rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-800"
+            />
+            <span className="mt-2 block text-xs leading-5 text-slate-500">{customFormDescriptionHint}</span>
+          </label>
+        ) : null}
+        <label className="block rounded-2xl border border-slate-200 bg-white p-3">
+          <span className="text-xs font-bold uppercase tracking-wider text-slate-500">{aiInstructionLabel}</span>
+          <textarea
+            rows={3}
+            value={aiInstruction}
+            onChange={(event) => onAiInstructionChange(event.target.value)}
+            className="mt-2 w-full resize-y rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-800"
+          />
+          <span className="mt-2 block text-xs leading-5 text-slate-500">{aiInstructionHint}</span>
+        </label>
+      </div>
 
       {loading ? (
         <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-4 text-sm text-slate-500">

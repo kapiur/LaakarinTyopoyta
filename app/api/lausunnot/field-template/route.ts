@@ -2,10 +2,14 @@ import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { requireAuthenticatedUser } from "../../../../lib/admin-auth";
 import { getLausuntoWorkspaceAccess } from "../../../../lib/lausunto/access";
-import { getDefaultLausuntoFieldTemplate, normalizeLausuntoFieldTemplate } from "../../../../lib/lausunto/fieldTemplates";
+import {
+  getDefaultLausuntoFieldTemplateConfig,
+  normalizeLausuntoFieldTemplate,
+  normalizeLausuntoFieldTemplateConfig,
+} from "../../../../lib/lausunto/fieldTemplates";
 import { prisma } from "../../../../lib/prisma";
 
-const LAUSUNTO_MODES = new Set(["sairausloma", "bc_lausunto", "b_lausunto", "c_lausunto"]);
+const LAUSUNTO_MODES = new Set(["sairausloma", "bc_lausunto", "b_lausunto", "c_lausunto", "oma_lomake"]);
 
 function text(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
@@ -54,16 +58,17 @@ export async function GET(request: Request) {
     parsed.purpose,
   );
 
-  const fields = normalizeLausuntoFieldTemplate(
-    rows[0]?.fields ?? getDefaultLausuntoFieldTemplate(parsed.mode, parsed.purpose),
+  const config = normalizeLausuntoFieldTemplateConfig(
+    rows[0]?.fields ?? getDefaultLausuntoFieldTemplateConfig(parsed.mode, parsed.purpose),
     parsed.mode,
+    parsed.purpose,
   );
 
   return NextResponse.json({
     mode: parsed.mode,
     purpose: parsed.purpose,
     isDefault: rows.length === 0,
-    fields,
+    ...config,
   });
 }
 
@@ -71,7 +76,13 @@ export async function PUT(request: Request) {
   const auth = await getUserId();
   if (auth.error || auth.userId === null) return auth.error;
 
-  const body = await request.json().catch(() => ({})) as { mode?: unknown; purpose?: unknown; fields?: unknown };
+  const body = await request.json().catch(() => ({})) as {
+    mode?: unknown;
+    purpose?: unknown;
+    fields?: unknown;
+    aiInstruction?: unknown;
+    formDescription?: unknown;
+  };
   const mode = text(body.mode);
   const purpose = text(body.purpose) || "default";
 
@@ -79,10 +90,15 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: "Tuntematon lausuntotyyppi." }, { status: 400 });
   }
 
-  const fields = normalizeLausuntoFieldTemplate(body.fields, mode);
+  const fields = normalizeLausuntoFieldTemplate(body.fields, mode, purpose);
   if (fields.length === 0) {
     return NextResponse.json({ error: "Rakenteessa pitää olla vähintään yksi kenttä." }, { status: 400 });
   }
+  const config = {
+    fields,
+    aiInstruction: text(body.aiInstruction).slice(0, 2000),
+    formDescription: mode === "oma_lomake" ? text(body.formDescription).slice(0, 2000) : "",
+  };
 
   await prisma.$executeRawUnsafe(
     `INSERT INTO "UserLausuntoFieldTemplate" ("id", "userId", "mode", "purpose", "fields", "createdAt", "updatedAt")
@@ -93,14 +109,14 @@ export async function PUT(request: Request) {
     auth.userId,
     mode,
     purpose,
-    JSON.stringify(fields),
+    JSON.stringify(config),
   );
 
   return NextResponse.json({
     mode,
     purpose,
     isDefault: false,
-    fields,
+    ...config,
   });
 }
 
@@ -122,6 +138,6 @@ export async function DELETE(request: Request) {
     mode: parsed.mode,
     purpose: parsed.purpose,
     isDefault: true,
-    fields: getDefaultLausuntoFieldTemplate(parsed.mode, parsed.purpose),
+    ...getDefaultLausuntoFieldTemplateConfig(parsed.mode, parsed.purpose),
   });
 }

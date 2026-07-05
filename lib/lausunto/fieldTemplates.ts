@@ -1,4 +1,4 @@
-export type LausuntoMode = "sairausloma" | "bc_lausunto" | "b_lausunto" | "c_lausunto";
+export type LausuntoMode = "sairausloma" | "bc_lausunto" | "b_lausunto" | "c_lausunto" | "oma_lomake";
 
 export type LausuntoFieldResponseType = "text" | "yes_no" | "yes_no_with_explanation";
 
@@ -9,6 +9,12 @@ export type LausuntoFieldTemplate = {
   required: boolean;
   responseType: LausuntoFieldResponseType;
   order: number;
+};
+
+export type LausuntoFieldTemplateConfig = {
+  fields: LausuntoFieldTemplate[];
+  aiInstruction: string;
+  formDescription: string;
 };
 
 export type GeneratedLausuntoField = {
@@ -61,6 +67,13 @@ const DEFAULT_FIELDS: Record<LausuntoMode, LausuntoFieldTemplate[]> = {
     field("avun_ohjauksen_valvonnan_tarve", "Avun, ohjauksen ja valvonnan tarve", true, "text"),
     field("hoito_kuntoutus_palvelut", "Hoito, kuntoutus ja palvelut", true, "text"),
     field("etuuden_perustelu", "Etuuden kannalta olennainen perustelu", true, "text"),
+    field("taydennettava", "Täydennettävä", false, "text"),
+  ],
+  oma_lomake: [
+    field("tausta_ja_tarkoitus", "Tausta ja tarkoitus", true, "text"),
+    field("olennaiset_tiedot", "Olennaiset tiedot", true, "text"),
+    field("arvio", "Arvio", true, "text"),
+    field("suunnitelma_tai_paatos", "Suunnitelma tai päätös", false, "text"),
     field("taydennettava", "Täydennettävä", false, "text"),
   ],
 };
@@ -222,8 +235,29 @@ export function getDefaultLausuntoFieldTemplate(mode: string, purpose = ""): Lau
   return withOrder(purposeFields ?? DEFAULT_FIELDS[safeMode]);
 }
 
-export function normalizeLausuntoFieldTemplate(value: unknown, mode: string): LausuntoFieldTemplate[] {
-  const source = Array.isArray(value) && value.length > 0 ? value : getDefaultLausuntoFieldTemplate(mode);
+export function getDefaultLausuntoFieldTemplateConfig(mode: string, purpose = ""): LausuntoFieldTemplateConfig {
+  return {
+    fields: getDefaultLausuntoFieldTemplate(mode, purpose),
+    aiInstruction: "",
+    formDescription: "",
+  };
+}
+
+export function normalizeLausuntoFieldTemplateConfig(value: unknown, mode: string, purpose = ""): LausuntoFieldTemplateConfig {
+  const item = typeof value === "object" && value !== null && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+  const rawFields = Array.isArray(value) ? value : item.fields;
+
+  return {
+    fields: normalizeLausuntoFieldTemplate(rawFields, mode, purpose),
+    aiInstruction: safeText(item.aiInstruction ?? item.instruction, 2000),
+    formDescription: safeText(item.formDescription, 2000),
+  };
+}
+
+export function normalizeLausuntoFieldTemplate(value: unknown, mode: string, purpose = ""): LausuntoFieldTemplate[] {
+  const source = Array.isArray(value) && value.length > 0 ? value : getDefaultLausuntoFieldTemplate(mode, purpose);
   const seen = new Set<string>();
 
   return source
@@ -282,5 +316,9 @@ export function responseTypeInstruction(responseType: LausuntoFieldResponseType)
 }
 
 function isLausuntoMode(value: string): value is LausuntoMode {
-  return value === "sairausloma" || value === "bc_lausunto" || value === "b_lausunto" || value === "c_lausunto";
+  return value === "sairausloma" || value === "bc_lausunto" || value === "b_lausunto" || value === "c_lausunto" || value === "oma_lomake";
+}
+
+function safeText(value: unknown, maxLength: number) {
+  return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
 }

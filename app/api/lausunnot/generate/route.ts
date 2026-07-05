@@ -16,7 +16,7 @@ import {
 } from "../../../../lib/lausunto/fieldTemplates";
 import { preparePrivacyPayload } from "../../../../lib/privacy/gateway";
 
-const LAUSUNTO_MODES = new Set(["sairausloma", "bc_lausunto", "b_lausunto", "c_lausunto"]);
+const LAUSUNTO_MODES = new Set(["sairausloma", "bc_lausunto", "b_lausunto", "c_lausunto", "oma_lomake"]);
 const LAUSUNTO_BLOCKING_RESIDUAL_TYPES = new Set(["hetu", "email", "phone", "address"]);
 
 const PRIVACY_PLACEHOLDER_SYSTEM_PROMPT = `
@@ -48,6 +48,8 @@ type GenerateBody = {
   absenceTo?: unknown;
   diagnosis?: DiagnosisPayload | null;
   fieldTemplate?: unknown;
+  fieldTemplateInstruction?: unknown;
+  customFormInstruction?: unknown;
 };
 
 function text(value: unknown) {
@@ -78,11 +80,15 @@ function buildPrompt(payload: {
   absenceTo: string;
   diagnosisCode: string;
   diagnosisLabel: string;
+  fieldTemplateInstruction: string;
+  customFormInstruction: string;
 }) {
   const metaLines = [
     `Asiakirjan tyyppi: ${payload.modeLabel}`,
     `Käyttötarkoitus: ${payload.purposeLabel}`,
     payload.purposeDescription ? `Käyttötarkoituksen kuvaus: ${payload.purposeDescription}` : "",
+    payload.customFormInstruction ? `Käyttäjän oman lomakkeen tarkoitus ja AI-ohje: ${payload.customFormInstruction}` : "",
+    payload.fieldTemplateInstruction ? `Käyttäjän lisäohje tälle rakenteelle: ${payload.fieldTemplateInstruction}` : "",
     payload.diagnosisCode || payload.diagnosisLabel ? `Diagnoosi: ${[payload.diagnosisCode, payload.diagnosisLabel].filter(Boolean).join(" ")}` : "",
     payload.medicineName ? `Lääke tai kliininen ravintovalmiste: ${payload.medicineName}` : "",
     payload.periodFrom || payload.periodTo ? `Jakso / hoito / kontrolli: ${payload.periodFrom || "ei annettu"} - ${payload.periodTo || "ei annettu"}` : "",
@@ -146,6 +152,7 @@ Täyttöohje:
 - Älä täytä puuttuvaa tietoa keksimällä. Jos tieto puuttuu, jätä content tyhjäksi tai lisää se vain "taydennettava"-kenttään konkreettisena puutteena.
 - Pidä teksti lakonisena mutta riittävänä. Jokaisessa kentässä vain sen kentän asia.
 - Säilytä kliinisesti olennaiset päivämäärät, mittausarvot, lääkeannokset, tutkimukset ja seuranta-ajat.
+- Noudata käyttäjän lomakekohtaista lisäohjetta, jos se ei ole ristiriidassa lähtöaineiston, tietosuojan tai lääketieteellisen varovaisuuden kanssa.
 `;
 }
 
@@ -161,6 +168,7 @@ Olet suomalaiseen terveydenhuoltoon ja Kelan lääkärinlausuntoihin erikoistunu
 
 Tärkeät rajaukset:
 - Tämä työkalu koskee vain Suomessa käytettäviä B/C-lausuntoja, B-lausuntoja, C-lausuntoja ja sairauslomatodistuksia.
+- Työkalu voi lisäksi laatia käyttäjän omia suomalaisessa työssä tarvittavia todistus- tai lausuntoluonnoksia, jos käyttäjä on määritellyt oman lomakkeen rakenteen.
 - Lopullinen luonnos kirjoitetaan aina suomeksi, vaikka käyttäjän käyttöliittymä, profiili tai kysely olisi muulla kielellä.
 - Käytä käyttäjän henkilökohtaista profiilia vain rakenteen, tiiviyden, kirjoitustyylin ja kliinisen työn kontekstin sovittamiseen. Älä anna profiilin kielitoiveen vaihtaa lausunnon kieltä pois suomesta.
 - Perustu vain käyttäjän antamaan lähtöaineistoon ja lisäkenttiin. Älä keksi tutkimuksia, diagnooseja, toimintakyvyn rajoitteita, päivämääriä, lääkityksiä tai päätöksiä.
@@ -174,6 +182,7 @@ Rakenteen ohje:
 - B/C- ja B-lausunto: Diagnoosit / Sairauden kulku ja nykytila / Tutkimukset ja hoito / Toiminta- ja työkyky / Etuuden kannalta olennainen perustelu / Suunnitelma / Täydennettävä.
 - C-lausunto: Diagnoosit / Sairauden kulku ja nykytila / Toimintakyky arjessa / Avun, ohjauksen ja valvonnan tarve / Hoito ja palvelut / Täydennettävä.
 - Lääkekorvausoikeus: korosta valmistetta, diagnoosia, korvauskriteerien kannalta olennaisia tietoja, hoidon aloitusta, annosta, vastetta ja seurantaa.
+- Oma lomake: käytä käyttäjän valitsemia kenttiä ja lomakkeen kuvausta ensisijaisena rakenteena.
 `;
 }
 
@@ -293,10 +302,13 @@ export async function POST(request: Request) {
     absenceTo: text(body.absenceTo),
     diagnosisCode: text(diagnosis?.code),
     diagnosisLabel: text(diagnosis?.label),
+    fieldTemplateInstruction: text(body.fieldTemplateInstruction),
+    customFormInstruction: text(body.customFormInstruction),
   };
   const fieldTemplate = normalizeLausuntoFieldTemplate(
     body.fieldTemplate ?? getDefaultLausuntoFieldTemplate(mode, text(body.purpose) || "default"),
     mode,
+    text(body.purpose) || "default",
   );
   const hasStructuredFields = enabledLausuntoFields(fieldTemplate, mode).length > 0;
   const userPrompt = hasStructuredFields
