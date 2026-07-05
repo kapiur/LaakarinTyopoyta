@@ -69,7 +69,7 @@ function isStrictContextMode(mode: AnonymizationMode) {
 }
 
 function shouldRedactExactDates(mode: AnonymizationMode) {
-  return isStorageLikeMode(mode) || mode === 'clinicalTransform' || mode === 'clinicalBuilder';
+  return isStorageLikeMode(mode);
 }
 
 const CONTEXT_WINDOW_CHARS = 120;
@@ -307,23 +307,8 @@ function collectStaffNames(text: string): InternalFinding[] {
   return findings;
 }
 
-function collectBareDatesNearIdentifiers(text: string, mode: AnonymizationMode, personContextPattern: RegExp): InternalFinding[] {
-  const findings: InternalFinding[] = [];
-  const regex = new RegExp(DATE_PATTERN.source, DATE_PATTERN.flags);
-  const strictMode = isStrictContextMode(mode);
-  let match: RegExpExecArray | null;
-
-  while ((match = regex.exec(text)) !== null) {
-    const value = match[0];
-    const start = match.index;
-    const end = start + value.length;
-
-    if (hasNearbyIdentifier(text, start, end, personContextPattern, strictMode)) {
-      findings.push(createFinding('dateOfBirth', value, strictMode ? '[DATE]' : '[DATE_OF_BIRTH]', start));
-    }
-  }
-
-  return findings;
+function collectBareDatesNearIdentifiers(_text: string, _mode: AnonymizationMode, _personContextPattern: RegExp): InternalFinding[] {
+  return [];
 }
 
 function collectBareNamesNearIdentifiers(text: string, mode: AnonymizationMode, personContextPattern: RegExp): InternalFinding[] {

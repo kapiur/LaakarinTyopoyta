@@ -81,10 +81,10 @@ const cases: TestCase[] = [
     forbiddenFragments: [syntheticName],
   },
   {
-    name: 'Bare name and bare date near identifiers are redacted',
+    name: 'Bare name near identifiers is redacted while clinical dates are preserved',
     input: `${syntheticNameFromUserExample} ${syntheticHetu} ${syntheticBareDob} ${syntheticLocalPhone}`,
-    expectedFragments: ['[NAME]', '[HETU]', '[DATE_OF_BIRTH]', '[PHONE]'],
-    forbiddenFragments: [syntheticNameFromUserExample, syntheticHetu, syntheticBareDob, syntheticLocalPhone],
+    expectedFragments: ['[NAME]', '[HETU]', syntheticBareDob, '[PHONE]'],
+    forbiddenFragments: [syntheticNameFromUserExample, syntheticHetu, syntheticLocalPhone],
   },
   {
     name: 'Relative words are normalized to generic Omainen before redacted name',
@@ -140,6 +140,20 @@ const cases: TestCase[] = [
     mode: 'chat',
     expectedFragments: ['12.3.2024', '15.4.2024'],
     forbiddenFragments: ['[DATE]'],
+  },
+  {
+    name: 'Clinical transform preserves chronology dates and date ranges',
+    input: `27.4.-30.9.2026 potilas siirtyy seurantaan. Kontrolli 05.04.2026 ja leikkaus vuonna 2021.`,
+    mode: 'clinicalTransform',
+    expectedFragments: ['27.4.-30.9.2026', '05.04.2026', '2021'],
+    forbiddenFragments: ['[DATE]', '[DATE_OF_BIRTH]'],
+  },
+  {
+    name: 'Clinical builder preserves chronology dates near patient context',
+    input: `Potilas kertoo oireiden alkaneen 14.03.2026. Laboratoriot 18.03.2026 ja kontrolli 25.03.2026.`,
+    mode: 'clinicalBuilder',
+    expectedFragments: ['14.03.2026', '18.03.2026', '25.03.2026'],
+    forbiddenFragments: ['[DATE]', '[DATE_OF_BIRTH]'],
   },
   {
     name: 'Exact dates are redacted in storage mode',
