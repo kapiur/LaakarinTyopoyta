@@ -44,12 +44,49 @@ function readModeAndPurpose(url: string) {
   return { mode, purpose, error: null };
 }
 
+function purposeLabelFromKey(purpose: string) {
+  if (purpose === "oma_lomake") return "Oma lomake";
+  if (!purpose.startsWith("oma_")) return purpose;
+  const label = purpose
+    .slice(4)
+    .replace(/_/g, " ")
+    .trim();
+
+  return label || "Oma lomake";
+}
+
 export async function GET(request: Request) {
   const auth = await getUserId();
   if (auth.error || auth.userId === null) return auth.error;
 
   const parsed = readModeAndPurpose(request.url);
   if (parsed.error) return parsed.error;
+  const searchParams = new URL(request.url).searchParams;
+  const wantsList = searchParams.get("list") === "1" || searchParams.get("list") === "true";
+
+  if (wantsList && parsed.mode === "oma_lomake") {
+    const rows = await prisma.$queryRawUnsafe<Array<{ purpose: string; fields: unknown; updatedAt: Date }>>(
+      'SELECT "purpose", "fields", "updatedAt" FROM "UserLausuntoFieldTemplate" WHERE "userId" = $1 AND "mode" = $2 ORDER BY "updatedAt" DESC',
+      auth.userId,
+      parsed.mode,
+    );
+
+    const forms = rows.map((row) => {
+      const config = normalizeLausuntoFieldTemplateConfig(row.fields, parsed.mode, row.purpose);
+      return {
+        purpose: row.purpose,
+        name: config.formName || purposeLabelFromKey(row.purpose),
+        formDescription: config.formDescription,
+        aiInstruction: config.aiInstruction,
+        updatedAt: row.updatedAt,
+      };
+    });
+
+    return NextResponse.json({
+      mode: parsed.mode,
+      forms,
+    });
+  }
 
   const rows = await prisma.$queryRawUnsafe<Array<{ fields: unknown }>>(
     'SELECT "fields" FROM "UserLausuntoFieldTemplate" WHERE "userId" = $1 AND "mode" = $2 AND "purpose" = $3 LIMIT 1',
@@ -82,6 +119,7 @@ export async function PUT(request: Request) {
     fields?: unknown;
     aiInstruction?: unknown;
     formDescription?: unknown;
+    formName?: unknown;
   };
   const mode = text(body.mode);
   const purpose = text(body.purpose) || "default";
@@ -95,6 +133,7 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: "Rakenteessa pitää olla vähintään yksi kenttä." }, { status: 400 });
   }
   const config = {
+    formName: mode === "oma_lomake" ? text(body.formName).slice(0, 160) : "",
     fields,
     aiInstruction: text(body.aiInstruction).slice(0, 2000),
     formDescription: mode === "oma_lomake" ? text(body.formDescription).slice(0, 2000) : "",

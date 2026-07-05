@@ -12,6 +12,7 @@ export type LausuntoFieldTemplate = {
 };
 
 export type LausuntoFieldTemplateConfig = {
+  formName: string;
   fields: LausuntoFieldTemplate[];
   aiInstruction: string;
   formDescription: string;
@@ -237,6 +238,7 @@ export function getDefaultLausuntoFieldTemplate(mode: string, purpose = ""): Lau
 
 export function getDefaultLausuntoFieldTemplateConfig(mode: string, purpose = ""): LausuntoFieldTemplateConfig {
   return {
+    formName: "",
     fields: getDefaultLausuntoFieldTemplate(mode, purpose),
     aiInstruction: "",
     formDescription: "",
@@ -250,6 +252,7 @@ export function normalizeLausuntoFieldTemplateConfig(value: unknown, mode: strin
   const rawFields = Array.isArray(value) ? value : item.fields;
 
   return {
+    formName: safeText(item.formName, 160),
     fields: normalizeLausuntoFieldTemplate(rawFields, mode, purpose),
     aiInstruction: safeText(item.aiInstruction ?? item.instruction, 2000),
     formDescription: safeText(item.formDescription, 2000),

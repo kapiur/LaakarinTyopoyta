@@ -22,6 +22,13 @@ type PurposeOption = {
   guide: string[];
 };
 
+type CustomFormSummary = {
+  purpose: string;
+  name: string;
+  formDescription: string;
+  aiInstruction: string;
+};
+
 const MODE_LABELS: Record<LausuntoMode, string> = {
   sairausloma: "Sairauslomatodistus",
   bc_lausunto: "B/C-lausunto",
@@ -217,20 +224,8 @@ function extractMedicineName(text: string) {
   return candidates[0] ?? "";
 }
 
-function customPurposeKey(value: string) {
-  const normalized = value
-    .trim()
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/å/g, "a")
-    .replace(/ä/g, "a")
-    .replace(/ö/g, "o")
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "")
-    .slice(0, 80);
-
-  return normalized ? `oma_${normalized}` : "oma_lomake";
+function createCustomFormPurpose() {
+  return `oma_${Date.now().toString(36)}`;
 }
 
 export default function LausunnotPage() {
@@ -258,6 +253,9 @@ export default function LausunnotPage() {
   const [fieldTemplateSaving, setFieldTemplateSaving] = useState(false);
   const [fieldTemplateStatus, setFieldTemplateStatus] = useState("");
   const [fieldTemplateInstruction, setFieldTemplateInstruction] = useState("");
+  const [customForms, setCustomForms] = useState<CustomFormSummary[]>([]);
+  const [customFormsLoading, setCustomFormsLoading] = useState(false);
+  const [customFormPurpose, setCustomFormPurpose] = useState("oma_lomake");
   const [customFormName, setCustomFormName] = useState("");
   const [customFormInstruction, setCustomFormInstruction] = useState("");
   const [fieldTemplateModalOpen, setFieldTemplateModalOpen] = useState(false);
@@ -268,7 +266,10 @@ export default function LausunnotPage() {
     noAccess: "Tämä työkalu on käytössä vain niille käyttäjille, joille se on erikseen sallittu ja joiden työskentelymaa on Suomi.",
     mode: "Asiakirjan tyyppi",
     purpose: "Mihin lausuntoa käytetään",
+    customFormSelect: "Oma lomake",
     customFormName: "Oman lomakkeen nimi / käyttötarkoitus",
+    newCustomForm: "Uusi oma lomake",
+    newCustomFormOption: "Uusi tallentamaton lomake",
     sourceText: "Lähtöaineisto",
     sourceHint: "Liitä tähän kaikki potilastekstit, aiemmat lausunnot, tutkimustulokset ja muut poimitut tiedot yhtenä tekstinä. AI:n tehtävä on jäsentää aineisto, ei vaatia valmiiksi jaoteltuja kenttiä.",
     sourceReminderTitle: "Muistilista lähtöaineistoon",
@@ -323,8 +324,27 @@ export default function LausunnotPage() {
   const diagnosisSuggestions = useMemo(() => extractDiagnosisSuggestions(sourceText), [sourceText]);
   const manualSearchResults = useMemo(() => searchIcd10Catalog(query), [query]);
   const selectedPurpose = purposeOptions[mode].find((item) => item.value === purpose) ?? purposeOptions[mode][0];
-  const effectivePurpose = mode === "oma_lomake" ? customPurposeKey(customFormName) : purpose;
-  const effectivePurposeLabel = mode === "oma_lomake" ? (customFormName.trim() || "Oma lomake") : selectedPurpose?.label;
+  const selectedCustomForm = customForms.find((item) => item.purpose === customFormPurpose);
+  const customFormOptions = useMemo(() => {
+    const savedOptions = customForms.map((item) => ({
+      value: item.purpose,
+      label: item.name,
+      description: item.formDescription,
+      guide: purposeOptions.oma_lomake[0].guide,
+    }));
+    if (savedOptions.some((item) => item.value === customFormPurpose)) return savedOptions;
+    return [
+      {
+        value: customFormPurpose,
+        label: customFormName.trim() || copy.newCustomFormOption,
+        description: customFormInstruction,
+        guide: purposeOptions.oma_lomake[0].guide,
+      },
+      ...savedOptions,
+    ];
+  }, [copy.newCustomFormOption, customFormInstruction, customFormName, customFormPurpose, customForms, purposeOptions.oma_lomake]);
+  const effectivePurpose = mode === "oma_lomake" ? customFormPurpose : purpose;
+  const effectivePurposeLabel = mode === "oma_lomake" ? (customFormName.trim() || selectedCustomForm?.name || "Oma lomake") : selectedPurpose?.label;
   const effectivePurposeDescription = mode === "oma_lomake" ? customFormInstruction : selectedPurpose?.description;
   const effectivePurposeGuide = mode === "oma_lomake" ? purposeOptions.oma_lomake[0].guide : selectedPurpose?.guide;
   const enabledFieldCount = fieldTemplate.filter((field) => field.enabled).length;
@@ -340,6 +360,44 @@ export default function LausunnotPage() {
     }
     loadAccess();
   }, []);
+
+  async function loadCustomForms(preferredPurpose?: string) {
+    if (!access?.enabled) return;
+    setCustomFormsLoading(true);
+    try {
+      const response = await fetch("/api/lausunnot/field-template?mode=oma_lomake&list=1", { cache: "no-store" });
+      const data = await response.json().catch(() => ({}));
+      const forms = Array.isArray(data.forms)
+        ? data.forms
+          .map((item: any) => ({
+            purpose: typeof item.purpose === "string" ? item.purpose : "",
+            name: typeof item.name === "string" ? item.name : "",
+            formDescription: typeof item.formDescription === "string" ? item.formDescription : "",
+            aiInstruction: typeof item.aiInstruction === "string" ? item.aiInstruction : "",
+          }))
+          .filter((item: CustomFormSummary) => item.purpose && item.name)
+        : [];
+
+      setCustomForms(forms);
+      const nextSelected = forms.find((item) => item.purpose === preferredPurpose)
+        ?? forms.find((item) => item.purpose === customFormPurpose)
+        ?? forms[0];
+      if (nextSelected && customFormPurpose === "oma_lomake") {
+        setCustomFormPurpose(nextSelected.purpose);
+        setCustomFormName(nextSelected.name);
+        setCustomFormInstruction(nextSelected.formDescription);
+        setFieldTemplateInstruction(nextSelected.aiInstruction);
+      }
+    } finally {
+      setCustomFormsLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!access?.enabled) return;
+    loadCustomForms();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [access?.enabled]);
 
   useEffect(() => {
     if (selectedIcd || diagnosisSuggestions.length === 0) return;
@@ -371,6 +429,9 @@ export default function LausunnotPage() {
         if (!isCancelled) {
           setFieldTemplate(data.fields);
           setFieldTemplateInstruction(typeof data.aiInstruction === "string" ? data.aiInstruction : "");
+          if (mode === "oma_lomake" && typeof data.formName === "string") {
+            setCustomFormName(data.formName || selectedCustomForm?.name || "");
+          }
           if (mode === "oma_lomake" && typeof data.formDescription === "string") {
             setCustomFormInstruction(data.formDescription);
           }
@@ -390,7 +451,7 @@ export default function LausunnotPage() {
     return () => {
       isCancelled = true;
     };
-  }, [access?.enabled, effectivePurpose, mode]);
+  }, [access?.enabled, effectivePurpose, mode, selectedCustomForm?.name]);
 
   const draft = useMemo(() => {
     const lines: string[] = [];
@@ -494,6 +555,27 @@ export default function LausunnotPage() {
       .map((field, index) => ({ ...field, order: index + 1 })));
   }
 
+  function selectCustomForm(nextPurpose: string) {
+    setCustomFormPurpose(nextPurpose);
+    const nextForm = customForms.find((item) => item.purpose === nextPurpose);
+    setCustomFormName(nextForm?.name ?? "");
+    setCustomFormInstruction(nextForm?.formDescription ?? "");
+    setFieldTemplateInstruction(nextForm?.aiInstruction ?? "");
+    setFieldTemplateStatus("");
+  }
+
+  function createCustomForm() {
+    const nextPurpose = createCustomFormPurpose();
+    setCustomFormPurpose(nextPurpose);
+    setCustomFormName("");
+    setCustomFormInstruction("");
+    setFieldTemplateInstruction("");
+    setFieldTemplate([]);
+    setFieldTemplateStatus("");
+    setGeneratedDraft("");
+    setGeneratedFields([]);
+  }
+
   async function saveFieldTemplate() {
     setFieldTemplateSaving(true);
     setFieldTemplateStatus("");
@@ -506,6 +588,7 @@ export default function LausunnotPage() {
           purpose: effectivePurpose,
           fields: fieldTemplate,
           aiInstruction: fieldTemplateInstruction,
+          formName: mode === "oma_lomake" ? customFormName : "",
           formDescription: mode === "oma_lomake" ? customFormInstruction : "",
         }),
       });
@@ -515,6 +598,9 @@ export default function LausunnotPage() {
       }
       setFieldTemplate(data.fields);
       setFieldTemplateStatus("Rakenne tallennettu.");
+      if (mode === "oma_lomake") {
+        await loadCustomForms(effectivePurpose);
+      }
     } catch (error) {
       setFieldTemplateStatus(error instanceof Error ? error.message : "Rakenteen tallennus epäonnistui.");
     } finally {
@@ -537,6 +623,9 @@ export default function LausunnotPage() {
       setFieldTemplateInstruction("");
       if (mode === "oma_lomake") setCustomFormInstruction("");
       setFieldTemplateStatus("Oletusrakenne palautettu.");
+      if (mode === "oma_lomake") {
+        await loadCustomForms();
+      }
     } catch (error) {
       setFieldTemplateStatus(error instanceof Error ? error.message : "Oletusrakenteen palautus epäonnistui.");
     } finally {
@@ -642,7 +731,26 @@ export default function LausunnotPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {mode === "oma_lomake" ? (
-              <Field label={copy.customFormName} value={customFormName} onChange={setCustomFormName} />
+              <>
+                <div className="space-y-2">
+                  <SelectField
+                    label={copy.customFormSelect}
+                    value={customFormPurpose}
+                    onChange={selectCustomForm}
+                    options={customFormOptions}
+                  />
+                  <button
+                    type="button"
+                    onClick={createCustomForm}
+                    className="inline-flex items-center gap-2 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-100"
+                  >
+                    <Plus size={14} />
+                    {copy.newCustomForm}
+                  </button>
+                  {customFormsLoading ? <div className="text-xs text-slate-400">{copy.loading}</div> : null}
+                </div>
+                <Field label={copy.customFormName} value={customFormName} onChange={setCustomFormName} />
+              </>
             ) : (
               <SelectField
                 label={copy.purpose}
