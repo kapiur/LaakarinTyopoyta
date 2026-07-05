@@ -72,20 +72,6 @@ function shouldRedactExactDates(mode: AnonymizationMode) {
   return isStorageLikeMode(mode);
 }
 
-function hasNearbyBareDateOfBirthContext(
-  text: string,
-  start: number,
-  end: number,
-  strict = false,
-) {
-  const windowSize = strict ? STRICT_CONTEXT_WINDOW_CHARS : CONTEXT_WINDOW_CHARS;
-  const windowStart = Math.max(0, start - windowSize);
-  const windowEnd = Math.min(text.length, end + windowSize);
-  const nearby = text.slice(windowStart, windowEnd);
-
-  return regexMatches(HETU_PATTERN, nearby);
-}
-
 const CONTEXT_WINDOW_CHARS = 120;
 const STRICT_CONTEXT_WINDOW_CHARS = 180;
 
@@ -403,31 +389,8 @@ function collectPatientRoleNames(text: string): InternalFinding[] {
   return findings;
 }
 
-function collectBareDatesNearIdentifiers(text: string, mode: AnonymizationMode, personContextPattern: RegExp): InternalFinding[] {
-  const findings: InternalFinding[] = [];
-  const regex = new RegExp(DATE_PATTERN.source, DATE_PATTERN.flags);
-  const strictMode = isStrictContextMode(mode);
-  const storageMode = isStorageLikeMode(mode);
-  let match: RegExpExecArray | null;
-
-  while ((match = regex.exec(text)) !== null) {
-    const value = match[0];
-    const start = match.index;
-    const end = start + value.length;
-
-    if (storageMode) {
-      if (hasNearbyIdentifier(text, start, end, personContextPattern, true)) {
-        findings.push(createFinding('dateOfBirth', value, '[DATE]', start));
-      }
-      continue;
-    }
-
-    if (hasNearbyBareDateOfBirthContext(text, start, end, strictMode)) {
-      findings.push(createFinding('dateOfBirth', value, strictMode ? '[DATE]' : '[DATE_OF_BIRTH]', start));
-    }
-  }
-
-  return findings;
+function collectBareDatesNearIdentifiers(_text: string, _mode: AnonymizationMode, _personContextPattern: RegExp): InternalFinding[] {
+  return [];
 }
 
 function collectBareNamesNearIdentifiers(text: string, mode: AnonymizationMode, personContextPattern: RegExp): InternalFinding[] {

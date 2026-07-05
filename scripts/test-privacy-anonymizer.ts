@@ -123,10 +123,10 @@ const cases: TestCase[] = [
     forbiddenFragments: ['[NAME]'],
   },
   {
-    name: 'Bare name and bare date near identifiers are redacted',
+    name: 'Bare name near identifiers is redacted while clinical dates are preserved',
     input: `${syntheticNameFromUserExample} ${syntheticHetu} ${syntheticBareDob} ${syntheticLocalPhone}`,
-    expectedFragments: ['[NAME]', '[HETU]', '[DATE_OF_BIRTH]', '[PHONE]'],
-    forbiddenFragments: [syntheticNameFromUserExample, syntheticHetu, syntheticBareDob, syntheticLocalPhone],
+    expectedFragments: ['[NAME]', '[HETU]', syntheticBareDob, '[PHONE]'],
+    forbiddenFragments: [syntheticNameFromUserExample, syntheticHetu, syntheticLocalPhone],
   },
   {
     name: 'Relative words are normalized to generic Omainen before redacted name',
@@ -191,6 +191,20 @@ const cases: TestCase[] = [
       forbiddenFragments: ['Matti Meikalainen'],
     },
   {
+    name: 'Clinical transform preserves chronology dates and date ranges',
+    input: `27.4.-30.9.2026 potilas siirtyy seurantaan. Kontrolli 05.04.2026 ja leikkaus vuonna 2021.`,
+    mode: 'clinicalTransform',
+    expectedFragments: ['27.4.-30.9.2026', '05.04.2026', '2021'],
+    forbiddenFragments: ['[DATE]', '[DATE_OF_BIRTH]'],
+  },
+  {
+    name: 'Clinical builder preserves chronology dates near patient context',
+    input: `Potilas kertoo oireiden alkaneen 14.03.2026. Laboratoriot 18.03.2026 ja kontrolli 25.03.2026.`,
+    mode: 'clinicalBuilder',
+    expectedFragments: ['14.03.2026', '18.03.2026', '25.03.2026'],
+    forbiddenFragments: ['[DATE]', '[DATE_OF_BIRTH]'],
+  },
+  {
     name: 'Exact dates are redacted in storage mode',
     input: `Leikkaus tehty 12.3.2024. Kontrolli 15.4.2024.`,
     mode: 'storage',
@@ -220,11 +234,11 @@ const cases: TestCase[] = [
     forbiddenFragments: [syntheticName, syntheticLocalPhone],
   },
   {
-    name: 'Clinical transform still redacts bare date of birth when paired with HETU',
+    name: 'Clinical transform preserves bare date even when paired with HETU',
     input: `${syntheticName} ${syntheticHetu} ${syntheticBareDob} ${syntheticLocalPhone}`,
     mode: 'clinicalTransform',
-    expectedFragments: ['[NAME]', '[HETU]', '[DATE]', '[PHONE]'],
-    forbiddenFragments: [syntheticName, syntheticHetu, syntheticBareDob, syntheticLocalPhone],
+    expectedFragments: ['[NAME]', '[HETU]', syntheticBareDob, '[PHONE]'],
+    forbiddenFragments: [syntheticName, syntheticHetu, syntheticLocalPhone],
   },
     {
       name: 'Clinical headings acronyms and references are not treated as names in clinical transform mode',
