@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../../../../lib/auth";
 import { resolveAiCredential } from "../../../../lib/ai/credentials/resolveAiCredential";
+import { getUserAiSettings } from "../../../../lib/ai/userAiSettings";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -49,10 +50,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Äänitiedosto on liian suuri. Jaa sanelu lyhyempiin osiin." }, { status: 413 });
     }
 
+    const settings = await getUserAiSettings(userId);
     const secret = await resolveAiCredential({
       userId,
       provider: "openai",
-      credentialMode: "auto",
+      credentialMode: settings.credentialMode,
     });
 
     const speechForm = new FormData();
@@ -63,10 +65,12 @@ export async function POST(req: Request) {
     const language = normalizeLanguage(formData.get("language"));
     if (language) speechForm.append("language", language);
 
-    const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+    const baseUrl = (secret.baseUrl || "https://api.openai.com/v1").replace(/\/+$/, "");
+    const response = await fetch(`${baseUrl}/audio/transcriptions`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${secret.value}`,
+        ...(secret.projectId ? { "OpenAI-Project": secret.projectId } : {}),
       },
       body: speechForm,
     });
