@@ -9,6 +9,7 @@ import StandaloneCalculatorsI18nEnhancer from "./StandaloneCalculatorsI18nEnhanc
 import { CaseSessionProvider } from "./workspace/CaseSessionProvider";
 import SessionValidityGuard from "./SessionValidityGuard";
 import SessionReplacementNotice from "./SessionReplacementNotice";
+import GlobalVoiceDictationDock from "./GlobalVoiceDictationDock";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
@@ -23,6 +24,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
           <CalculatorsI18nEnhancer />
           <StandaloneCalculatorsI18nEnhancer />
           {children}
+          <GlobalVoiceDictationDock />
         </CaseSessionProvider>
       </I18nProvider>
     </SessionProvider>
