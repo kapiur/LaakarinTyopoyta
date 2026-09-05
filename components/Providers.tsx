@@ -6,6 +6,7 @@ import MalliSyntaxHelpEnhancer from "./MalliSyntaxHelpEnhancer";
 import CoreUiI18nEnhancer from "./CoreUiI18nEnhancer";
 import CalculatorsI18nEnhancer from "./CalculatorsI18nEnhancer";
 import StandaloneCalculatorsI18nEnhancer from "./StandaloneCalculatorsI18nEnhancer";
+import GlobalVoiceDictationDock from "./GlobalVoiceDictationDock";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
@@ -16,6 +17,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
         <CoreUiI18nEnhancer />
         <CalculatorsI18nEnhancer />
         <StandaloneCalculatorsI18nEnhancer />
+        <GlobalVoiceDictationDock />
         {children}
       </I18nProvider>
     </SessionProvider>
