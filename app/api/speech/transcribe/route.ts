@@ -38,7 +38,8 @@ export async function POST(req: Request) {
     const formData = await req.formData();
     const audio = formData.get("audio");
 
-    if (!(audio instanceof File)) {
+    // FormData entries are strings or files; Node 18 has no global File constructor.
+    if (audio === null || typeof audio === "string") {
       return NextResponse.json({ error: "Äänitiedosto puuttuu." }, { status: 400 });
     }
 
