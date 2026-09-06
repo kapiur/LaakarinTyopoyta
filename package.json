@@ -13,7 +13,8 @@
     "guidelines:warm:ru": "ts-node -P tsconfig.scripts.json scripts/warm-guideline-cache-ru.ts",
     "seed:pikaohjeet": "node scripts/seed_pikaohjeet.cjs",
     "test:templates": "ts-node -P tsconfig.scripts.json scripts/test-template-parser.ts",
-    "test:privacy": "ts-node -P tsconfig.scripts.json scripts/test-privacy-anonymizer.ts"
+    "test:privacy": "ts-node -P tsconfig.scripts.json scripts/test-privacy-anonymizer.ts",
+    "test:lausunto-fields": "ts-node -P tsconfig.scripts.json scripts/test-lausunto-field-contract.ts"
   },
   "dependencies": {
     "react": "^18",
