@@ -308,6 +308,34 @@ export function buildContentFromFields(fields: GeneratedLausuntoField[]) {
     .join("\n\n");
 }
 
+export function materializeGeneratedLausuntoFields(
+  value: unknown,
+  fieldTemplate: LausuntoFieldTemplate[],
+  mode: string,
+): GeneratedLausuntoField[] | null {
+  if (!Array.isArray(value)) return null;
+
+  return enabledLausuntoFields(fieldTemplate, mode).map((templateField) => {
+    const generatedField = value.find((item) => (
+      typeof item === "object"
+      && item !== null
+      && (item as Record<string, unknown>).key === templateField.key
+    ));
+    const item = typeof generatedField === "object" && generatedField !== null
+      ? generatedField as Record<string, unknown>
+      : {};
+
+    return {
+      key: templateField.key,
+      label: templateField.label,
+      content: safeText(item.content, 30_000),
+      required: templateField.required,
+      omitted: false,
+      responseType: templateField.responseType,
+    };
+  });
+}
+
 export function responseTypeInstruction(responseType: LausuntoFieldResponseType) {
   if (responseType === "yes_no") {
     return "Vastaa vain Kyllä, Ei tai Ei arvioitavissa aineiston perusteella.";

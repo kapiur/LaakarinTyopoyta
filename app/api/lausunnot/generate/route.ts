@@ -11,6 +11,7 @@ import {
   type LausuntoFieldTemplate,
   enabledLausuntoFields,
   getDefaultLausuntoFieldTemplate,
+  materializeGeneratedLausuntoFields,
   normalizeLausuntoFieldTemplate,
   responseTypeInstruction,
 } from "../../../../lib/lausunto/fieldTemplates";
@@ -134,11 +135,7 @@ JSON-rakenne:
   "fields": [
     {
       "key": "kentän_avain",
-      "label": "Kentän otsikko",
-      "content": "Valmis suomenkielinen kenttäteksti. Tyhjä merkkijono, jos aineistossa ei ole riittävää tietoa.",
-      "required": true,
-      "omitted": false,
-      "responseType": "text"
+      "content": "Valmis suomenkielinen kenttäteksti. Tyhjä merkkijono, jos aineistossa ei ole riittävää tietoa."
     }
   ]
 }
@@ -147,6 +144,8 @@ Käytä täsmälleen näitä kenttiä ja järjestystä:
 ${fieldInstructions}
 
 Täyttöohje:
+- Palauta jokaiselle annetulle avaimelle täsmälleen yksi fields-alkio samassa järjestyksessä.
+- Älä nimeä, ryhmittele, yhdistä tai jätä pois kenttiä. Kenttien nimet ja muut asetukset tulevat käyttäjän tallentamasta rakenteesta.
 - Kirjoita kenttien content-arvot valmiiksi kopioitavaksi valitun lausunnon tai todistuksen kenttiin.
 - Älä yhdistä kaikkia kenttiä yhdeksi proosaksi.
 - Älä täytä puuttuvaa tietoa keksimällä. Jos tieto puuttuu, jätä content tyhjäksi tai lisää se vain "taydennettava"-kenttään konkreettisena puutteena.
@@ -186,28 +185,12 @@ Rakenteen ohje:
 `;
 }
 
-function normalizeStructuredField(value: unknown, fallback: LausuntoFieldTemplate): GeneratedLausuntoField {
-  const item = typeof value === "object" && value !== null ? value as Record<string, unknown> : {};
-  return {
-    key: fallback.key,
-    label: text(item.label) || fallback.label,
-    content: text(item.content),
-    required: typeof item.required === "boolean" ? item.required : fallback.required,
-    omitted: typeof item.omitted === "boolean" ? item.omitted : false,
-    responseType: fallback.responseType,
-  };
-}
-
 function parseStructuredLausunto(content: string, fieldTemplate: LausuntoFieldTemplate[], mode: string): GeneratedLausuntoField[] | null {
   const trimmed = content.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
   try {
     const parsed = JSON.parse(trimmed) as { fields?: unknown };
     if (!Array.isArray(parsed.fields)) return null;
-    const parsedFields = parsed.fields;
-    return enabledLausuntoFields(fieldTemplate, mode).map((field) => {
-      const match = parsedFields.find((item) => typeof item === "object" && item !== null && (item as Record<string, unknown>).key === field.key);
-      return normalizeStructuredField(match, field);
-    });
+    return materializeGeneratedLausuntoFields(parsed.fields, fieldTemplate, mode);
   } catch {
     return null;
   }
