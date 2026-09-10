@@ -14,7 +14,8 @@
     "seed:pikaohjeet": "node scripts/seed_pikaohjeet.cjs",
     "test:templates": "ts-node -P tsconfig.scripts.json scripts/test-template-parser.ts",
     "test:privacy": "ts-node -P tsconfig.scripts.json scripts/test-privacy-anonymizer.ts",
-    "test:lausunto-fields": "ts-node -P tsconfig.scripts.json scripts/test-lausunto-field-contract.ts"
+    "test:lausunto-fields": "ts-node -P tsconfig.scripts.json scripts/test-lausunto-field-contract.ts",
+    "test:calculator-language": "ts-node -P tsconfig.scripts.json scripts/test-calculator-output-language.ts"
   },
   "dependencies": {
     "react": "^18",

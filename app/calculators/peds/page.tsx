@@ -5,6 +5,8 @@ import Link from "next/link";
 import { Calculator, Copy, RefreshCw } from "lucide-react";
 import { getLocalizedVariant } from "../../../lib/i18n";
 import { useI18n } from "../../../lib/useI18n";
+import { formatCalculatorNumber } from "../../../lib/calculators/clinicalOutputLanguage";
+import { useClinicalOutputLanguage } from "../../../lib/useClinicalOutputLanguage";
 
 type PedsIndication = {
   id: number;
@@ -325,6 +327,50 @@ const copy = {
   },
 } as const;
 
+const swedishResultCopy = {
+  calculations: "Beräkningar",
+  enterValues: "Ange uppgifter",
+  dailyDose: "Dygnsdos",
+  totalCourseNeed: "Totalt behov för kuren",
+  totalValueSuffix: "{unit} totalt",
+  requiredLiquidVolume: "Nödvändig volym",
+  totalCourseAmount: "Total mängd för kuren",
+  prescribeWholeCourse: "Ordineras för hela kuren",
+  singleDoseLabel: "Engångsdos ({unit})",
+  timesPerDayValue: "{count} gånger/dygn",
+  tabletRoundingWarning:
+    "Observera: avrundning till tabletter ändrar engångsdosen med cirka {percent} %. Kontrollera dosen.",
+  prescription: "Recept",
+  prescriptionPackageLine: "à {size} {unit}",
+  bottleLabel: "flaskor",
+  packageLabel: "förpackningar",
+  packageUnitLiquid: "ml",
+  packageUnitTablet: "st.",
+  tabletAmountShort: "tabl.",
+  info:
+    "Kontrollera alltid resultatet före klinisk användning utifrån patientens ålder, vikt, njurfunktion, indikation och lokala anvisningar.",
+  copyTitle: "Viktbaserad dosberäkning",
+  copyDrug: "Läkemedel: {drug}",
+  copyWeight: "Vikt: {weight} kg",
+  copyDose: "Dos: {dose} {unit}/kg/dygn",
+  copyDailyDose: "Dygnsdos: {value} {unit}/dygn",
+  copySingleDoseLiquid:
+    "Engångsdos: {amount} ml (= {dose} {unit}) x {times}/dygn",
+  copySingleDoseTablet:
+    "Engångsdos: {amount} tabl. (= cirka {dose} {unit}) x {times}/dygn",
+  copyCourseDays: "Kurens längd: {days} dygn",
+  copyCourseLiquid: "Hela kuren: {value} {unit} = {amount} ml",
+  copyCourseTablet: "Hela kuren: {amount} tabl.",
+  copyPrescription: "Recept: {packs} {label} à {size} {unit}",
+  copyNote: "Observera: {note}",
+  copyFooter: "Kontrollera alltid dosen före klinisk användning enligt lokala anvisningar.",
+} as const;
+
+function getResultCopy(language: "fi" | "sv" | "ru" | "de" | "en") {
+  if (language === "sv") return swedishResultCopy;
+  return copy[language];
+}
+
 function fmt(value: number, digits = 1) {
   if (!Number.isFinite(value)) return "0";
   return value.toFixed(digits).replace(".", ",");
@@ -371,6 +417,11 @@ async function fetchPedsDrugs(
 export default function PedsCalculatorPage() {
   const { language } = useI18n();
   const c = getLocalizedVariant(copy, language) ?? copy.en;
+  const { clinicalOutputLanguage, clinicalOutputLanguageReady } = useClinicalOutputLanguage();
+  const resultLanguage = clinicalOutputLanguage ?? "fi";
+  const rc = getResultCopy(resultLanguage);
+  const fmtResult = (value: number, digits = 1) =>
+    formatCalculatorNumber(value, digits, resultLanguage);
 
   const [peds, setPeds] = useState<PedsState>(emptyPeds);
   const [indications, setIndications] = useState<PedsIndication[]>([]);
@@ -534,60 +585,59 @@ export default function PedsCalculatorPage() {
 
   const copyText = () => {
     const unit = peds.unit.toLowerCase();
-    const amountUnit = peds.mode === "LIQUID" ? "ml" : c.tabletAmountShort;
-    const packageLabel = peds.mode === "LIQUID" ? c.bottleLabel : c.packageLabel;
+    const packageLabel = peds.mode === "LIQUID" ? rc.bottleLabel : rc.packageLabel;
     const prescriptionUnit =
-      peds.mode === "LIQUID" ? c.packageUnitLiquid : c.packageUnitTablet;
+      peds.mode === "LIQUID" ? rc.packageUnitLiquid : rc.packageUnitTablet;
 
     const text = [
-      c.copyTitle,
+      rc.copyTitle,
       peds.selectedDrugName
-        ? formatTemplate(c.copyDrug, { drug: peds.selectedDrugName })
+        ? formatTemplate(rc.copyDrug, { drug: peds.selectedDrugName })
         : null,
-      formatTemplate(c.copyWeight, { weight: peds.weight }),
-      formatTemplate(c.copyDose, {
+      formatTemplate(rc.copyWeight, { weight: peds.weight }),
+      formatTemplate(rc.copyDose, {
         dose: peds.dosePerKgDay,
         unit,
       }),
-      formatTemplate(c.copyDailyDose, {
-        value: fmt(result.dailyValue, 1),
+      formatTemplate(rc.copyDailyDose, {
+        value: fmtResult(result.dailyValue, 1),
         unit,
       }),
       peds.mode === "LIQUID"
-        ? formatTemplate(c.copySingleDoseLiquid, {
-            amount: fmt(result.singleAmount, 2),
-            dose: fmt(result.singleValue, 1),
+        ? formatTemplate(rc.copySingleDoseLiquid, {
+            amount: fmtResult(result.singleAmount, 2),
+            dose: fmtResult(result.singleValue, 1),
             unit,
             times: peds.timesPerDay,
           })
-        : formatTemplate(c.copySingleDoseTablet, {
-            amount: fmt(result.singleAmount, 1),
-            dose: fmt(result.actualSingleDose, 1),
+        : formatTemplate(rc.copySingleDoseTablet, {
+            amount: fmtResult(result.singleAmount, 1),
+            dose: fmtResult(result.actualSingleDose, 1),
             unit,
             times: peds.timesPerDay,
           }),
-      peds.days ? formatTemplate(c.copyCourseDays, { days: peds.days }) : null,
+      peds.days ? formatTemplate(rc.copyCourseDays, { days: peds.days }) : null,
       peds.days
         ? peds.mode === "LIQUID"
-          ? formatTemplate(c.copyCourseLiquid, {
-              value: fmt(result.totalValue, 0),
+          ? formatTemplate(rc.copyCourseLiquid, {
+              value: fmtResult(result.totalValue, 0),
               unit,
-              amount: fmt(result.totalAmount, 1),
+              amount: fmtResult(result.totalAmount, 1),
             })
-          : formatTemplate(c.copyCourseTablet, {
-              amount: fmt(result.totalAmount, 0),
+          : formatTemplate(rc.copyCourseTablet, {
+              amount: fmtResult(result.totalAmount, 0),
             })
         : null,
       result.packs > 0 && peds.packageSize
-        ? formatTemplate(c.copyPrescription, {
+        ? formatTemplate(rc.copyPrescription, {
             packs: result.packs,
             label: packageLabel,
             size: peds.packageSize,
             unit: prescriptionUnit,
           })
         : null,
-      peds.drugNote ? formatTemplate(c.copyNote, { note: peds.drugNote }) : null,
-      c.copyFooter,
+      peds.drugNote ? formatTemplate(rc.copyNote, { note: peds.drugNote }) : null,
+      rc.copyFooter,
     ]
       .filter(Boolean)
       .join("\n");
@@ -601,8 +651,6 @@ export default function PedsCalculatorPage() {
   const unit = peds.unit.toLowerCase();
   const amountUnitDisplay =
     peds.mode === "LIQUID" ? c.packageUnitLiquid : c.tabShort;
-  const singleDoseUnitDisplay =
-    peds.mode === "LIQUID" ? c.packageUnitLiquid : c.tabletAmountShort;
   const packageUnitDisplay =
     peds.mode === "LIQUID" ? c.packageUnitLiquid : c.packageUnitTablet;
   const modeOptionLabel = (form: PedsDrug["form"]) =>
@@ -835,12 +883,12 @@ export default function PedsCalculatorPage() {
             <div className="flex items-center gap-2">
               <div className="w-2.5 h-2.5 bg-blue-600 rounded-full animate-pulse" />
               <span className="text-[12px] font-black text-blue-600 uppercase tracking-[0.2em]">
-                {c.calculations}
+                {rc.calculations}
               </span>
             </div>
             <button
               onClick={copyText}
-              disabled={!result.isReady}
+              disabled={!result.isReady || !clinicalOutputLanguageReady}
               className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest hover:text-blue-600 disabled:opacity-30 transition-all"
             >
               <Copy size={14} /> {copied ? c.copied : c.copy}
@@ -850,46 +898,46 @@ export default function PedsCalculatorPage() {
           {!result.isReady ? (
             <div className="flex-1 flex flex-col items-center justify-center text-slate-200 font-black uppercase text-center">
               <Calculator size={64} className="mb-4 opacity-20" />
-              <div className="text-4xl tracking-tighter">{c.enterValues}</div>
+              <div className="text-4xl tracking-tighter">{rc.enterValues}</div>
             </div>
           ) : (
             <div className="flex-1 space-y-5">
               <div className="p-6 bg-slate-50/80 rounded-3xl border border-slate-100">
                 <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">
-                  {c.dailyDose}
+                  {rc.dailyDose}
                 </p>
                 <div className="text-4xl font-black text-slate-800">
-                  {fmt(result.dailyValue, 1)}{" "}
+                  {fmtResult(result.dailyValue, 1)}{" "}
                   <span className="text-sm font-bold opacity-30 tracking-normal">
-                    {unit} / {language === "ru" ? "сут" : language === "de" ? "Tag" : "day"}
+                    {unit} / {resultLanguage === "fi" ? "vrk" : resultLanguage === "sv" ? "dygn" : resultLanguage === "ru" ? "сут" : resultLanguage === "de" ? "Tag" : "day"}
                   </span>
                 </div>
               </div>
 
               <div className="p-6 bg-white rounded-3xl border border-slate-100 shadow-sm">
                 <p className="text-[9px] font-bold text-slate-300 uppercase tracking-widest mb-1">
-                  {c.totalCourseNeed}
+                  {rc.totalCourseNeed}
                 </p>
                 <div className="text-3xl font-bold text-slate-300">
-                  {fmt(result.totalValue, 0)}{" "}
+                  {fmtResult(result.totalValue, 0)}{" "}
                   <span className="text-sm font-medium tracking-normal">
-                    {formatTemplate(c.totalValueSuffix, { unit })}
+                    {formatTemplate(rc.totalValueSuffix, { unit })}
                   </span>
                 </div>
               </div>
 
               <div className="p-10 bg-blue-600 rounded-[2.5rem] text-white shadow-2xl shadow-blue-100">
                 <p className="text-[10px] font-black uppercase tracking-widest opacity-70 mb-4">
-                  {peds.mode === "LIQUID" ? c.requiredLiquidVolume : c.totalCourseAmount}
+                  {peds.mode === "LIQUID" ? rc.requiredLiquidVolume : rc.totalCourseAmount}
                 </p>
                 <div className="text-7xl sm:text-8xl font-black tracking-tighter">
-                  {fmt(result.totalAmount, peds.mode === "LIQUID" ? 1 : 0)}{" "}
+                  {fmtResult(result.totalAmount, peds.mode === "LIQUID" ? 1 : 0)}{" "}
                   <span className="text-3xl font-bold tracking-tighter opacity-80">
-                    {peds.mode === "LIQUID" ? c.packageUnitLiquid : c.tabletAmountShort}
+                    {peds.mode === "LIQUID" ? rc.packageUnitLiquid : rc.tabletAmountShort}
                   </span>
                 </div>
                 <p className="text-[11px] font-black uppercase mt-6 tracking-widest italic opacity-80">
-                  {c.prescribeWholeCourse}
+                  {rc.prescribeWholeCourse}
                 </p>
               </div>
 
@@ -897,31 +945,31 @@ export default function PedsCalculatorPage() {
                 <div className="flex justify-between items-start gap-4">
                   <div>
                     <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-1">
-                      {formatTemplate(c.singleDoseLabel, { unit: singleDoseUnitDisplay })}
+                      {formatTemplate(rc.singleDoseLabel, { unit: peds.mode === "LIQUID" ? rc.packageUnitLiquid : rc.tabletAmountShort })}
                     </p>
                     <div className="text-6xl font-black text-emerald-600 tracking-tighter">
-                      {fmt(result.singleAmount, peds.mode === "LIQUID" ? 2 : 1)}{" "}
-                      <span className="text-2xl">{singleDoseUnitDisplay}</span>
+                      {fmtResult(result.singleAmount, peds.mode === "LIQUID" ? 2 : 1)}{" "}
+                      <span className="text-2xl">{peds.mode === "LIQUID" ? rc.packageUnitLiquid : rc.tabletAmountShort}</span>
                     </div>
                   </div>
                   <div className="text-right">
                     <div className="text-2xl font-black text-emerald-500">
-                      {fmt(
+                      {fmtResult(
                         peds.mode === "LIQUID" ? result.singleValue : result.actualSingleDose,
                         1
                       )}{" "}
                       {unit}
                     </div>
                     <div className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">
-                      {formatTemplate(c.timesPerDayValue, { count: peds.timesPerDay })}
+                      {formatTemplate(rc.timesPerDayValue, { count: peds.timesPerDay })}
                     </div>
                   </div>
                 </div>
 
                 {peds.mode === "TABLET" && Math.abs(result.doseDiffPercent) >= 10 && (
                   <div className="p-3 bg-amber-100/70 rounded-2xl text-[11px] font-bold text-amber-800">
-                    {formatTemplate(c.tabletRoundingWarning, {
-                      percent: fmt(result.doseDiffPercent, 0),
+                    {formatTemplate(rc.tabletRoundingWarning, {
+                      percent: fmtResult(result.doseDiffPercent, 0),
                     })}
                   </div>
                 )}
@@ -930,15 +978,15 @@ export default function PedsCalculatorPage() {
               {result.packs > 0 && peds.packageSize && (
                 <div className="p-6 bg-slate-900 rounded-3xl text-white">
                   <p className="text-[10px] font-black uppercase opacity-40 tracking-widest mb-1">
-                    {c.prescription}
+                    {rc.prescription}
                   </p>
                   <div className="text-3xl font-black">
-                    {result.packs} {peds.mode === "LIQUID" ? c.bottleLabel : c.packageLabel}
+                    {result.packs} {peds.mode === "LIQUID" ? rc.bottleLabel : rc.packageLabel}
                   </div>
                   <p className="text-[11px] opacity-40 font-medium">
-                    {formatTemplate(c.prescriptionPackageLine, {
+                    {formatTemplate(rc.prescriptionPackageLine, {
                       size: peds.packageSize,
-                      unit: packageUnitDisplay,
+                      unit: peds.mode === "LIQUID" ? rc.packageUnitLiquid : rc.packageUnitTablet,
                     })}
                   </p>
                 </div>
@@ -951,7 +999,7 @@ export default function PedsCalculatorPage() {
               i
             </div>
             <p className="text-[10px] text-blue-800 leading-tight font-bold italic">
-              {c.info}
+              {rc.info}
             </p>
           </div>
         </section>

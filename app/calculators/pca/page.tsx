@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { AlertTriangle, Copy, FlaskConical, Plus, RefreshCw, Trash2, Zap } from 'lucide-react';
+import { formatCalculatorNumber, type CalculatorOutputLanguage } from '../../../lib/calculators/clinicalOutputLanguage';
+import { useClinicalOutputLanguage } from '../../../lib/useClinicalOutputLanguage';
 
 type PcaLibraryDrug = { id: number; name: string; strength: number };
 type SelectedDrug = { drugId: string; dailyDose: string };
@@ -19,10 +21,72 @@ function fmt(value: number, digits = 1) {
   return value.toFixed(digits).replace('.', ',');
 }
 
-function fmtDot(value: number, digits = 1) {
-  if (!Number.isFinite(value)) return '0';
-  return value.toFixed(digits);
+function formatTemplate(template: string, values: Record<string, string | number>) {
+  return template.replace(/\{(\w+)\}/g, (_, key) => String(values[key] ?? ''));
 }
+
+const pcaResultCopy = {
+  fi: {
+    calculations: 'Laskelmat', enterValues: 'Syötä tiedot', totalDrugs: 'Lääkkeet yhteensä', naclAdded: 'NaCl lisätään', basicSettings: 'PCA-perusasetukset',
+    speedLine: 'Nopeus {speed} ml/h – {days} vrk – perusinfuusion tarve {need} ml', suggestedAd: 'Suositeltu ad vähintään {ad} ml tällä nopeudella ja kestolla.',
+    volume: 'Tilavuus', concentration: 'Pitoisuus', bolus: 'Bolus', bolusCalculation: 'Boluslaskenta', bolusExplanation: 'Laskennallinen 2 × tuntiannos.',
+    info: 'Tarkista annokset, yhteensopivuus, munuaistoiminta, sedaatioaste ja paikallinen ohjeistus ennen käyttöönottoa.',
+    copyTitle: 'PCA-laskelma:', copySummary: 'PCA {days} vrk, {cassette} ml kasetti.', copyDrug: '{name} ({strength} mg/ml): {daily} mg/vrk – {total} mg/{days} vrk – {volume} ml',
+    copyNacl: 'NaCl 0,9 % ad {ad} ml – lisätään {nacl} ml', copyConcentrations: 'Pitoisuudet:', copySpeed: 'Tiputusnopeus: {speed} ml/h',
+    copyBolus: 'Boluslaskenta: {bolus} ml', copyBolusContains: 'Bolus sisältää laskennallisesti:',
+    warningDrug: 'Valitse vähintään yksi lääke ja anna vuorokausiannos.', warningAd: 'Anna kokonaismäärä ad ml.', warningDays: 'Anna hoidon kesto vuorokausina.', warningSpeed: 'Anna tiputusnopeus ml/h.',
+    warningDrugVolume: 'Lääkkeet yhteensä {total} ml ylittää kokonaismäärän {ad} ml. NaCl-määrä olisi negatiivinen.', warningInfusion: 'Valittu ad {ad} ml ei riitä perusnopeudella {speed} ml/h {days} vrk ajalle. Infuusion tarve on {need} ml.',
+    warningCassette: 'Valittu ad {ad} ml ylittää kasetin koon {cassette} ml.', warningNacl: 'NaCl-lisä on vain {nacl} ml. Tarkista käytännön valmistettavuus.',
+  },
+  sv: {
+    calculations: 'Beräkningar', enterValues: 'Ange uppgifter', totalDrugs: 'Läkemedel totalt', naclAdded: 'NaCl tillsätts', basicSettings: 'PCA-grundinställningar',
+    speedLine: 'Hastighet {speed} ml/h – {days} dygn – behov för basinfusion {need} ml', suggestedAd: 'Rekommenderad ad-volym minst {ad} ml med denna hastighet och behandlingstid.',
+    volume: 'Volym', concentration: 'Koncentration', bolus: 'Bolus', bolusCalculation: 'Bolusberäkning', bolusExplanation: 'Beräknad dos motsvarande 2 × timdos.',
+    info: 'Kontrollera doser, kompatibilitet, njurfunktion, sederingsgrad och lokala anvisningar före användning.',
+    copyTitle: 'PCA-beräkning:', copySummary: 'PCA {days} dygn, {cassette} ml kassett.', copyDrug: '{name} ({strength} mg/ml): {daily} mg/dygn – {total} mg/{days} dygn – {volume} ml',
+    copyNacl: 'NaCl 0,9 % ad {ad} ml – tillsätt {nacl} ml', copyConcentrations: 'Koncentrationer:', copySpeed: 'Infusionshastighet: {speed} ml/h',
+    copyBolus: 'Bolusberäkning: {bolus} ml', copyBolusContains: 'Bolusen innehåller beräknat:',
+    warningDrug: 'Välj minst ett läkemedel och ange dygnsdosen.', warningAd: 'Ange totalvolym ad ml.', warningDays: 'Ange behandlingstiden i dygn.', warningSpeed: 'Ange infusionshastigheten i ml/h.',
+    warningDrugVolume: 'Läkemedelsvolymen {total} ml överstiger totalvolymen {ad} ml. NaCl-volymen skulle bli negativ.', warningInfusion: 'Vald ad-volym {ad} ml räcker inte vid {speed} ml/h i {days} dygn. Infusionsbehovet är {need} ml.',
+    warningCassette: 'Vald ad-volym {ad} ml överstiger kassettens volym {cassette} ml.', warningNacl: 'Endast {nacl} ml NaCl tillsätts. Kontrollera att beredningen är praktiskt genomförbar.',
+  },
+  ru: {
+    calculations: 'Расчёты', enterValues: 'Введите данные', totalDrugs: 'Объём препаратов', naclAdded: 'Добавить NaCl', basicSettings: 'Основные параметры PCA',
+    speedLine: 'Скорость {speed} мл/ч – {days} сут – потребность для базовой инфузии {need} мл', suggestedAd: 'Рекомендуемый объём ad не менее {ad} мл при этой скорости и длительности.',
+    volume: 'Объём', concentration: 'Концентрация', bolus: 'Болюс', bolusCalculation: 'Расчёт болюса', bolusExplanation: 'Расчётно 2 × часовая доза.',
+    info: 'Перед применением проверьте дозы, совместимость, функцию почек, степень седации и локальные инструкции.',
+    copyTitle: 'Расчёт PCA:', copySummary: 'PCA на {days} сут, кассета {cassette} мл.', copyDrug: '{name} ({strength} мг/мл): {daily} мг/сут – {total} мг/{days} сут – {volume} мл',
+    copyNacl: 'NaCl 0,9 % ad {ad} мл – добавить {nacl} мл', copyConcentrations: 'Концентрации:', copySpeed: 'Скорость инфузии: {speed} мл/ч',
+    copyBolus: 'Расчёт болюса: {bolus} мл', copyBolusContains: 'Расчётное содержание болюса:',
+    warningDrug: 'Выберите хотя бы один препарат и укажите суточную дозу.', warningAd: 'Укажите итоговый объём ad в мл.', warningDays: 'Укажите длительность лечения в сутках.', warningSpeed: 'Укажите скорость инфузии в мл/ч.',
+    warningDrugVolume: 'Объём препаратов {total} мл превышает итоговый объём {ad} мл. Объём NaCl был бы отрицательным.', warningInfusion: 'Объёма ad {ad} мл недостаточно для скорости {speed} мл/ч в течение {days} сут. Требуется {need} мл.',
+    warningCassette: 'Объём ad {ad} мл превышает объём кассеты {cassette} мл.', warningNacl: 'Добавляется только {nacl} мл NaCl. Проверьте практическую возможность приготовления.',
+  },
+  de: {
+    calculations: 'Berechnungen', enterValues: 'Daten eingeben', totalDrugs: 'Arzneimittelvolumen', naclAdded: 'NaCl-Zugabe', basicSettings: 'PCA-Grundeinstellungen',
+    speedLine: 'Rate {speed} ml/h – {days} Tage – Bedarf der Basisinfusion {need} ml', suggestedAd: 'Empfohlenes ad-Volumen mindestens {ad} ml bei dieser Rate und Dauer.',
+    volume: 'Volumen', concentration: 'Konzentration', bolus: 'Bolus', bolusCalculation: 'Bolusberechnung', bolusExplanation: 'Berechnet als 2 × Stundendosis.',
+    info: 'Vor Anwendung Dosierungen, Kompatibilität, Nierenfunktion, Sedierungsgrad und lokale Vorgaben prüfen.',
+    copyTitle: 'PCA-Berechnung:', copySummary: 'PCA für {days} Tage, {cassette}-ml-Kassette.', copyDrug: '{name} ({strength} mg/ml): {daily} mg/Tag – {total} mg/{days} Tage – {volume} ml',
+    copyNacl: 'NaCl 0,9 % ad {ad} ml – {nacl} ml hinzufügen', copyConcentrations: 'Konzentrationen:', copySpeed: 'Infusionsrate: {speed} ml/h',
+    copyBolus: 'Bolusberechnung: {bolus} ml', copyBolusContains: 'Der Bolus enthält rechnerisch:',
+    warningDrug: 'Mindestens ein Arzneimittel auswählen und die Tagesdosis angeben.', warningAd: 'Gesamtvolumen ad in ml angeben.', warningDays: 'Behandlungsdauer in Tagen angeben.', warningSpeed: 'Infusionsrate in ml/h angeben.',
+    warningDrugVolume: 'Das Arzneimittelvolumen {total} ml übersteigt das Gesamtvolumen {ad} ml. Das NaCl-Volumen wäre negativ.', warningInfusion: 'Das ad-Volumen {ad} ml reicht bei {speed} ml/h für {days} Tage nicht aus. Benötigt werden {need} ml.',
+    warningCassette: 'Das ad-Volumen {ad} ml übersteigt das Kassettenvolumen {cassette} ml.', warningNacl: 'Es werden nur {nacl} ml NaCl zugesetzt. Praktische Herstellbarkeit prüfen.',
+  },
+  en: {
+    calculations: 'Calculations', enterValues: 'Enter data', totalDrugs: 'Total drug volume', naclAdded: 'NaCl to add', basicSettings: 'PCA basic settings',
+    speedLine: 'Rate {speed} ml/h – {days} days – basal infusion requirement {need} ml', suggestedAd: 'Recommended ad volume at least {ad} ml for this rate and duration.',
+    volume: 'Volume', concentration: 'Concentration', bolus: 'Bolus', bolusCalculation: 'Bolus calculation', bolusExplanation: 'Calculated as 2 × hourly dose.',
+    info: 'Check doses, compatibility, renal function, sedation level, and local guidance before use.',
+    copyTitle: 'PCA calculation:', copySummary: 'PCA for {days} days, {cassette} ml cassette.', copyDrug: '{name} ({strength} mg/ml): {daily} mg/day – {total} mg/{days} days – {volume} ml',
+    copyNacl: 'NaCl 0.9% ad {ad} ml – add {nacl} ml', copyConcentrations: 'Concentrations:', copySpeed: 'Infusion rate: {speed} ml/h',
+    copyBolus: 'Bolus calculation: {bolus} ml', copyBolusContains: 'Calculated bolus content:',
+    warningDrug: 'Select at least one drug and enter the daily dose.', warningAd: 'Enter the total ad volume in ml.', warningDays: 'Enter the treatment duration in days.', warningSpeed: 'Enter the infusion rate in ml/h.',
+    warningDrugVolume: 'Drug volume {total} ml exceeds the total volume {ad} ml. The NaCl volume would be negative.', warningInfusion: 'The ad volume {ad} ml is insufficient at {speed} ml/h for {days} days. Required volume is {need} ml.',
+    warningCassette: 'The ad volume {ad} ml exceeds the cassette volume {cassette} ml.', warningNacl: 'Only {nacl} ml of NaCl is added. Check practical preparation feasibility.',
+  },
+} as const satisfies Record<CalculatorOutputLanguage, Record<string, string>>;
 
 export default function PcaCalculatorPage() {
   const [library, setLibrary] = useState<PcaLibraryDrug[]>([]);
@@ -31,6 +95,10 @@ export default function PcaCalculatorPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const { clinicalOutputLanguage, clinicalOutputLanguageReady } = useClinicalOutputLanguage();
+  const resultLanguage = clinicalOutputLanguage ?? 'fi';
+  const rc = pcaResultCopy[resultLanguage];
+  const fmtResult = (value: number, digits = 1) => formatCalculatorNumber(value, digits, resultLanguage);
 
   const loadLibrary = async () => {
     setIsLoading(true);
@@ -73,17 +141,17 @@ export default function PcaCalculatorPage() {
     const bolusMl = speedMlH * 2;
     const warnings: string[] = [];
 
-    if (rows.length === 0) warnings.push('Valitse vähintään yksi lääke ja anna vuorokausiannos.');
-    if (adMl <= 0) warnings.push('Anna kokonaismäärä ad ml.');
-    if (days <= 0) warnings.push('Anna hoidon kesto vuorokausina.');
-    if (speedMlH <= 0) warnings.push('Anna tiputusnopeus ml/h.');
-    if (totalDrugVolume > adMl && adMl > 0) warnings.push(`Lääkkeet yhteensä ${fmt(totalDrugVolume, 1)} ml ylittää kokonaismäärän ${fmt(adMl, 1)} ml. NaCl-määrä olisi negatiivinen.`);
-    if (infusionNeedMl > adMl && adMl > 0) warnings.push(`Valittu ad ${fmt(adMl, 1)} ml ei riitä perusnopeudella ${fmt(speedMlH, 1)} ml/h ${fmt(days, 0)} vrk ajalle. Infuusion tarve on ${fmt(infusionNeedMl, 1)} ml.`);
-    if (adMl > cassetteMl && cassetteMl > 0) warnings.push(`Valittu ad ${fmt(adMl, 1)} ml ylittää kasetin koon ${fmt(cassetteMl, 1)} ml.`);
-    if (naclMl >= 0 && naclMl < 1 && rows.length > 0) warnings.push(`NaCl-lisä on vain ${fmt(naclMl, 1)} ml. Tarkista käytännön valmistettavuus.`);
+    if (rows.length === 0) warnings.push(rc.warningDrug);
+    if (adMl <= 0) warnings.push(rc.warningAd);
+    if (days <= 0) warnings.push(rc.warningDays);
+    if (speedMlH <= 0) warnings.push(rc.warningSpeed);
+    if (totalDrugVolume > adMl && adMl > 0) warnings.push(formatTemplate(rc.warningDrugVolume, { total: fmtResult(totalDrugVolume, 1), ad: fmtResult(adMl, 1) }));
+    if (infusionNeedMl > adMl && adMl > 0) warnings.push(formatTemplate(rc.warningInfusion, { ad: fmtResult(adMl, 1), speed: fmtResult(speedMlH, 1), days: fmtResult(days, 0), need: fmtResult(infusionNeedMl, 1) }));
+    if (adMl > cassetteMl && cassetteMl > 0) warnings.push(formatTemplate(rc.warningCassette, { ad: fmtResult(adMl, 1), cassette: fmtResult(cassetteMl, 1) }));
+    if (naclMl >= 0 && naclMl < 1 && rows.length > 0) warnings.push(formatTemplate(rc.warningNacl, { nacl: fmtResult(naclMl, 1) }));
 
     return { rows, days, adMl, speedMlH, cassetteMl, infusionNeedMl, totalDrugVolume, naclMl, bolusMl, suggestedAdMl: infusionNeedMl > 0 ? Math.ceil(infusionNeedMl) : 0, warnings, isReady: rows.length > 0 && warnings.length === 0 };
-  }, [library, selectedDrugs, settings]);
+  }, [library, selectedDrugs, settings, resultLanguage]);
 
   const updateSelectedDrug = (index: number, patch: Partial<SelectedDrug>) => {
     setSelectedDrugs((prev) => prev.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item));
@@ -107,25 +175,25 @@ export default function PcaCalculatorPage() {
 
   const copyText = () => {
     const lines = [
-      'PCA-laskelma:',
+      rc.copyTitle,
       '',
-      `PCA ${fmtDot(result.days, 0)} vrk, ${fmtDot(result.cassetteMl, 0)} ml kasetti.`,
+      formatTemplate(rc.copySummary, { days: fmtResult(result.days, 0), cassette: fmtResult(result.cassetteMl, 0) }),
       '',
-      ...result.rows.map((row) => `${row.name} (${fmtDot(row.strength, row.strength < 1 ? 3 : 1)} mg/ml): ${fmtDot(row.dailyDose, 1)} mg/vrk – ${fmtDot(row.totalDose, 1)} mg/${fmtDot(result.days, 0)} vrk – ${fmtDot(row.drugVolume, 1)} ml`),
+      ...result.rows.map((row) => formatTemplate(rc.copyDrug, { name: row.name, strength: fmtResult(row.strength, row.strength < 1 ? 3 : 1), daily: fmtResult(row.dailyDose, 1), total: fmtResult(row.totalDose, 1), days: fmtResult(result.days, 0), volume: fmtResult(row.drugVolume, 1) })),
       '',
-      `Lääkkeet yhteensä: ${fmtDot(result.totalDrugVolume, 1)} ml`,
-      `NaCl 0,9 % ad ${fmtDot(result.adMl, 1)} ml – lisätään ${fmtDot(result.naclMl, 1)} ml`,
+      `${rc.totalDrugs}: ${fmtResult(result.totalDrugVolume, 1)} ml`,
+      formatTemplate(rc.copyNacl, { ad: fmtResult(result.adMl, 1), nacl: fmtResult(result.naclMl, 1) }),
       '',
-      'Pitoisuudet:',
-      ...result.rows.map((row) => `${row.name}: ${fmtDot(row.concentration, row.strength < 1 ? 3 : 2)} mg/ml`),
+      rc.copyConcentrations,
+      ...result.rows.map((row) => `${row.name}: ${fmtResult(row.concentration, row.strength < 1 ? 3 : 2)} mg/ml`),
       '',
-      `Tiputusnopeus: ${fmtDot(result.speedMlH, 1)} ml/h`,
-      `Boluslaskenta: ${fmtDot(result.bolusMl, 1)} ml`,
+      formatTemplate(rc.copySpeed, { speed: fmtResult(result.speedMlH, 1) }),
+      formatTemplate(rc.copyBolus, { bolus: fmtResult(result.bolusMl, 1) }),
       '',
-      'Bolus sisältää laskennallisesti:',
-      ...result.rows.map((row) => `${row.name}: ${fmtDot(row.bolusDose, row.strength < 1 ? 3 : 2)} mg`),
+      rc.copyBolusContains,
+      ...result.rows.map((row) => `${row.name}: ${fmtResult(row.bolusDose, row.strength < 1 ? 3 : 2)} mg`),
       '',
-      'Tarkista annokset, yhteensopivuus, munuaistoiminta, sedaatioaste ja paikallinen ohjeistus ennen käyttöönottoa.',
+      rc.info,
     ];
 
     navigator.clipboard.writeText(lines.join('\n')).then(() => {
@@ -202,30 +270,30 @@ export default function PcaCalculatorPage() {
 
         <section className="bg-white rounded-[2.5rem] p-6 sm:p-10 border border-slate-200 shadow-sm min-h-[700px] flex flex-col">
           <div className="flex justify-between items-center mb-8">
-            <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 bg-blue-600 rounded-full animate-pulse" /><span className="text-[12px] font-black text-blue-600 uppercase tracking-[0.2em]">Laskelmat</span></div>
-            <button onClick={copyText} disabled={!result.isReady} className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest hover:text-blue-600 disabled:opacity-30 transition-all"><Copy size={14} /> {copied ? 'Kopioitu' : 'Kopioi'}</button>
+            <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 bg-blue-600 rounded-full animate-pulse" /><span className="text-[12px] font-black text-blue-600 uppercase tracking-[0.2em]">{rc.calculations}</span></div>
+            <button onClick={copyText} disabled={!result.isReady || !clinicalOutputLanguageReady} className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest hover:text-blue-600 disabled:opacity-30 transition-all"><Copy size={14} /> {copied ? 'Kopioitu' : 'Kopioi'}</button>
           </div>
 
           {result.warnings.length > 0 && <div className="mb-5 space-y-2">{result.warnings.map((warning, index) => <div key={index} className="p-4 bg-amber-50 border border-amber-100 rounded-2xl text-xs font-bold text-amber-800 flex gap-2"><AlertTriangle size={15} className="shrink-0 mt-0.5" /><span>{warning}</span></div>)}</div>}
 
           {result.rows.length === 0 ? (
-            <div className="flex-1 flex flex-col items-center justify-center text-slate-200 font-black uppercase text-center"><FlaskConical size={64} className="mb-4 opacity-20" /><div className="text-4xl tracking-tighter">Syötä tiedot</div></div>
+            <div className="flex-1 flex flex-col items-center justify-center text-slate-200 font-black uppercase text-center"><FlaskConical size={64} className="mb-4 opacity-20" /><div className="text-4xl tracking-tighter">{rc.enterValues}</div></div>
           ) : (
             <div className="flex-1 space-y-5">
               <div className="grid grid-cols-2 gap-3">
-                <div className="p-5 bg-slate-50 rounded-3xl border border-slate-100"><p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Lääkkeet yhteensä</p><div className="text-3xl font-black text-slate-800">{fmt(result.totalDrugVolume, 1)} <span className="text-sm opacity-40">ml</span></div></div>
-                <div className="p-5 bg-slate-50 rounded-3xl border border-slate-100"><p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">NaCl lisätään</p><div className={`text-3xl font-black ${result.naclMl < 0 ? 'text-red-600' : 'text-slate-800'}`}>{fmt(result.naclMl, 1)} <span className="text-sm opacity-40">ml</span></div></div>
+                <div className="p-5 bg-slate-50 rounded-3xl border border-slate-100"><p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">{rc.totalDrugs}</p><div className="text-3xl font-black text-slate-800">{fmtResult(result.totalDrugVolume, 1)} <span className="text-sm opacity-40">ml</span></div></div>
+                <div className="p-5 bg-slate-50 rounded-3xl border border-slate-100"><p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">{rc.naclAdded}</p><div className={`text-3xl font-black ${result.naclMl < 0 ? 'text-red-600' : 'text-slate-800'}`}>{fmtResult(result.naclMl, 1)} <span className="text-sm opacity-40">ml</span></div></div>
               </div>
 
-              <div className="p-8 bg-blue-600 rounded-[2.5rem] text-white shadow-2xl shadow-blue-100"><p className="text-[10px] font-black uppercase tracking-widest opacity-70 mb-4">PCA-perusasetukset</p><div className="text-4xl font-black tracking-tighter">{fmt(result.adMl, 1)} ml <span className="text-lg opacity-70">ad</span></div><div className="mt-4 text-sm font-bold opacity-80">Nopeus {fmt(result.speedMlH, 1)} ml/h – {fmt(result.days, 0)} vrk – perusinfuusion tarve {fmt(result.infusionNeedMl, 1)} ml</div>{result.suggestedAdMl > 0 && result.infusionNeedMl > result.adMl && <div className="mt-3 p-3 bg-white/15 rounded-2xl text-xs font-bold">Suositeltu ad vähintään {fmt(result.suggestedAdMl, 0)} ml tällä nopeudella ja kestolla.</div>}</div>
+              <div className="p-8 bg-blue-600 rounded-[2.5rem] text-white shadow-2xl shadow-blue-100"><p className="text-[10px] font-black uppercase tracking-widest opacity-70 mb-4">{rc.basicSettings}</p><div className="text-4xl font-black tracking-tighter">{fmtResult(result.adMl, 1)} ml <span className="text-lg opacity-70">ad</span></div><div className="mt-4 text-sm font-bold opacity-80">{formatTemplate(rc.speedLine, { speed: fmtResult(result.speedMlH, 1), days: fmtResult(result.days, 0), need: fmtResult(result.infusionNeedMl, 1) })}</div>{result.suggestedAdMl > 0 && result.infusionNeedMl > result.adMl && <div className="mt-3 p-3 bg-white/15 rounded-2xl text-xs font-bold">{formatTemplate(rc.suggestedAd, { ad: fmtResult(result.suggestedAdMl, 0) })}</div>}</div>
 
-              <div className="space-y-3">{result.rows.map((row) => <div key={row.id} className="p-5 bg-slate-50 rounded-3xl border border-slate-100"><div className="flex justify-between gap-3"><div><div className="text-base font-black text-slate-800">{row.name}</div><div className="text-[11px] font-bold text-slate-400">{fmt(row.strength, row.strength < 1 ? 3 : 1)} mg/ml</div></div><div className="text-right"><div className="text-lg font-black text-blue-600">{fmt(row.totalDose, 1)} mg</div><div className="text-[10px] font-bold text-slate-400 uppercase">{fmt(result.days, 0)} vrk</div></div></div><div className="grid grid-cols-3 gap-2 mt-3 text-[11px] font-bold text-slate-500"><div className="p-2 bg-white rounded-xl">Tilavuus<br/><span className="text-slate-900">{fmt(row.drugVolume, 1)} ml</span></div><div className="p-2 bg-white rounded-xl">Pitoisuus<br/><span className="text-slate-900">{fmt(row.concentration, row.strength < 1 ? 3 : 2)} mg/ml</span></div><div className="p-2 bg-white rounded-xl">Bolus<br/><span className="text-slate-900">{fmt(row.bolusDose, row.strength < 1 ? 3 : 2)} mg</span></div></div></div>)}</div>
+              <div className="space-y-3">{result.rows.map((row) => <div key={row.id} className="p-5 bg-slate-50 rounded-3xl border border-slate-100"><div className="flex justify-between gap-3"><div><div className="text-base font-black text-slate-800">{row.name}</div><div className="text-[11px] font-bold text-slate-400">{fmtResult(row.strength, row.strength < 1 ? 3 : 1)} mg/ml</div></div><div className="text-right"><div className="text-lg font-black text-blue-600">{fmtResult(row.totalDose, 1)} mg</div><div className="text-[10px] font-bold text-slate-400 uppercase">{fmtResult(result.days, 0)} {resultLanguage === 'fi' ? 'vrk' : resultLanguage === 'sv' ? 'dygn' : resultLanguage === 'ru' ? 'сут' : resultLanguage === 'de' ? 'Tage' : 'days'}</div></div></div><div className="grid grid-cols-3 gap-2 mt-3 text-[11px] font-bold text-slate-500"><div className="p-2 bg-white rounded-xl">{rc.volume}<br/><span className="text-slate-900">{fmtResult(row.drugVolume, 1)} ml</span></div><div className="p-2 bg-white rounded-xl">{rc.concentration}<br/><span className="text-slate-900">{fmtResult(row.concentration, row.strength < 1 ? 3 : 2)} mg/ml</span></div><div className="p-2 bg-white rounded-xl">{rc.bolus}<br/><span className="text-slate-900">{fmtResult(row.bolusDose, row.strength < 1 ? 3 : 2)} mg</span></div></div></div>)}</div>
 
-              <div className="p-6 bg-emerald-50 rounded-[2rem] border border-emerald-100"><p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-2">Boluslaskenta</p><div className="text-4xl font-black text-emerald-600">{fmt(result.bolusMl, 1)} <span className="text-xl">ml</span></div><p className="mt-2 text-xs font-bold text-emerald-700">Laskennallinen 2 × tuntiannos.</p></div>
+              <div className="p-6 bg-emerald-50 rounded-[2rem] border border-emerald-100"><p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-2">{rc.bolusCalculation}</p><div className="text-4xl font-black text-emerald-600">{fmtResult(result.bolusMl, 1)} <span className="text-xl">ml</span></div><p className="mt-2 text-xs font-bold text-emerald-700">{rc.bolusExplanation}</p></div>
             </div>
           )}
 
-          <div className="mt-8 p-5 bg-blue-50 rounded-[1.5rem] border border-blue-100 flex gap-4 items-center"><div className="w-7 h-7 rounded-full bg-blue-600 flex items-center justify-center text-white text-[12px] font-black italic shadow-md shadow-blue-200">i</div><p className="text-[10px] text-blue-800 leading-tight font-bold italic">Tarkista annokset, yhteensopivuus, munuaistoiminta, sedaatioaste ja paikallinen ohjeistus ennen käyttöönottoa.</p></div>
+          <div className="mt-8 p-5 bg-blue-50 rounded-[1.5rem] border border-blue-100 flex gap-4 items-center"><div className="w-7 h-7 rounded-full bg-blue-600 flex items-center justify-center text-white text-[12px] font-black italic shadow-md shadow-blue-200">i</div><p className="text-[10px] text-blue-800 leading-tight font-bold italic">{rc.info}</p></div>
         </section>
       </div>
     </div>
